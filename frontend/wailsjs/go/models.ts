@@ -82,6 +82,55 @@ export namespace model {
 		    return a;
 		}
 	}
+	
+	export class SliceRequest {
+	    sourcePaths: string[];
+	    outputDir: string;
+	    sliceCount: number;
+	    contrast: number;
+	    saturation: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new SliceRequest(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.sourcePaths = source["sourcePaths"];
+	        this.outputDir = source["outputDir"];
+	        this.sliceCount = source["sliceCount"];
+	        this.contrast = source["contrast"];
+	        this.saturation = source["saturation"];
+	    }
+	}
+	export class WatermarkRequest {
+	    sourcePaths: string[];
+	    outputDir: string;
+	    watermarkImage: string;
+	    watermarkText: string;
+	    opacity: number;
+	    position: string;
+	    fontSize: number;
+	    fontColor: string;
+	    uniformWidth: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new WatermarkRequest(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.sourcePaths = source["sourcePaths"];
+	        this.outputDir = source["outputDir"];
+	        this.watermarkImage = source["watermarkImage"];
+	        this.watermarkText = source["watermarkText"];
+	        this.opacity = source["opacity"];
+	        this.position = source["position"];
+	        this.fontSize = source["fontSize"];
+	        this.fontColor = source["fontColor"];
+	        this.uniformWidth = source["uniformWidth"];
+	    }
+	}
 
 }
 

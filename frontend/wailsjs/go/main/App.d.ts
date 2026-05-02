@@ -12,3 +12,7 @@ export function SelectDirectory():Promise<string>;
 export function SelectFiles():Promise<Array<string>>;
 
 export function SetContext(arg1:context.Context):Promise<void>;
+
+export function SliceImages(arg1:model.SliceRequest):Promise<model.BatchResult>;
+
+export function WatermarkImages(arg1:model.WatermarkRequest):Promise<model.BatchResult>;

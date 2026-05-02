@@ -21,3 +21,11 @@ export function SelectFiles() {
 export function SetContext(arg1) {
   return window['go']['main']['App']['SetContext'](arg1);
 }
+
+export function SliceImages(arg1) {
+  return window['go']['main']['App']['SliceImages'](arg1);
+}
+
+export function WatermarkImages(arg1) {
+  return window['go']['main']['App']['WatermarkImages'](arg1);
+}
