@@ -1,0 +1,9 @@
+package model
+
+type ProgressUpdate struct {
+	Completed int    `json:"completed"`
+	Total     int    `json:"total"`
+	Current   string `json:"current"`
+	Error     string `json:"error,omitempty"`
+	Done      bool   `json:"done"`
+}
