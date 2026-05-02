@@ -27,13 +27,7 @@ const defaultModels = [
   { id: 'doubao-seedream-3-0-t2i-250415', name: 'Seedream 3.0' },
 ];
 
-const sizeOptions = [
-  '1024x1024', '2048x2048', '2304x1728', '1728x2304',
-  '2848x1600', '1600x2848', '2496x1664', '1664x2496',
-  '3136x1344', '3072x3072', '3456x2592', '2592x3456',
-  '4096x2304', '2304x4096', '2496x3744', '3744x2496',
-  '4704x2016', '4096x4096',
-];
+const sizeOptions = ['1K', '2K', '3K', '4K'];
 
 const defaultPromptPresets: PromptPreset[] = [
   { name: '默认人像', text: 'A beautiful portrait photo, high quality, detailed', category: '人像' },
@@ -82,20 +76,20 @@ function loadModelList(): { id: string; name: string }[] {
 export const AIBatch: React.FC = () => {
   // ── State ──
   const [prompt, setPrompt] = useState('');
-  const [model, setModel] = useState(defaultModels[0].id);
+  const [model, setModel] = useState('doubao-seedream-5-0-lite-260128');
   const [modelList, setModelList] = useState<{ id: string; name: string }[]>(loadModelList);
-  const [size, setSize] = useState('2048x2048');
+  const [size, setSize] = useState('2K');
   const [seed, setSeed] = useState(-1);
   const [showCustomSeed, setShowCustomSeed] = useState(false);
-  const [outputFormat, setOutputFormat] = useState('jpeg');
-  const [watermark, setWatermark] = useState(true);
+  const [outputFormat, setOutputFormat] = useState('png');
+  const [watermark, setWatermark] = useState(false);
   const [guidanceScale, setGuidanceScale] = useState(2.5);
   const [responseFormat, setResponseFormat] = useState('url');
-  const [sequentialMode, setSequentialMode] = useState('disabled');
+  const [sequentialMode, setSequentialMode] = useState('auto');
   const [maxImages, setMaxImages] = useState(4);
   const [optimizePromptMode, setOptimizePromptMode] = useState('standard');
   const [webSearch, setWebSearch] = useState(false);
-  const [concurrent, setConcurrent] = useState(2);
+  const [concurrent, setConcurrent] = useState(20);
   const [downloadWidth, setDownloadWidth] = useState('1440');
   const [customWidth, setCustomWidth] = useState('');
   const [showCustomWidth, setShowCustomWidth] = useState(false);
@@ -336,12 +330,12 @@ export const AIBatch: React.FC = () => {
 
   // ── Styles ──
   const s = {
-    card: { background: '#16213e', borderRadius: 12, padding: 16, border: '1px solid #1a2744' },
-    input: { width: '100%' as const, padding: '10px 14px', background: '#0f1a30', color: '#e0e0e0', border: '1px solid #1e3a5f', borderRadius: 8, fontSize: 14, outline: 'none', boxSizing: 'border-box' as const, fontFamily: 'inherit' },
-    select: { padding: '8px 12px', background: '#0f1a30', color: '#e0e0e0', border: '1px solid #1e3a5f', borderRadius: 8, fontSize: 13, outline: 'none' },
-    btn: { padding: '8px 18px', border: 'none', borderRadius: 8, cursor: 'pointer' as const, fontSize: 13, color: '#fff', background: '#1e3a5f' },
-    btnSm: { padding: '4px 10px', border: 'none', borderRadius: 6, cursor: 'pointer' as const, fontSize: 11, color: '#fff', background: '#1e3a5f' },
-    label: { fontSize: 13, color: '#94a3b8', marginBottom: 6, display: 'block' as const },
+    card: { background: '#1a1a2e', borderRadius: 12, padding: 16, border: '1px solid #222' },
+    input: { width: '100%' as const, padding: '10px 14px', background: '#1a1a2e', color: '#fff', border: '1px solid #333', borderRadius: 8, fontSize: 14, outline: 'none', boxSizing: 'border-box' as const, fontFamily: 'inherit' },
+    select: { padding: '8px 12px', background: '#1a1a2e', color: '#fff', border: '1px solid #333', borderRadius: 8, fontSize: 13, outline: 'none' },
+    btn: { padding: '8px 18px', border: 'none', borderRadius: 8, cursor: 'pointer' as const, fontSize: 13, color: '#fff', background: '#0f3460' },
+    btnSm: { padding: '4px 10px', border: 'none', borderRadius: 6, cursor: 'pointer' as const, fontSize: 11, color: '#fff', background: '#0f3460' },
+    label: { fontSize: 13, color: '#888', marginBottom: 6, display: 'block' as const },
     row: { display: 'flex' as const, alignItems: 'center' as const, justifyContent: 'space-between' as const },
     dangerBtn: { padding: '8px 18px', border: 'none', borderRadius: 8, cursor: 'pointer' as const, fontSize: 13, color: '#fff', background: '#dc2626' },
   };
@@ -364,7 +358,7 @@ export const AIBatch: React.FC = () => {
       {/* Settings Modal */}
       {showSettings && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 9000, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setShowSettings(false)}>
-          <div style={{ background: '#16213e', borderRadius: 16, padding: 28, width: 520, maxHeight: '90vh', overflow: 'auto', border: '1px solid #1a2744' }} onClick={e => e.stopPropagation()}>
+          <div style={{ background: '#1a1a2e', borderRadius: 16, padding: 28, width: 520, maxHeight: '90vh', overflow: 'auto', border: '1px solid #333' }} onClick={e => e.stopPropagation()}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
               <h3 style={{ margin: 0, fontSize: 18, color: '#fff' }}>设置</h3>
               <button onClick={() => setShowSettings(false)} style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: 20 }}>×</button>
@@ -400,12 +394,12 @@ export const AIBatch: React.FC = () => {
                   <input placeholder="ID" value={newModelId} onChange={e => setNewModelId(e.target.value)}
                     style={{ ...s.input, width: 160, padding: '6px 10px', fontSize: 12 }} />
                   <button onClick={handleAddModel} style={s.btnSm}>保存</button>
-                  <button onClick={() => setIsAddingModel(false)} style={{ ...s.btnSm, background: '#475569' }}>取消</button>
+                  <button onClick={() => setIsAddingModel(false)} style={{ ...s.btnSm, background: '#555' }}>取消</button>
                 </div>
               )}
               <div style={{ maxHeight: 160, overflow: 'auto' }}>
                 {modelList.map(m => (
-                  <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderBottom: '1px solid #0f1a30' }}>
+                  <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderBottom: '1px solid #1a1a2e' }}>
                     {editingModel?.id === m.id ? (
                       <>
                         <input value={editingModel.name} onChange={e => setEditingModel({ ...editingModel, name: e.target.value })}
@@ -413,13 +407,13 @@ export const AIBatch: React.FC = () => {
                         <input value={editingModel.id} onChange={e => setEditingModel({ ...editingModel, id: e.target.value })}
                           style={{ ...s.input, width: 150, padding: '4px 8px', fontSize: 12 }} />
                         <button onClick={handleEditModelSave} style={s.btnSm}>保存</button>
-                        <button onClick={() => setEditingModel(null)} style={{ ...s.btnSm, background: '#475569' }}>取消</button>
+                        <button onClick={() => setEditingModel(null)} style={{ ...s.btnSm, background: '#555' }}>取消</button>
                       </>
                     ) : (
                       <>
-                        <span style={{ fontSize: 13, color: '#cbd5e1', width: 120 }}>{m.name}</span>
+                        <span style={{ fontSize: 13, color: '#ccc', width: 120 }}>{m.name}</span>
                         <span style={{ fontSize: 11, color: '#64748b', flex: 1 }}>{m.id}</span>
-                        <button onClick={() => setEditingModel({ ...m })} style={{ ...s.btnSm, background: '#0f1a30', border: '1px solid #1e3a5f' }}>编辑</button>
+                        <button onClick={() => setEditingModel({ ...m })} style={{ ...s.btnSm, background: '#1a1a2e', border: '1px solid #0f3460' }}>编辑</button>
                         <button onClick={() => handleDeleteModel(m.id)} style={{ ...s.btnSm, background: '#7f1d1d' }}>删除</button>
                       </>
                     )}
@@ -429,7 +423,7 @@ export const AIBatch: React.FC = () => {
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-              <button onClick={() => setShowSettings(false)} style={{ ...s.btn, background: '#475569' }}>关闭</button>
+              <button onClick={() => setShowSettings(false)} style={{ ...s.btn, background: '#555' }}>关闭</button>
             </div>
           </div>
         </div>
@@ -438,11 +432,11 @@ export const AIBatch: React.FC = () => {
       {/* Delete prompt confirmation */}
       {deleteConfirmPreset && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 9500, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ background: '#16213e', borderRadius: 12, padding: 24, width: 360, border: '1px solid #1a2744' }}>
+          <div style={{ background: '#1a1a2e', borderRadius: 12, padding: 24, width: 360, border: '1px solid #333' }}>
             <h4 style={{ margin: '0 0 12px', color: '#fff', fontSize: 16 }}>确认删除</h4>
-            <p style={{ fontSize: 14, color: '#94a3b8', margin: '0 0 20px' }}>确定要删除提示词「{deleteConfirmPreset}」吗？</p>
+            <p style={{ fontSize: 14, color: '#888', margin: '0 0 20px' }}>确定要删除提示词「{deleteConfirmPreset}」吗？</p>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-              <button onClick={() => setDeleteConfirmPreset(null)} style={{ ...s.btn, background: '#475569' }}>取消</button>
+              <button onClick={() => setDeleteConfirmPreset(null)} style={{ ...s.btn, background: '#555' }}>取消</button>
               <button onClick={() => handleDeletePreset(deleteConfirmPreset)} style={s.dangerBtn}>删除</button>
             </div>
           </div>
@@ -454,16 +448,16 @@ export const AIBatch: React.FC = () => {
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 9500, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }} onClick={closePreview}>
           {/* Controls */}
           <div style={{ position: 'absolute', top: 16, right: 16, display: 'flex', gap: 8, zIndex: 1 }}>
-            <button onClick={() => setCompareMode(!compareMode)} style={{ ...s.btnSm, background: compareMode ? '#e94560' : '#1e3a5f' }}>
+            <button onClick={() => setCompareMode(!compareMode)} style={{ ...s.btnSm, background: compareMode ? '#e94560' : '#0f3460' }}>
               {compareMode ? '单图' : '对比'}
             </button>
-            <button onClick={closePreview} style={{ ...s.btnSm, background: '#475569', fontSize: 14 }}>×</button>
+            <button onClick={closePreview} style={{ ...s.btnSm, background: '#555', fontSize: 14 }}>×</button>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 16, position: 'absolute', bottom: 40 }}>
             {selectedPreview.results && previewIndex > 0 && (
               <button onClick={() => { setPreviewIndex(i => i - 1); setPreviewZoom(1); }} style={s.btn}>◀ 上一张</button>
             )}
-            <span style={{ color: '#94a3b8', fontSize: 13 }}>
+            <span style={{ color: '#888', fontSize: 13 }}>
               {previewIndex + 1} / {selectedPreview.results?.length || 1}
             </span>
             {selectedPreview.results && previewIndex < selectedPreview.results.length - 1 && (
@@ -477,7 +471,7 @@ export const AIBatch: React.FC = () => {
           {compareMode && selectedPreview.results?.[previewIndex] ? (
             <div style={{ display: 'flex', gap: 20, alignItems: 'center' }} onClick={e => e.stopPropagation()}>
               <div style={{ textAlign: 'center' }}>
-                <p style={{ color: '#94a3b8', fontSize: 12, marginBottom: 8 }}>原图</p>
+                <p style={{ color: '#888', fontSize: 12, marginBottom: 8 }}>原图</p>
                 <div style={{ overflow: 'auto', maxWidth: '40vw', maxHeight: '70vh' }}>
                   <img src={selectedPreview.path} style={{ transform: `scale(${leftZoom})`, transformOrigin: 'top left' }} alt="original" />
                 </div>
@@ -487,9 +481,9 @@ export const AIBatch: React.FC = () => {
                 </div>
               </div>
               <div style={{ textAlign: 'center' }}>
-                <p style={{ color: '#94a3b8', fontSize: 12, marginBottom: 8 }}>AI 结果</p>
+                <p style={{ color: '#888', fontSize: 12, marginBottom: 8 }}>AI 结果</p>
                 <div style={{ overflow: 'auto', maxWidth: '40vw', maxHeight: '70vh' }}>
-                  <div style={{ width: 200, height: 200, background: '#0f1a30', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b', fontSize: 13 }}>
+                  <div style={{ width: 200, height: 200, background: '#1a1a2e', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b', fontSize: 13 }}>
                     结果图片 (URL 需联网加载)
                   </div>
                 </div>
@@ -502,7 +496,7 @@ export const AIBatch: React.FC = () => {
           ) : (
             <div style={{ maxWidth: '80vw', maxHeight: '75vh', overflow: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={e => e.stopPropagation()}>
               <div style={{
-                width: 300, height: 300, background: '#0f1a30', borderRadius: 12,
+                width: 300, height: 300, background: '#1a1a2e', borderRadius: 12,
                 display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b', fontSize: 14,
               }}>
                 AI 结果图片<br/>需联网加载
@@ -534,7 +528,7 @@ export const AIBatch: React.FC = () => {
             </div>
 
             {showPromptForm && (
-              <div style={{ marginBottom: 10, padding: 10, background: '#0f1a30', borderRadius: 8 }}>
+              <div style={{ marginBottom: 10, padding: 10, background: '#1a1a2e', borderRadius: 8 }}>
                 <input placeholder="名称" value={newPresetName} onChange={e => setNewPresetName(e.target.value)}
                   style={{ ...s.input, marginBottom: 6, padding: '6px 10px', fontSize: 12 }} />
                 <textarea placeholder="提示词内容（留空使用当前提示词）" value={newPresetText}
@@ -546,13 +540,13 @@ export const AIBatch: React.FC = () => {
                     {['常用', '人像', '风景', '风格', '其他'].map(c => <option key={c} value={c}>{c}</option>)}
                   </select>
                   <button onClick={handleSavePreset} style={s.btnSm}>保存</button>
-                  <button onClick={() => setShowPromptForm(false)} style={{ ...s.btnSm, background: '#475569' }}>取消</button>
+                  <button onClick={() => setShowPromptForm(false)} style={{ ...s.btnSm, background: '#555' }}>取消</button>
                 </div>
               </div>
             )}
 
             {groupedPresets.length === 0 ? (
-              <div style={{ fontSize: 12, color: '#475569', textAlign: 'center', padding: 12 }}>暂无保存的提示词</div>
+              <div style={{ fontSize: 12, color: '#555', textAlign: 'center', padding: 12 }}>暂无保存的提示词</div>
             ) : (
               groupedPresets.map(g => (
                 <div key={g.category} style={{ marginBottom: 6 }}>
@@ -561,7 +555,7 @@ export const AIBatch: React.FC = () => {
                     {g.items.map(p => (
                       <div key={p.name} style={{ position: 'relative', display: 'inline-block' }}>
                         <button onClick={() => setPrompt(p.text)}
-                          style={{ ...s.btnSm, background: '#0f1a30', border: '1px solid #1e3a5f', fontSize: 11, padding: '3px 10px', whiteSpace: 'nowrap' }}>
+                          style={{ ...s.btnSm, background: '#1a1a2e', border: '1px solid #0f3460', fontSize: 11, padding: '3px 10px', whiteSpace: 'nowrap' }}>
                           {p.name}
                         </button>
                         <button onClick={() => setDeleteConfirmPreset(p.name)}
@@ -582,18 +576,18 @@ export const AIBatch: React.FC = () => {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               {/* --- Model --- */}
               <div style={s.row}>
-                <span style={{ fontSize: 13, color: '#94a3b8' }}>模型</span>
+                <span style={{ fontSize: 13, color: '#888' }}>模型</span>
                 <div style={{ display: 'flex', gap: 4 }}>
                   <select value={model} onChange={e => setModel(e.target.value)} style={{ ...s.select, width: 150 }}>
                     {modelList.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
                   </select>
-                  <button onClick={() => setShowSettings(true)} style={{ ...s.btnSm, background: '#0f1a30', border: '1px solid #1e3a5f', fontSize: 11, padding: '4px 6px' }} title="管理模型">⚙</button>
+                  <button onClick={() => setShowSettings(true)} style={{ ...s.btnSm, background: '#1a1a2e', border: '1px solid #0f3460', fontSize: 11, padding: '4px 6px' }} title="管理模型">⚙</button>
                 </div>
               </div>
 
               {/* --- Size --- */}
               <div style={s.row}>
-                <span style={{ fontSize: 13, color: '#94a3b8' }}>尺寸</span>
+                <span style={{ fontSize: 13, color: '#888' }}>尺寸</span>
                 <select value={size} onChange={e => setSize(e.target.value)} style={{ ...s.select, width: 150 }}>
                   {sizeOptions.map(sz => <option key={sz} value={sz}>{sz}</option>)}
                 </select>
@@ -601,11 +595,11 @@ export const AIBatch: React.FC = () => {
 
               {/* --- Seed --- */}
               <div style={s.row}>
-                <span style={{ fontSize: 13, color: '#94a3b8' }}>种子</span>
+                <span style={{ fontSize: 13, color: '#888' }}>种子</span>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   {!showCustomSeed ? (
                     <button onClick={() => setShowCustomSeed(true)}
-                      style={{ ...s.btnSm, background: '#0f1a30', border: '1px solid #1e3a5f', color: seed === -1 ? '#64748b' : '#cbd5e1' }}>
+                      style={{ ...s.btnSm, background: '#1a1a2e', border: '1px solid #0f3460', color: seed === -1 ? '#64748b' : '#ccc' }}>
                       {seed === -1 ? '随机' : seed}
                     </button>
                   ) : (
@@ -620,15 +614,15 @@ export const AIBatch: React.FC = () => {
 
               {/* --- Watermark --- */}
               <div style={s.row}>
-                <span style={{ fontSize: 13, color: '#94a3b8' }}>水印</span>
-                <label style={{ fontSize: 13, color: '#cbd5e1', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ fontSize: 13, color: '#888' }}>水印</span>
+                <label style={{ fontSize: 13, color: '#ccc', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
                   <input type="checkbox" checked={watermark} onChange={e => setWatermark(e.target.checked)} style={{ accentColor: '#e94560' }} /> Seedream 水印
                 </label>
               </div>
 
               {/* --- Response Format --- */}
               <div style={s.row}>
-                <span style={{ fontSize: 13, color: '#94a3b8' }}>返回格式</span>
+                <span style={{ fontSize: 13, color: '#888' }}>返回格式</span>
                 <select value={responseFormat} onChange={e => setResponseFormat(e.target.value)} style={{ ...s.select, width: 150 }}>
                   <option value="url">URL (推荐)</option>
                   <option value="b64_json">Base64</option>
@@ -637,7 +631,7 @@ export const AIBatch: React.FC = () => {
 
               {/* --- Sequential (组图) --- */}
               <div style={s.row}>
-                <span style={{ fontSize: 13, color: '#94a3b8' }}>生成模式</span>
+                <span style={{ fontSize: 13, color: '#888' }}>生成模式</span>
                 <select value={sequentialMode} onChange={e => setSequentialMode(e.target.value)} style={{ ...s.select, width: 150 }}>
                   <option value="disabled">关闭 (单图)</option>
                   <option value="auto">自动 (组图)</option>
@@ -647,17 +641,17 @@ export const AIBatch: React.FC = () => {
               {/* --- Max Images --- */}
               {sequentialMode === 'auto' && (
                 <div style={s.row}>
-                  <span style={{ fontSize: 13, color: '#94a3b8' }}>最大图片数</span>
+                  <span style={{ fontSize: 13, color: '#888' }}>最大图片数</span>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                     <input type="range" min={1} max={15} value={maxImages} onChange={e => setMaxImages(Number(e.target.value))} style={{ width: 80, accentColor: '#e94560' }} />
-                    <span style={{ fontSize: 12, color: '#cbd5e1', width: 24 }}>{maxImages}</span>
+                    <span style={{ fontSize: 12, color: '#ccc', width: 24 }}>{maxImages}</span>
                   </div>
                 </div>
               )}
 
               {/* --- Output Format --- */}
               <div style={s.row}>
-                <span style={{ fontSize: 13, color: '#94a3b8' }}>输出格式</span>
+                <span style={{ fontSize: 13, color: '#888' }}>输出格式</span>
                 <select value={outputFormat} onChange={e => setOutputFormat(e.target.value)} style={{ ...s.select, width: 150 }}>
                   <option value="jpeg">JPEG</option>
                   <option value="png">PNG</option>
@@ -666,18 +660,18 @@ export const AIBatch: React.FC = () => {
 
               {/* --- Guidance Scale --- */}
               <div style={s.row}>
-                <span style={{ fontSize: 13, color: '#94a3b8' }}>文本权重</span>
+                <span style={{ fontSize: 13, color: '#888' }}>文本权重</span>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   <span style={{ fontSize: 11, color: '#64748b' }}>1</span>
                   <input type="range" min={10} max={100} value={guidanceScale * 10} onChange={e => setGuidanceScale(Number(e.target.value) / 10)} style={{ width: 80, accentColor: '#e94560' }} step={5} />
                   <span style={{ fontSize: 11, color: '#64748b' }}>10</span>
-                  <span style={{ fontSize: 12, color: '#cbd5e1', width: 28 }}>{guidanceScale.toFixed(1)}</span>
+                  <span style={{ fontSize: 12, color: '#ccc', width: 28 }}>{guidanceScale.toFixed(1)}</span>
                 </div>
               </div>
 
               {/* --- Optimize Prompt --- */}
               <div style={s.row}>
-                <span style={{ fontSize: 13, color: '#94a3b8' }}>提示词优化</span>
+                <span style={{ fontSize: 13, color: '#888' }}>提示词优化</span>
                 <select value={optimizePromptMode} onChange={e => setOptimizePromptMode(e.target.value)} style={{ ...s.select, width: 150 }}>
                   <option value="standard">标准模式 (高质量)</option>
                   <option value="fast">快速模式 (低耗时)</option>
@@ -686,18 +680,18 @@ export const AIBatch: React.FC = () => {
 
               {/* --- Web Search --- */}
               <div style={s.row}>
-                <span style={{ fontSize: 13, color: '#94a3b8' }}>联网搜索</span>
-                <label style={{ fontSize: 13, color: '#cbd5e1', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ fontSize: 13, color: '#888' }}>联网搜索</span>
+                <label style={{ fontSize: 13, color: '#ccc', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
                   <input type="checkbox" checked={webSearch} onChange={e => setWebSearch(e.target.checked)} style={{ accentColor: '#e94560' }} /> 搜索互联网
                 </label>
               </div>
 
               {/* --- Concurrent --- */}
               <div style={s.row}>
-                <span style={{ fontSize: 13, color: '#94a3b8' }}>并发数</span>
+                <span style={{ fontSize: 13, color: '#888' }}>并发数</span>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   <input type="range" min={1} max={20} value={concurrent} onChange={e => setConcurrent(Number(e.target.value))} style={{ width: 80, accentColor: '#e94560' }} />
-                  <span style={{ fontSize: 12, color: '#cbd5e1', width: 24 }}>{concurrent}</span>
+                  <span style={{ fontSize: 12, color: '#ccc', width: 24 }}>{concurrent}</span>
                 </div>
               </div>
             </div>
@@ -717,14 +711,14 @@ export const AIBatch: React.FC = () => {
             </div>
             {referenceImages.length === 0 ? (
               <div onClick={handleReferenceUpload}
-                style={{ border: '2px dashed #1e3a5f', borderRadius: 10, padding: '16px 0', textAlign: 'center', cursor: 'pointer', color: '#64748b', fontSize: 13 }}>
+                style={{ border: '2px dashed #0f3460', borderRadius: 10, padding: '16px 0', textAlign: 'center', cursor: 'pointer', color: '#64748b', fontSize: 13 }}>
                 <div style={{ fontSize: 22, marginBottom: 2 }}>+</div>拖拽或点击上传参考图
               </div>
             ) : (
               <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 4 }}>
                 {referenceImages.map((img, i) => (
                   <div key={i} style={{ position: 'relative', flexShrink: 0 }}>
-                    <div style={{ width: 48, height: 48, borderRadius: 8, border: '1px solid #1e3a5f', background: '#0f1a30', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: '#64748b' }}>
+                    <div style={{ width: 48, height: 48, borderRadius: 8, border: '1px solid #0f3460', background: '#1a1a2e', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: '#64748b' }}>
                       {img.split('\\').pop()?.substring(0, 10) || `ref${i}`}
                     </div>
                     <button onClick={() => removeReference(i)}
@@ -733,7 +727,7 @@ export const AIBatch: React.FC = () => {
                 ))}
                 {referenceImages.length < 12 && (
                   <div onClick={handleReferenceUpload}
-                    style={{ width: 48, height: 48, borderRadius: 8, border: '2px dashed #1e3a5f', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#475569', fontSize: 18, flexShrink: 0 }}>+</div>
+                    style={{ width: 48, height: 48, borderRadius: 8, border: '2px dashed #0f3460', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#555', fontSize: 18, flexShrink: 0 }}>+</div>
                 )}
               </div>
             )}
@@ -741,7 +735,7 @@ export const AIBatch: React.FC = () => {
 
           {/* Batch Actions Bar */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0, flexWrap: 'wrap' }}>
-            <button onClick={clearQueue} style={{ ...s.btn, background: 'transparent', border: '1px solid #1e3a5f', color: '#94a3b8' }}>清空</button>
+            <button onClick={clearQueue} style={{ ...s.btn, background: 'transparent', border: '1px solid #0f3460', color: '#888' }}>清空</button>
             <button onClick={handleSelectFolder} style={s.btn}>+ 添加图片</button>
 
             {queue.length > 0 && (
@@ -788,7 +782,7 @@ export const AIBatch: React.FC = () => {
               </button>
             ) : (
               <button onClick={handleRun} disabled={queue.length === 0 || !prompt}
-                style={{ padding: '10px 24px', border: 'none', borderRadius: 8, cursor: queue.length === 0 || !prompt ? 'not-allowed' : 'pointer', fontSize: 14, color: '#fff', background: queue.length === 0 || !prompt ? '#475569' : '#e94560', fontWeight: 600 }}>
+                style={{ padding: '10px 24px', border: 'none', borderRadius: 8, cursor: queue.length === 0 || !prompt ? 'not-allowed' : 'pointer', fontSize: 14, color: '#fff', background: queue.length === 0 || !prompt ? '#555' : '#e94560', fontWeight: 600 }}>
                 开始处理 {pendingCount > 0 ? `(${pendingCount}张)` : ''}
               </button>
             )}
@@ -796,14 +790,14 @@ export const AIBatch: React.FC = () => {
 
           {/* Download Progress */}
           {downloadProgress.active && (
-            <div style={{ position: 'fixed', bottom: 20, left: '50%', transform: 'translateX(-50%)', zIndex: 100, background: '#16213e', border: '1px solid #1a2744', borderRadius: 8, padding: '10px 20px', fontSize: 13, color: '#94a3b8' }}>
+            <div style={{ position: 'fixed', bottom: 20, left: '50%', transform: 'translateX(-50%)', zIndex: 100, background: '#1a1a2e', border: '1px solid #333', borderRadius: 8, padding: '10px 20px', fontSize: 13, color: '#888' }}>
               下载中 {downloadProgress.current} / {downloadProgress.total}
             </div>
           )}
 
           {/* Image Queue */}
           <div style={{ ...s.card, flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0 10px', fontSize: 12, color: '#64748b', borderBottom: '1px solid #1a2744', marginBottom: 8 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0 10px', fontSize: 12, color: '#64748b', borderBottom: '1px solid #333', marginBottom: 8 }}>
               <span>图片队列</span>
               <span>{completedCount}/{queue.length} 完成</span>
             </div>
@@ -811,19 +805,19 @@ export const AIBatch: React.FC = () => {
             <div style={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
               {queue.length === 0 ? (
                 <div onClick={handleSelectFolder}
-                  style={{ border: '2px dashed #1e3a5f', borderRadius: 10, padding: '40px 0', textAlign: 'center', cursor: 'pointer', color: '#64748b', fontSize: 13 }}>
+                  style={{ border: '2px dashed #0f3460', borderRadius: 10, padding: '40px 0', textAlign: 'center', cursor: 'pointer', color: '#64748b', fontSize: 13 }}>
                   <div style={{ fontSize: 28, marginBottom: 4 }}>+</div>
                   拖拽或点击添加图片到队列<br />
-                  <span style={{ fontSize: 11, color: '#475569' }}>支持 JPG/PNG/WebP/BMP/TIFF/GIF</span>
+                  <span style={{ fontSize: 11, color: '#555' }}>支持 JPG/PNG/WebP/BMP/TIFF/GIF</span>
                 </div>
               ) : (
                 queue.map(item => (
-                  <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 4px', borderBottom: '1px solid #0f1a30' }}>
-                    <div style={{ width: 40, height: 40, borderRadius: 6, background: '#0f1a30', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, color: '#475569' }}>
+                  <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 4px', borderBottom: '1px solid #1a1a2e' }}>
+                    <div style={{ width: 40, height: 40, borderRadius: 6, background: '#1a1a2e', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, color: '#555' }}>
                       {item.status === 'completed' ? '✅' : item.status === 'error' ? '❌' : '🖼'}
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 13, color: '#cbd5e1', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'pointer' }}
+                      <div style={{ fontSize: 13, color: '#ccc', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'pointer' }}
                         onClick={() => item.status === 'completed' && openPreview(item)}>
                         {item.name}
                       </div>
@@ -831,18 +825,18 @@ export const AIBatch: React.FC = () => {
                     </div>
 
                     {/* Status */}
-                    {item.status === 'pending' && <span style={{ fontSize: 11, color: '#64748b', background: '#1e293b', padding: '2px 8px', borderRadius: 4, flexShrink: 0 }}>等待处理</span>}
+                    {item.status === 'pending' && <span style={{ fontSize: 11, color: '#64748b', background: '#222', padding: '2px 8px', borderRadius: 4, flexShrink: 0 }}>等待处理</span>}
                     {item.status === 'processing' && (
-                      <span style={{ fontSize: 11, color: '#60a5fa', background: '#1e3a5f', padding: '2px 8px', borderRadius: 4, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <span style={{ fontSize: 11, color: '#60a5fa', background: '#1a1a2e', border: '1px solid #0f3460', padding: '2px 8px', borderRadius: 4, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 4 }}>
                         <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#60a5fa', display: 'inline-block' }} /> 处理中
                       </span>
                     )}
                     {item.status === 'completed' && (
-                      <button onClick={() => openPreview(item)} style={{ fontSize: 11, color: '#4ade80', background: '#14532d', padding: '2px 8px', borderRadius: 4, border: 'none', cursor: 'pointer', flexShrink: 0 }}>
+                      <button onClick={() => openPreview(item)} style={{ fontSize: 11, color: '#4ade80', background: '#1a1a2e', border: '1px solid #14532d', padding: '2px 8px', borderRadius: 4, cursor: 'pointer', flexShrink: 0 }}>
                         ✓ 完成 {item.results ? `(${item.results.length}张)` : ''}
                       </button>
                     )}
-                    {item.status === 'error' && <span style={{ fontSize: 11, color: '#f87171', background: '#451a1a', padding: '2px 8px', borderRadius: 4, flexShrink: 0 }}>✗ 失败</span>}
+                    {item.status === 'error' && <span style={{ fontSize: 11, color: '#f87171', background: '#1a1a2e', border: '1px solid #7f1d1d', padding: '2px 8px', borderRadius: 4, flexShrink: 0 }}>✗ 失败</span>}
 
                     {/* Actions */}
                     <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
