@@ -74,16 +74,3 @@ func removeAlpha(img image.Image) image.Image {
 	draw.Draw(dst, bounds, img, image.Point{}, draw.Over)
 	return dst
 }
-
-// Temporary stubs — will be properly implemented in Task 5 (resize.go).
-type ResizeOptions struct {
-	Mode    string
-	Value   float64
-	Width   int
-	Height  int
-	MaxEdge int
-}
-
-func ResizeImage(src image.Image, opts ResizeOptions) image.Image {
-	return src // no-op until Task 5
-}
