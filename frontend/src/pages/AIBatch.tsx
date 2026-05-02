@@ -6,7 +6,8 @@ interface ImageItem {
   id: number;
   name: string;
   path: string;
-  status: 'pending' | 'processing' | 'completed' | 'error';
+  outputPath?: string;
+  status: 'pending' | 'processing' | 'completed' | 'error' | 'cancelled';
   error?: string;
   results?: { url?: string; b64_json?: string; size?: string }[];
 }
@@ -74,6 +75,7 @@ function loadModelList(): { id: string; name: string }[] {
 
 // ── Component ──
 export const AIBatch: React.FC = () => {
+
   // ── State ──
   const [prompt, setPrompt] = useState('');
   const [model, setModel] = useState('doubao-seedream-5-0-lite-260128');
@@ -117,10 +119,19 @@ export const AIBatch: React.FC = () => {
   const [leftZoom, setLeftZoom] = useState(1);
   const [rightZoom, setRightZoom] = useState(1);
   const [downloadProgress, setDownloadProgress] = useState<{ current: number; total: number; active: boolean }>({ current: 0, total: 0, active: false });
+  const [hoverPreviewImg, setHoverPreviewImg] = useState<string | null>(null);
+  const [hoverPreviewPos, setHoverPreviewPos] = useState({ x: 0, y: 0 });
+  const [hoverPreviewVisible, setHoverPreviewVisible] = useState(false);
   const refInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const nextId = useRef(0);
   const toastTimer = useRef<ReturnType<typeof setTimeout>>();
+
+  // ── Model capability helpers ──
+  const isSequentialSupported = model.includes('5-0') || model.includes('4-5') || model.includes('4-0');
+  const isOutputFormatSupported = model.includes('5-0-lite') || model.includes('5-0-260128');
+  const isGuidanceSupported = model.includes('3-0-t2i');
+  const isWebSearchSupported = model.includes('5-0-lite') || model.includes('5-0-260128');
 
   // ── Computed-like ──
   const pendingCount = queue.filter(i => i.status === 'pending' || i.status === 'error').length;
@@ -286,11 +297,13 @@ export const AIBatch: React.FC = () => {
             downloadWidth: downloadWidth === 'custom' ? parseInt(customWidth) || 0 : downloadWidth === 'original' ? 0 : parseInt(downloadWidth),
           });
 
-          if (result && result.success && result.success > 0) {
-            setQueue(prev => prev.map(i => i.id === item.id ? { ...i, status: 'completed' as const } : i));
+          if (cancelRequested) {
+            setQueue(prev => prev.map(i => i.id === item.id ? { ...i, status: 'cancelled' as const } : i));
+          } else if (result && result.success && result.success > 0) {
+            const outputPath = result.results?.[0]?.outputPath || '';
+            setQueue(prev => prev.map(i => i.id === item.id ? { ...i, status: 'completed' as const, outputPath } : i));
           } else {
             const errMsg = result?.results?.[0]?.error || result?.error || '处理失败';
-            errors.push(`${item.name}: ${errMsg}`);
             setQueue(prev => prev.map(i => i.id === item.id ? { ...i, status: 'error' as const, error: errMsg } : i));
           }
         } catch (err: any) {
@@ -302,6 +315,13 @@ export const AIBatch: React.FC = () => {
 
     const workers = Array.from({ length: concurrency }, () => worker());
     await Promise.all(workers);
+
+    // Mark remaining pending items as cancelled
+    if (cancelRequested) {
+      setQueue(prev => prev.map(i =>
+        i.status === 'pending' ? { ...i, status: 'cancelled' as const } : i
+      ));
+    }
 
     setProcessing(false);
     if (errors.length > 0) showToast(`${errors.length} 张处理失败`, 'error');
@@ -630,16 +650,16 @@ export const AIBatch: React.FC = () => {
               </div>
 
               {/* --- Sequential (组图) --- */}
-              <div style={s.row}>
+              {isSequentialSupported && (<div style={s.row}>
                 <span style={{ fontSize: 13, color: '#888' }}>生成模式</span>
                 <select value={sequentialMode} onChange={e => setSequentialMode(e.target.value)} style={{ ...s.select, width: 150 }}>
                   <option value="disabled">关闭 (单图)</option>
                   <option value="auto">自动 (组图)</option>
                 </select>
-              </div>
+              </div>)}
 
               {/* --- Max Images --- */}
-              {sequentialMode === 'auto' && (
+              {isSequentialSupported && sequentialMode === 'auto' && (
                 <div style={s.row}>
                   <span style={{ fontSize: 13, color: '#888' }}>最大图片数</span>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -650,16 +670,16 @@ export const AIBatch: React.FC = () => {
               )}
 
               {/* --- Output Format --- */}
-              <div style={s.row}>
+              {isOutputFormatSupported && (<div style={s.row}>
                 <span style={{ fontSize: 13, color: '#888' }}>输出格式</span>
                 <select value={outputFormat} onChange={e => setOutputFormat(e.target.value)} style={{ ...s.select, width: 150 }}>
                   <option value="jpeg">JPEG</option>
                   <option value="png">PNG</option>
                 </select>
-              </div>
+              </div>)}
 
               {/* --- Guidance Scale --- */}
-              <div style={s.row}>
+              {isGuidanceSupported && (<div style={s.row}>
                 <span style={{ fontSize: 13, color: '#888' }}>文本权重</span>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   <span style={{ fontSize: 11, color: '#64748b' }}>1</span>
@@ -667,7 +687,7 @@ export const AIBatch: React.FC = () => {
                   <span style={{ fontSize: 11, color: '#64748b' }}>10</span>
                   <span style={{ fontSize: 12, color: '#ccc', width: 28 }}>{guidanceScale.toFixed(1)}</span>
                 </div>
-              </div>
+              </div>)}
 
               {/* --- Optimize Prompt --- */}
               <div style={s.row}>
@@ -679,12 +699,12 @@ export const AIBatch: React.FC = () => {
               </div>
 
               {/* --- Web Search --- */}
-              <div style={s.row}>
+              {isWebSearchSupported && (<div style={s.row}>
                 <span style={{ fontSize: 13, color: '#888' }}>联网搜索</span>
                 <label style={{ fontSize: 13, color: '#ccc', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
                   <input type="checkbox" checked={webSearch} onChange={e => setWebSearch(e.target.checked)} style={{ accentColor: '#e94560' }} /> 搜索互联网
                 </label>
-              </div>
+              </div>)}
 
               {/* --- Concurrent --- */}
               <div style={s.row}>
@@ -795,6 +815,13 @@ export const AIBatch: React.FC = () => {
             </div>
           )}
 
+          {/* Hover Preview */}
+          {hoverPreviewVisible && hoverPreviewImg && (
+            <div style={{ position: 'fixed', left: hoverPreviewPos.x, top: hoverPreviewPos.y, zIndex: 9999, background: '#000', border: '1px solid #333', borderRadius: 8, padding: 4, pointerEvents: 'none', boxShadow: '0 8px 32px rgba(0,0,0,0.6)' }}>
+              <img src={hoverPreviewImg} style={{ maxWidth: 300, maxHeight: 300, borderRadius: 6, objectFit: 'contain' }} alt="preview" />
+            </div>
+          )}
+
           {/* Image Queue */}
           <div style={{ ...s.card, flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0 10px', fontSize: 12, color: '#64748b', borderBottom: '1px solid #333', marginBottom: 8 }}>
@@ -812,9 +839,21 @@ export const AIBatch: React.FC = () => {
                 </div>
               ) : (
                 queue.map(item => (
-                  <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 4px', borderBottom: '1px solid #1a1a2e' }}>
-                    <div style={{ width: 40, height: 40, borderRadius: 6, background: '#1a1a2e', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, color: '#555' }}>
-                      {item.status === 'completed' ? '✅' : item.status === 'error' ? '❌' : '🖼'}
+                  <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 4px', borderBottom: '1px solid #1a1a2e' }}
+                    onMouseMove={(e) => {
+                      if (item.status === 'completed' && item.outputPath) {
+                        setHoverPreviewImg(item.outputPath);
+                        setHoverPreviewPos({ x: e.clientX + 15, y: e.clientY + 15 });
+                      }
+                    }}
+                    onMouseEnter={() => item.status === 'completed' && item.outputPath && setHoverPreviewVisible(true)}
+                    onMouseLeave={() => setHoverPreviewVisible(false)}
+                  >
+                    <div style={{ width: 40, height: 40, borderRadius: 6, background: '#1a1a2e', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, color: '#555', overflow: 'hidden', cursor: item.outputPath ? 'pointer' : 'default' }}
+                      onClick={() => item.status === 'completed' && item.outputPath && openPreview(item)}>
+                      {item.status === 'completed' && item.outputPath ? (
+                        <img src={item.outputPath} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="result" />
+                      ) : item.status === 'error' ? '❌' : '🖼'}
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 13, color: '#ccc', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'pointer' }}
@@ -824,7 +863,7 @@ export const AIBatch: React.FC = () => {
                       {item.error && <div style={{ fontSize: 11, color: '#f87171', marginTop: 2 }}>{item.error}</div>}
                     </div>
 
-                    {/* Status */}
+                    {/* Status badges */}
                     {item.status === 'pending' && <span style={{ fontSize: 11, color: '#64748b', background: '#222', padding: '2px 8px', borderRadius: 4, flexShrink: 0 }}>等待处理</span>}
                     {item.status === 'processing' && (
                       <span style={{ fontSize: 11, color: '#60a5fa', background: '#1a1a2e', border: '1px solid #0f3460', padding: '2px 8px', borderRadius: 4, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -833,13 +872,27 @@ export const AIBatch: React.FC = () => {
                     )}
                     {item.status === 'completed' && (
                       <button onClick={() => openPreview(item)} style={{ fontSize: 11, color: '#4ade80', background: '#1a1a2e', border: '1px solid #14532d', padding: '2px 8px', borderRadius: 4, cursor: 'pointer', flexShrink: 0 }}>
-                        ✓ 完成 {item.results ? `(${item.results.length}张)` : ''}
+                        ✓ 完成
                       </button>
                     )}
                     {item.status === 'error' && <span style={{ fontSize: 11, color: '#f87171', background: '#1a1a2e', border: '1px solid #7f1d1d', padding: '2px 8px', borderRadius: 4, flexShrink: 0 }}>✗ 失败</span>}
+                    {item.status === 'cancelled' && <span style={{ fontSize: 11, color: '#64748b', background: '#1a1a2e', border: '1px solid #555', padding: '2px 8px', borderRadius: 4, flexShrink: 0 }}>已取消</span>}
 
                     {/* Actions */}
                     <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                      {item.status === 'completed' && item.outputPath && (
+                        <button onClick={async () => {
+                          try {
+                            // Trigger file save dialog via Wails
+                            const link = document.createElement('a');
+                            link.href = item.outputPath!;
+                            link.download = item.name;
+                            document.body.appendChild(link);
+                            link.click();
+                            document.body.removeChild(link);
+                          } catch { /* no-op */ }
+                        }} style={{ ...s.btnSm, background: '#0f3460' }} title="下载">⬇</button>
+                      )}
                       {item.status === 'error' && <button onClick={() => retryItem(item.id)} style={{ ...s.btnSm, background: '#1a1a2e', border: '1px solid #eab308', color: '#eab308' }}>重试</button>}
                       <button onClick={() => removeItem(item.id)} style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: 15 }}>×</button>
                     </div>
