@@ -1,5 +1,35 @@
 export namespace model {
 	
+	export class AIBatchRequest {
+	    sourcePaths: string[];
+	    outputDir: string;
+	    prompt: string;
+	    model: string;
+	    size: string;
+	    referenceImages: string[];
+	    seed: number;
+	    outputFormat: string;
+	    watermark: boolean;
+	    guidanceScale: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new AIBatchRequest(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.sourcePaths = source["sourcePaths"];
+	        this.outputDir = source["outputDir"];
+	        this.prompt = source["prompt"];
+	        this.model = source["model"];
+	        this.size = source["size"];
+	        this.referenceImages = source["referenceImages"];
+	        this.seed = source["seed"];
+	        this.outputFormat = source["outputFormat"];
+	        this.watermark = source["watermark"];
+	        this.guidanceScale = source["guidanceScale"];
+	    }
+	}
 	export class BatchRequest {
 	    sourcePaths: string[];
 	    outputDir: string;

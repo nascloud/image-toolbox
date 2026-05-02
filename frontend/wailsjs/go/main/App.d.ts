@@ -3,7 +3,13 @@
 import {model} from '../models';
 import {context} from '../models';
 
+export function GetApiKey():Promise<string>;
+
 export function ProcessImagesBatch(arg1:model.BatchRequest):Promise<model.BatchResult>;
+
+export function RunAIImageBatch(arg1:model.AIBatchRequest):Promise<model.BatchResult>;
+
+export function SaveApiKey(arg1:string):Promise<void>;
 
 export function ScanDirectory(arg1:string,arg2:boolean):Promise<Array<string>>;
 
