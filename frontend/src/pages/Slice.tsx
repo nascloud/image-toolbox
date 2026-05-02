@@ -24,7 +24,7 @@ export const Slice: React.FC = () => {
     const outputDir = files.length > 0
       ? files[0].substring(0, files[0].lastIndexOf('\\'))
       : '';
-    await startBatch({
+    await startBatch('SliceImages', {
       sourcePaths: files,
       outputDir,
       sliceCount,

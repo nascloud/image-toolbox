@@ -4,12 +4,46 @@ import (
 	"image"
 	"image/color"
 	"image/draw"
+	"os"
 	"strings"
 
 	"golang.org/x/image/font"
 	"golang.org/x/image/font/basicfont"
+	"golang.org/x/image/font/opentype"
 	"golang.org/x/image/math/fixed"
 )
+
+// systemFontFace loads a system TrueType font for CJK text rendering.
+// Falls back to basicfont if no system font is available.
+func systemFontFace(size float64) font.Face {
+	paths := []string{
+		"C:/Windows/Fonts/msyh.ttc",   // Microsoft YaHei
+		"C:/Windows/Fonts/msyh.ttf",
+		"C:/Windows/Fonts/arial.ttf",
+		"/System/Library/Fonts/STHeiti Light.ttc",
+		"/System/Library/Fonts/Arial.ttf",
+	}
+	for _, p := range paths {
+		data, err := os.ReadFile(p)
+		if err != nil {
+			continue
+		}
+		tt, err := opentype.Parse(data)
+		if err != nil {
+			continue
+		}
+		face, err := opentype.NewFace(tt, &opentype.FaceOptions{
+			Size:    size,
+			DPI:     72,
+			Hinting: font.HintingNone,
+		})
+		if err != nil {
+			continue
+		}
+		return face
+	}
+	return basicfont.Face7x13
+}
 
 // AddImageWatermark places or tiles a watermark image over the base.
 func AddImageWatermark(base, watermark image.Image, opacity float64, position string) *image.RGBA {
@@ -73,7 +107,11 @@ func AddTextWatermark(base image.Image, text string, opacity float64, position s
 	c := parseHexColor(fontColor)
 	c.A = uint8(opacity * 255)
 
-	face := basicfont.Face7x13
+	fSize := fontSize
+	if fSize <= 0 {
+		fSize = 12
+	}
+	face := systemFontFace(float64(fSize))
 	drawer := &font.Drawer{
 		Dst:  dst,
 		Src:  image.NewUniform(c),

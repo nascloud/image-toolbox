@@ -30,7 +30,7 @@ export const ConvertResize: React.FC = () => {
   };
 
   const handleRun = async () => {
-    await startBatch({
+    await startBatch('ProcessImagesBatch', {
       sourcePaths: files,
       outputDir: outputDir || (files.length > 0 ? files[0].substring(0, files[0].lastIndexOf('\\')) : ''),
       convertTo: convertTo || '',

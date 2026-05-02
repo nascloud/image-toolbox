@@ -33,7 +33,7 @@ export const Watermark: React.FC = () => {
     const outputDir = files.length > 0
       ? files[0].substring(0, files[0].lastIndexOf('\\'))
       : '';
-    await startBatch({
+    await startBatch('WatermarkImages', {
       sourcePaths: files,
       outputDir,
       watermarkImage: mode === 'image' ? watermarkImage : '',

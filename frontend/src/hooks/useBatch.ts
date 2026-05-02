@@ -21,12 +21,13 @@ export function useBatch() {
     result: null,
   });
 
-  const startBatch = useCallback(async (request: any) => {
+  const startBatch = useCallback(async (method: string, request: any) => {
     setState({ running: true, progress: null, result: null });
 
     try {
-      // Wails binds Go methods to window.go.main.App
-      const result = await (window as any).go.main.App.ProcessImagesBatch(request);
+      const fn = (window as any).go.main.App[method];
+      if (!fn) throw new Error(`Wails method not found: ${method}`);
+      const result = await fn(request);
       setState({ running: false, progress: null, result });
       return result;
     } catch (err: any) {
