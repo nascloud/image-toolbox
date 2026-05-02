@@ -3,10 +3,13 @@ package app
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 
 	"image-toolbox/backend/batch"
+	"image-toolbox/backend/config"
 	"image-toolbox/backend/file"
 	"image-toolbox/backend/model"
 )
@@ -141,4 +144,47 @@ func (a *App) WatermarkImages(req model.WatermarkRequest) (model.BatchResult, er
 	result := batch.RunWatermarkBatch(req, progressCh)
 	close(progressCh)
 	return result, nil
+}
+
+// RunAIImageBatch processes images through AI generation.
+func (a *App) RunAIImageBatch(req model.AIBatchRequest) (model.BatchResult, error) {
+	if len(req.SourcePaths) == 0 && req.OutputDir != "" {
+		paths, err := file.ScanImageFiles(req.OutputDir, false)
+		if err != nil {
+			return model.BatchResult{}, err
+		}
+		req.SourcePaths = paths
+	}
+
+	progressCh := make(chan model.ProgressUpdate, 100)
+	go func() {
+		for update := range progressCh {
+			runtime.EventsEmit(a.ctx, "batch-progress", update)
+		}
+	}()
+
+	configPath := filepath.Join(getConfigDir(), "config.json")
+	result := batch.RunAIImageBatch(req, configPath, progressCh)
+	close(progressCh)
+	return result, nil
+}
+
+// SaveApiKey persists the API key to the config file.
+func (a *App) SaveApiKey(apiKey string) error {
+	configPath := filepath.Join(getConfigDir(), "config.json")
+	return config.SaveApiKey(configPath, apiKey)
+}
+
+// GetApiKey retrieves the stored API key.
+func (a *App) GetApiKey() (string, error) {
+	configPath := filepath.Join(getConfigDir(), "config.json")
+	return config.LoadApiKey(configPath)
+}
+
+func getConfigDir() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ".imagetool"
+	}
+	return filepath.Join(home, ".imagetool")
 }
