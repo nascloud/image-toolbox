@@ -13,33 +13,40 @@
 ## File Structure
 
 ### Backend (new)
+
+Note: `main.go`, `app.go`, `go.mod` live at the **module root** (Go requirement). All other backend packages are under `backend/`.
+
 ```
-backend/
-├── app/
-│   └── app.go                 # Wails API methods
-├── image/
-│   ├── convert.go             # Format conversion (jpg/png/webp)
-│   ├── convert_test.go
-│   ├── resize.go              # Scale by ratio / fit within bounds
-│   └── resize_test.go
-├── batch/
-│   ├── runner.go              # Concurrency + progress callback
-│   ├── local.go               # Local batch orchestration
-│   └── local_test.go
-├── file/
-│   ├── scan.go                # Directory scan for image files
-│   ├── scan_test.go
-│   ├── output.go              # Output path & naming rules
-│   └── output_test.go
-├── model/
-│   ├── image.go               # ImageJob / ImageResult
-│   ├── batch.go               # BatchRequest / BatchResult
-│   └── progress.go            # ProgressUpdate
-├── util/
-│   ├── logger.go
-│   └── errors.go
-├── app.go                     # Main app struct (Wails lifecycle)
-└── main.go                    # Entry point
+image-toolbox/                 # Module root (go.mod lives here)
+├── main.go                    # Entry point (package main)
+├── app.go                     # Wails lifecycle struct (package main)
+├── go.mod
+├── backend/
+│   ├── app/
+│   │   └── app.go             # Wails API methods
+│   ├── image/
+│   │   ├── convert.go         # Format conversion (jpg/png/webp)
+│   │   ├── convert_test.go
+│   │   ├── resize.go          # Scale by ratio / fit within bounds
+│   │   └── resize_test.go
+│   ├── batch/
+│   │   ├── runner.go          # Concurrency + progress callback
+│   │   ├── local.go           # Local batch orchestration
+│   │   └── local_test.go
+│   ├── file/
+│   │   ├── scan.go            # Directory scan for image files
+│   │   ├── scan_test.go
+│   │   ├── output.go          # Output path & naming rules
+│   │   └── output_test.go
+│   ├── model/
+│   │   ├── image.go           # ImageJob / ImageResult
+│   │   ├── batch.go           # BatchRequest / BatchResult
+│   │   └── progress.go        # ProgressUpdate
+│   └── util/
+│       ├── logger.go
+│       └── errors.go
+└── frontend/
+    └── ...
 ```
 
 ### Frontend (Wails init creates scaffold, then modify)
@@ -133,7 +140,7 @@ package model
 type ImageJob struct {
 	SourcePath      string `json:"sourcePath"`
 	OutputPath      string `json:"outputPath"`
-	PreserveOrigina bool   `json:"preserveOriginal"`
+	PreserveOriginal bool   `json:"preserveOriginal"`
 }
 
 // ImageResult represents the outcome of processing one image.
@@ -161,7 +168,7 @@ type BatchRequest struct {
 	ResizeValue    float64  `json:"resizeValue,omitempty"`
 	ResizeWidth    int      `json:"resizeWidth,omitempty"`
 	ResizeHeight   int      `json:"resizeHeight,omitempty"`
-	PreserveOrigin bool     `json:"preserveOrigin"`
+	PreserveOriginal bool     `json:"preserveOriginal"`
 }
 
 // BatchResult aggregates results from processing multiple images.
@@ -1543,7 +1550,7 @@ export const ConvertResize: React.FC = () => {
       convertTo: convertTo || '',
       resizeMode: resizeMode || '',
       resizeValue: resizeValue / 100,
-      preserveOrigin: true,
+      preserveOriginal: true,
     });
   };
 
