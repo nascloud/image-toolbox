@@ -1,28 +1,20 @@
-import {useState} from 'react';
-import logo from './assets/images/logo-universal.png';
+import React, { useState } from 'react';
+import { Layout, TabDef } from './components/Layout';
 import './App.css';
-import {Greet} from "../wailsjs/go/main/App";
 
 function App() {
-    const [resultText, setResultText] = useState("Please enter your name below 👇");
-    const [name, setName] = useState('');
-    const updateName = (e: any) => setName(e.target.value);
-    const updateResultText = (result: string) => setResultText(result);
+  const [activeTab, setActiveTab] = useState('convert-resize');
 
-    function greet() {
-        Greet(name).then(updateResultText);
-    }
+  const tabs: TabDef[] = [
+    { id: 'convert-resize', label: '转换+缩放', component: <div style={{ padding: 40, color: '#666' }}>转换+缩放（待实现）</div> },
+    { id: 'slice', label: '切片', component: <div style={{ padding: 40, color: '#666' }}>切片功能（Phase 2）</div> },
+    { id: 'watermark', label: '水印', component: <div style={{ padding: 40, color: '#666' }}>水印功能（Phase 2）</div> },
+    { id: 'ai', label: 'AI 生成', component: <div style={{ padding: 40, color: '#666' }}>AI 生成功能（Phase 3）</div> },
+  ];
 
-    return (
-        <div id="App">
-            <img src={logo} id="logo" alt="logo"/>
-            <div id="result" className="result">{resultText}</div>
-            <div id="input" className="input-box">
-                <input id="name" className="input" onChange={updateName} autoComplete="off" name="input" type="text"/>
-                <button className="btn" onClick={greet}>Greet</button>
-            </div>
-        </div>
-    )
+  return (
+    <Layout tabs={tabs} activeTab={activeTab} onTabChange={setActiveTab} />
+  );
 }
 
-export default App
+export default App;
