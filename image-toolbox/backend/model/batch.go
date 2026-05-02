@@ -1,5 +1,6 @@
 package model
 
+// BatchRequest holds all parameters for a local batch operation.
 type BatchRequest struct {
 	SourcePaths      []string `json:"sourcePaths"`
 	OutputDir        string   `json:"outputDir"`
@@ -11,6 +12,7 @@ type BatchRequest struct {
 	PreserveOriginal bool     `json:"preserveOriginal"`
 }
 
+// BatchResult aggregates results from processing multiple images.
 type BatchResult struct {
 	Total   int           `json:"total"`
 	Success int           `json:"success"`
