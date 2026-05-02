@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { EventsOn, EventsOff } from '../../wailsjs/runtime';
 
 export interface ProgressUpdate {
@@ -22,23 +22,30 @@ export function useBatch() {
     result: null,
   });
 
-  const startBatch = useCallback(async (method: string, request: any) => {
-    setState({ running: true, progress: null, result: null });
+  // Keep a ref to latest setState so EventsOn callback always has fresh access
+  const stateRef = useRef(state);
+  stateRef.current = state;
 
-    // Subscribe to progress events from Go backend
+  // Register progress listener once on mount
+  useEffect(() => {
     EventsOn('batch-progress', (update: ProgressUpdate) => {
       setState(prev => ({ ...prev, progress: update }));
     });
+    return () => {
+      EventsOff('batch-progress');
+    };
+  }, []);
+
+  const startBatch = useCallback(async (method: string, request: any) => {
+    setState({ running: true, progress: null, result: null });
 
     try {
       const fn = (window as any).go.main.App[method];
       if (!fn) throw new Error(`Wails method not found: ${method}`);
       const result = await fn(request);
-      EventsOff('batch-progress');
       setState({ running: false, progress: null, result });
       return result;
     } catch (err: any) {
-      EventsOff('batch-progress');
       setState({ running: false, progress: null, result: { error: err.message } });
     }
   }, []);
