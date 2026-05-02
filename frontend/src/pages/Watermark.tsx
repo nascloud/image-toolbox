@@ -10,7 +10,10 @@ export const Watermark: React.FC = () => {
   const [watermarkText, setWatermarkText] = useState('Watermark');
   const [opacity, setOpacity] = useState(0.5);
   const [position, setPosition] = useState('bottomRight');
-  const { state, startBatch } = useBatch();
+  const [outputDir, setOutputDir] = useState('');
+  const [uniformWidth, setUniformWidth] = useState(false);
+  const [uniformTarget, setUniformTarget] = useState(1440);
+  const { state, startBatch, cancelBatch, openOutputDir } = useBatch();
 
   const handleSelectFolder = async () => {
     try {
@@ -18,6 +21,7 @@ export const Watermark: React.FC = () => {
       if (dir) {
         const scanned = await (window as any).go.main.App.ScanDirectory(dir, true);
         if (scanned) setFiles(scanned);
+        if (!outputDir) setOutputDir(dir);
       }
     } catch { /* no-op */ }
   };
@@ -29,19 +33,24 @@ export const Watermark: React.FC = () => {
     } catch { /* no-op */ }
   };
 
+  const handleSelectOutputDir = async () => {
+    try {
+      const dir = await (window as any).go.main.App.SelectOutputDir();
+      if (dir) setOutputDir(dir);
+    } catch { /* no-op */ }
+  };
+
   const handleRun = async () => {
-    const outputDir = files.length > 0
-      ? files[0].substring(0, files[0].lastIndexOf('\\'))
-      : '';
     await startBatch('WatermarkImages', {
       sourcePaths: files,
-      outputDir,
+      outputDir: outputDir || (files.length > 0 ? files[0].substring(0, files[0].lastIndexOf('\\')) : ''),
       watermarkImage: mode === 'image' ? watermarkImage : '',
       watermarkText: mode === 'text' ? watermarkText : '',
       opacity,
       position,
       fontSize: 12,
       fontColor: '#ffffff',
+      uniformWidth: uniformWidth ? uniformTarget : 0,
     });
   };
 
@@ -53,6 +62,10 @@ export const Watermark: React.FC = () => {
     padding: '8px 12px', background: '#1a1a2e', color: '#fff',
     border: '1px solid #333', borderRadius: 6, fontSize: 14,
   };
+  const inputStyle: React.CSSProperties = {
+    padding: '8px 12px', background: '#1a1a2e', color: '#fff',
+    border: '1px solid #333', borderRadius: 6, fontSize: 14, width: 80,
+  };
 
   return (
     <div style={{ maxWidth: 800, margin: '0 auto' }}>
@@ -60,7 +73,15 @@ export const Watermark: React.FC = () => {
 
       <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
         <button onClick={handleSelectFolder} style={btnStyle}>选择图片文件夹</button>
+        <button onClick={handleSelectOutputDir} style={btnStyle}>输出目录</button>
+        {outputDir && (
+          <button onClick={() => openOutputDir(outputDir)} style={{ ...btnStyle, background: '#1a1a2e', border: '1px solid #333' }}>📂 打开</button>
+        )}
       </div>
+
+      {outputDir && (
+        <div style={{ fontSize: 12, color: '#888', marginBottom: 8 }}>输出目录: {outputDir}</div>
+      )}
 
       <ImageList files={files} onRemove={i => setFiles(files.filter((_, j) => j !== i))}
         onClear={() => setFiles([])} />
@@ -77,17 +98,14 @@ export const Watermark: React.FC = () => {
         {mode === 'text' ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <label style={{ fontSize: 14, minWidth: 80 }}>水印文字</label>
-            <input type="text" value={watermarkText}
-              onChange={e => setWatermarkText(e.target.value)}
+            <input type="text" value={watermarkText} onChange={e => setWatermarkText(e.target.value)}
               style={{ padding: '8px 12px', background: '#1a1a2e', color: '#fff',
                 border: '1px solid #333', borderRadius: 6, fontSize: 14, flex: 1 }} />
           </div>
         ) : (
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <label style={{ fontSize: 14, minWidth: 80 }}>水印图片</label>
-            <span style={{ fontSize: 13, color: '#ccc', flex: 1 }}>
-              {watermarkImage || '未选择'}
-            </span>
+            <span style={{ fontSize: 13, color: '#ccc', flex: 1 }}>{watermarkImage || '未选择'}</span>
             <button onClick={handleSelectWatermark} style={btnStyle}>选择图片</button>
           </div>
         )}
@@ -109,15 +127,42 @@ export const Watermark: React.FC = () => {
             <option value="topLeft">左上角</option>
           </select>
         </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <label style={{ fontSize: 14, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+            <input type="checkbox" checked={uniformWidth} onChange={e => setUniformWidth(e.target.checked)} style={{ accentColor: '#e94560' }} />
+            统一输入宽度
+          </label>
+          {uniformWidth && (
+            <>
+              <input type="number" value={uniformTarget} onChange={e => setUniformTarget(Number(e.target.value))} style={inputStyle} min={1} />
+              <span style={{ fontSize: 13, color: '#888' }}>px</span>
+            </>
+          )}
+        </div>
       </div>
 
-      <button onClick={handleRun} disabled={state.running || files.length === 0}
-        style={{ ...btnStyle, marginTop: 24, background: state.running ? '#555' : '#e94560',
-          width: '100%', padding: '12px 0', fontSize: 16 }}>
-        {state.running ? '处理中...' : '添加水印'}
-      </button>
+      <div style={{ display: 'flex', gap: 12, marginTop: 24 }}>
+        {state.running ? (
+          <button onClick={cancelBatch}
+            style={{ ...btnStyle, background: '#dc2626', width: '100%', padding: '12px 0', fontSize: 16 }}>
+            取消处理
+          </button>
+        ) : (
+          <button onClick={handleRun} disabled={files.length === 0}
+            style={{ ...btnStyle, marginTop: 0, background: files.length === 0 ? '#555' : '#e94560',
+              width: '100%', padding: '12px 0', fontSize: 16 }}>
+            添加水印
+          </button>
+        )}
+      </div>
 
       <BatchProgress progress={state.progress} />
+      {state.result && (
+        <div style={{ fontSize: 13, color: '#888', marginTop: 8, textAlign: 'center' }}>
+          处理完成: {state.result.success || 0} 成功, {state.result.failed || 0} 失败
+        </div>
+      )}
     </div>
   );
 };

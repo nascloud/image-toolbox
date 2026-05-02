@@ -3,7 +3,11 @@
 import {model} from '../models';
 import {context} from '../models';
 
+export function CancelBatch():Promise<void>;
+
 export function GetApiKey():Promise<string>;
+
+export function OpenOutputDir(arg1:string):Promise<void>;
 
 export function ProcessImagesBatch(arg1:model.BatchRequest):Promise<model.BatchResult>;
 
@@ -16,6 +20,8 @@ export function ScanDirectory(arg1:string,arg2:boolean):Promise<Array<string>>;
 export function SelectDirectory():Promise<string>;
 
 export function SelectFiles():Promise<Array<string>>;
+
+export function SelectOutputDir():Promise<string>;
 
 export function SetContext(arg1:context.Context):Promise<void>;
 

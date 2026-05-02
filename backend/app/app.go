@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
@@ -15,9 +16,9 @@ import (
 )
 
 // App is the thin Wails API layer that exposes methods to the frontend.
-// It delegates all logic to the backend packages.
 type App struct {
-	ctx context.Context
+	ctx       context.Context
+	cancelFn  context.CancelFunc
 }
 
 // NewApp creates a new API App instance.
@@ -28,6 +29,33 @@ func NewApp() *App {
 // SetContext stores the Wails runtime context for dialog and event calls.
 func (a *App) SetContext(ctx context.Context) {
 	a.ctx = ctx
+}
+
+// newBatchContext creates a cancellable context for batch operations.
+func (a *App) newBatchContext() context.Context {
+	if a.cancelFn != nil {
+		a.cancelFn()
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	a.cancelFn = cancel
+	return ctx
+}
+
+// CancelBatch cancels the currently running batch operation.
+func (a *App) CancelBatch() {
+	if a.cancelFn != nil {
+		a.cancelFn()
+		a.cancelFn = nil
+	}
+}
+
+// OpenOutputDir opens the given directory in the file explorer.
+func (a *App) OpenOutputDir(dir string) error {
+	if dir == "" {
+		return fmt.Errorf("no directory specified")
+	}
+	cmd := exec.Command("explorer", dir)
+	return cmd.Start()
 }
 
 // SelectFiles opens a file dialog for selecting image files.
@@ -55,6 +83,17 @@ func (a *App) SelectDirectory() (string, error) {
 	return dir, nil
 }
 
+// SelectOutputDir opens a directory picker for output.
+func (a *App) SelectOutputDir() (string, error) {
+	dir, err := runtime.OpenDirectoryDialog(a.ctx, runtime.OpenDialogOptions{
+		Title: "选择输出文件夹",
+	})
+	if err != nil {
+		return "", fmt.Errorf("select output dir: %w", err)
+	}
+	return dir, nil
+}
+
 // ScanDirectory scans a directory for supported image files.
 func (a *App) ScanDirectory(dir string, recursive bool) ([]string, error) {
 	return file.ScanImageFiles(dir, recursive)
@@ -70,6 +109,7 @@ func (a *App) ProcessImagesBatch(req model.BatchRequest) (model.BatchResult, err
 		req.SourcePaths = paths
 	}
 
+	ctx := a.newBatchContext()
 	progressCh := make(chan model.ProgressUpdate, 100)
 	go func() {
 		for update := range progressCh {
@@ -77,9 +117,8 @@ func (a *App) ProcessImagesBatch(req model.BatchRequest) (model.BatchResult, err
 		}
 	}()
 
-	result := batch.RunLocalBatch(req, progressCh)
+	result := batch.RunLocalBatch(ctx, req, progressCh)
 	close(progressCh)
-
 	return result, nil
 }
 
@@ -92,7 +131,6 @@ func (a *App) SliceImages(req model.SliceRequest) (model.BatchResult, error) {
 		}
 		req.SourcePaths = paths
 	}
-
 	if req.SliceCount <= 0 {
 		req.SliceCount = 25
 	}
@@ -103,6 +141,7 @@ func (a *App) SliceImages(req model.SliceRequest) (model.BatchResult, error) {
 		req.Saturation = 1.0
 	}
 
+	ctx := a.newBatchContext()
 	progressCh := make(chan model.ProgressUpdate, 100)
 	go func() {
 		for update := range progressCh {
@@ -110,7 +149,7 @@ func (a *App) SliceImages(req model.SliceRequest) (model.BatchResult, error) {
 		}
 	}()
 
-	result := batch.RunSliceBatch(req, progressCh)
+	result := batch.RunSliceBatch(ctx, req, progressCh)
 	close(progressCh)
 	return result, nil
 }
@@ -124,7 +163,6 @@ func (a *App) WatermarkImages(req model.WatermarkRequest) (model.BatchResult, er
 		}
 		req.SourcePaths = paths
 	}
-
 	if req.Opacity <= 0 {
 		req.Opacity = 0.5
 	} else if req.Opacity > 1.0 {
@@ -134,6 +172,7 @@ func (a *App) WatermarkImages(req model.WatermarkRequest) (model.BatchResult, er
 		req.Position = "bottomRight"
 	}
 
+	ctx := a.newBatchContext()
 	progressCh := make(chan model.ProgressUpdate, 100)
 	go func() {
 		for update := range progressCh {
@@ -141,7 +180,7 @@ func (a *App) WatermarkImages(req model.WatermarkRequest) (model.BatchResult, er
 		}
 	}()
 
-	result := batch.RunWatermarkBatch(req, progressCh)
+	result := batch.RunWatermarkBatch(ctx, req, progressCh)
 	close(progressCh)
 	return result, nil
 }
@@ -156,6 +195,7 @@ func (a *App) RunAIImageBatch(req model.AIBatchRequest) (model.BatchResult, erro
 		req.SourcePaths = paths
 	}
 
+	ctx := a.newBatchContext()
 	progressCh := make(chan model.ProgressUpdate, 100)
 	go func() {
 		for update := range progressCh {
@@ -164,7 +204,7 @@ func (a *App) RunAIImageBatch(req model.AIBatchRequest) (model.BatchResult, erro
 	}()
 
 	configPath := filepath.Join(getConfigDir(), "config.json")
-	result := batch.RunAIImageBatch(req, configPath, progressCh)
+	result := batch.RunAIImageBatch(ctx, req, configPath, progressCh)
 	close(progressCh)
 	return result, nil
 }

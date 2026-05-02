@@ -1,6 +1,7 @@
 package batch
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,7 +11,7 @@ import (
 )
 
 // RunLocalBatch processes a batch of images with convert/resize operations.
-func RunLocalBatch(req model.BatchRequest, progressCh chan<- model.ProgressUpdate) model.BatchResult {
+func RunLocalBatch(ctx context.Context, req model.BatchRequest, progressCh chan<- model.ProgressUpdate) model.BatchResult {
 	jobFn := func(srcPath string) (string, error) {
 		outPath := srcPath
 		var ext string
@@ -22,7 +23,6 @@ func RunLocalBatch(req model.BatchRequest, progressCh chan<- model.ProgressUpdat
 			name := strings.TrimSuffix(baseName, origExt)
 			outPath = filepath.Join(req.OutputDir, name+"."+ext)
 		} else {
-			// Resize-only mode: keep original extension
 			baseName := filepath.Base(srcPath)
 			origExt := filepath.Ext(baseName)
 			ext = strings.TrimPrefix(origExt, ".")
@@ -46,33 +46,26 @@ func RunLocalBatch(req model.BatchRequest, progressCh chan<- model.ProgressUpdat
 			}
 		}
 
-		// Ensure output directory exists
 		outDir := filepath.Dir(outPath)
 		if err := os.MkdirAll(outDir, 0755); err != nil {
 			return "", err
 		}
 
-		return backendImage.ConvertImage(srcPath, outPath, ext, resizeOpts)
-	}
-
-	results := RunConcurrent(req.SourcePaths, jobFn, 4, progressCh)
-
-	successCount := 0
-	failedCount := 0
-	for _, r := range results {
-		if r.Success {
-			successCount++
-		} else {
-			failedCount++
+		resultPath, err := backendImage.ConvertImage(srcPath, outPath, ext, resizeOpts)
+		if err != nil {
+			return "", err
 		}
+
+		// Remove original if requested
+		if !req.PreserveOriginal {
+			os.Remove(srcPath)
+		}
+
+		return resultPath, nil
 	}
 
-	return model.BatchResult{
-		Total:   len(results),
-		Success: successCount,
-		Failed:  failedCount,
-		Results: results,
-	}
+	results := RunConcurrent(ctx, req.SourcePaths, jobFn, 4, progressCh)
+	return aggregateResults(results)
 }
 
 // aggregateResults summarises a slice of ImageResult into a BatchResult.

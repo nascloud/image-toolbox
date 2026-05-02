@@ -1,6 +1,7 @@
 package batch
 
 import (
+	"context"
 	"sync"
 
 	"image-toolbox/backend/model"
@@ -10,14 +11,28 @@ import (
 type JobFunc func(srcPath string) (string, error)
 
 // RunConcurrent executes jobs concurrently with a progress channel.
-func RunConcurrent(sources []string, fn JobFunc, maxConcurrent int, progressCh chan<- model.ProgressUpdate) []model.ImageResult {
+// If ctx is cancelled, remaining pending jobs are skipped and marked as cancelled.
+func RunConcurrent(ctx context.Context, sources []string, fn JobFunc, maxConcurrent int, progressCh chan<- model.ProgressUpdate) []model.ImageResult {
 	total := len(sources)
 	results := make([]model.ImageResult, total)
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, maxConcurrent)
 	var mu sync.Mutex
+	cancelled := false
 
 	for i, src := range sources {
+		// Check for cancellation before starting each job
+		select {
+		case <-ctx.Done():
+			cancelled = true
+		default:
+		}
+
+		if cancelled {
+			results[i] = model.ImageResult{SourcePath: src, Error: "cancelled"}
+			continue
+		}
+
 		wg.Add(1)
 		go func(idx int, path string) {
 			defer wg.Done()

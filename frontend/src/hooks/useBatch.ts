@@ -50,5 +50,17 @@ export function useBatch() {
     }
   }, []);
 
-  return { state, startBatch };
+  const cancelBatch = useCallback(async () => {
+    try {
+      await (window as any).go.main.App.CancelBatch();
+    } catch { /* no-op */ }
+  }, []);
+
+  const openOutputDir = useCallback(async (dir: string) => {
+    try {
+      await (window as any).go.main.App.OpenOutputDir(dir);
+    } catch { /* no-op */ }
+  }, []);
+
+  return { state, startBatch, cancelBatch, openOutputDir };
 }

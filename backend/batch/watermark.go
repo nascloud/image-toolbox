@@ -1,6 +1,7 @@
 package batch
 
 import (
+	"context"
 	"fmt"
 	"image"
 	"os"
@@ -12,7 +13,7 @@ import (
 )
 
 // RunWatermarkBatch processes images with watermark operation.
-func RunWatermarkBatch(req model.WatermarkRequest, progressCh chan<- model.ProgressUpdate) model.BatchResult {
+func RunWatermarkBatch(ctx context.Context, req model.WatermarkRequest, progressCh chan<- model.ProgressUpdate) model.BatchResult {
 	var wmImage image.Image
 	if req.WatermarkImage != "" {
 		f, err := os.Open(req.WatermarkImage)
@@ -58,6 +59,6 @@ func RunWatermarkBatch(req model.WatermarkRequest, progressCh chan<- model.Progr
 		return outPath, nil
 	}
 
-	results := RunConcurrent(req.SourcePaths, jobFn, 4, progressCh)
+	results := RunConcurrent(ctx, req.SourcePaths, jobFn, 4, progressCh)
 	return aggregateResults(results)
 }

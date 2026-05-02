@@ -1,6 +1,7 @@
 package batch
 
 import (
+	"context"
 	"fmt"
 	"image"
 	"image/png"
@@ -13,7 +14,7 @@ import (
 )
 
 // RunSliceBatch processes images with the slicing operation.
-func RunSliceBatch(req model.SliceRequest, progressCh chan<- model.ProgressUpdate) model.BatchResult {
+func RunSliceBatch(ctx context.Context, req model.SliceRequest, progressCh chan<- model.ProgressUpdate) model.BatchResult {
 	jobFn := func(srcPath string) (string, error) {
 		f, err := os.Open(srcPath)
 		if err != nil {
@@ -44,7 +45,7 @@ func RunSliceBatch(req model.SliceRequest, progressCh chan<- model.ProgressUpdat
 		return filepath.Join(req.OutputDir, fmt.Sprintf("%s_slice_1.png", name)), nil
 	}
 
-	results := RunConcurrent(req.SourcePaths, jobFn, 4, progressCh)
+	results := RunConcurrent(ctx, req.SourcePaths, jobFn, 4, progressCh)
 	return aggregateResults(results)
 }
 

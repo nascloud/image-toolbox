@@ -1,6 +1,7 @@
 package batch
 
 import (
+	"context"
 	"image"
 	"image/color"
 	"image/png"
@@ -42,7 +43,7 @@ func TestRunLocalBatch(t *testing.T) {
 	}
 
 	progressCh := make(chan model.ProgressUpdate, 10)
-	result := RunLocalBatch(req, progressCh)
+	result := RunLocalBatch(context.Background(), req, progressCh)
 	close(progressCh)
 
 	if result.Total != 2 {

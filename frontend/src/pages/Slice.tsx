@@ -8,7 +8,8 @@ export const Slice: React.FC = () => {
   const [sliceCount, setSliceCount] = useState(25);
   const [contrast, setContrast] = useState(1.0);
   const [saturation, setSaturation] = useState(1.0);
-  const { state, startBatch } = useBatch();
+  const [outputDir, setOutputDir] = useState('');
+  const { state, startBatch, cancelBatch, openOutputDir } = useBatch();
 
   const handleSelectFolder = async () => {
     try {
@@ -16,17 +17,22 @@ export const Slice: React.FC = () => {
       if (dir) {
         const scanned = await (window as any).go.main.App.ScanDirectory(dir, false);
         if (scanned) setFiles(scanned);
+        if (!outputDir) setOutputDir(dir);
       }
     } catch { /* no-op */ }
   };
 
+  const handleSelectOutputDir = async () => {
+    try {
+      const dir = await (window as any).go.main.App.SelectOutputDir();
+      if (dir) setOutputDir(dir);
+    } catch { /* no-op */ }
+  };
+
   const handleRun = async () => {
-    const outputDir = files.length > 0
-      ? files[0].substring(0, files[0].lastIndexOf('\\'))
-      : '';
     await startBatch('SliceImages', {
       sourcePaths: files,
-      outputDir,
+      outputDir: outputDir || (files.length > 0 ? files[0].substring(0, files[0].lastIndexOf('\\')) : ''),
       sliceCount,
       contrast,
       saturation,
@@ -49,7 +55,15 @@ export const Slice: React.FC = () => {
 
       <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
         <button onClick={handleSelectFolder} style={btnStyle}>选择文件夹</button>
+        <button onClick={handleSelectOutputDir} style={btnStyle}>输出目录</button>
+        {outputDir && (
+          <button onClick={() => openOutputDir(outputDir)} style={{ ...btnStyle, background: '#1a1a2e', border: '1px solid #333' }}>📂 打开</button>
+        )}
       </div>
+
+      {outputDir && (
+        <div style={{ fontSize: 12, color: '#888', marginBottom: 8 }}>输出目录: {outputDir}</div>
+      )}
 
       <ImageList files={files} onRemove={i => setFiles(files.filter((_, j) => j !== i))}
         onClear={() => setFiles([])} />
@@ -77,13 +91,27 @@ export const Slice: React.FC = () => {
         </div>
       </div>
 
-      <button onClick={handleRun} disabled={state.running || files.length === 0}
-        style={{ ...btnStyle, marginTop: 24, background: state.running ? '#555' : '#e94560',
-          width: '100%', padding: '12px 0', fontSize: 16 }}>
-        {state.running ? '处理中...' : '开始切片'}
-      </button>
+      <div style={{ display: 'flex', gap: 12, marginTop: 24 }}>
+        {state.running ? (
+          <button onClick={cancelBatch}
+            style={{ ...btnStyle, background: '#dc2626', width: '100%', padding: '12px 0', fontSize: 16 }}>
+            取消处理
+          </button>
+        ) : (
+          <button onClick={handleRun} disabled={files.length === 0}
+            style={{ ...btnStyle, marginTop: 0, background: files.length === 0 ? '#555' : '#e94560',
+              width: '100%', padding: '12px 0', fontSize: 16 }}>
+            开始切片
+          </button>
+        )}
+      </div>
 
       <BatchProgress progress={state.progress} />
+      {state.result && (
+        <div style={{ fontSize: 13, color: '#888', marginTop: 8, textAlign: 'center' }}>
+          处理完成: {state.result.success || 0} 成功, {state.result.failed || 0} 失败
+        </div>
+      )}
     </div>
   );
 };

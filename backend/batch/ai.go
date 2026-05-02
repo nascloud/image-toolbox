@@ -1,6 +1,7 @@
 package batch
 
 import (
+	"context"
 	"fmt"
 
 	backendAI "image-toolbox/backend/ai"
@@ -9,7 +10,7 @@ import (
 )
 
 // RunAIImageBatch processes images through AI generation.
-func RunAIImageBatch(req model.AIBatchRequest, configPath string, progressCh chan<- model.ProgressUpdate) model.BatchResult {
+func RunAIImageBatch(ctx context.Context, req model.AIBatchRequest, configPath string, progressCh chan<- model.ProgressUpdate) model.BatchResult {
 	apiKey, err := config.LoadApiKey(configPath)
 	if err != nil {
 		return model.BatchResult{Error: fmt.Sprintf("load API key: %v", err)}
@@ -35,6 +36,6 @@ func RunAIImageBatch(req model.AIBatchRequest, configPath string, progressCh cha
 	if req.Concurrent > 0 {
 		maxConcurrent = req.Concurrent
 	}
-	results := RunConcurrent(req.SourcePaths, jobFn, maxConcurrent, progressCh)
+	results := RunConcurrent(ctx, req.SourcePaths, jobFn, maxConcurrent, progressCh)
 	return aggregateResults(results)
 }
