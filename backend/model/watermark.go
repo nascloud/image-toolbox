@@ -11,4 +11,5 @@ type WatermarkRequest struct {
 	FontSize       int      `json:"fontSize"`
 	FontColor      string   `json:"fontColor"`
 	UniformWidth   int      `json:"uniformWidth"`
+	OutputWidth    int      `json:"outputWidth"`
 }

@@ -39,13 +39,35 @@ func RunWatermarkBatch(ctx context.Context, req model.WatermarkRequest, progress
 			return "", fmt.Errorf("decode: %w", err)
 		}
 
+		// Apply uniform input width if specified
+		workingImg := img
+		if req.UniformWidth > 0 {
+			workingImg = backendImage.ResizeImage(img, backendImage.ResizeOptions{
+				Mode: backendImage.ResizeModeMaxEdge, MaxEdge: req.UniformWidth,
+			})
+		}
+
 		var result *image.RGBA
 		if wmImage != nil {
-			result = backendImage.AddImageWatermark(img, wmImage, req.Opacity, req.Position)
+			result = backendImage.AddImageWatermark(workingImg, wmImage, req.Opacity, req.Position)
 		} else if req.WatermarkText != "" {
-			result = backendImage.AddTextWatermark(img, req.WatermarkText, req.Opacity, req.Position, req.FontSize, req.FontColor)
+			result = backendImage.AddTextWatermark(workingImg, req.WatermarkText, req.Opacity, req.Position, req.FontSize, req.FontColor)
 		} else {
 			return "", fmt.Errorf("no watermark image or text provided")
+		}
+
+		// Apply uniform output width if specified
+		outputImg := result
+		if req.OutputWidth > 0 {
+			resized := backendImage.ResizeImage(result, backendImage.ResizeOptions{
+				Mode: backendImage.ResizeModeMaxEdge, MaxEdge: req.OutputWidth,
+			})
+			outputImg = image.NewRGBA(resized.Bounds())
+			for y := 0; y < resized.Bounds().Dy(); y++ {
+				for x := 0; x < resized.Bounds().Dx(); x++ {
+					outputImg.Set(x, y, resized.At(x, y))
+				}
+			}
 		}
 
 		base := filepath.Base(srcPath)
@@ -53,7 +75,7 @@ func RunWatermarkBatch(ctx context.Context, req model.WatermarkRequest, progress
 		name := strings.TrimSuffix(base, ext)
 		outPath := filepath.Join(req.OutputDir, name+"_watermarked.png")
 
-		if err := savePNG(result, outPath); err != nil {
+		if err := savePNG(outputImg, outPath); err != nil {
 			return "", fmt.Errorf("save: %w", err)
 		}
 		return outPath, nil

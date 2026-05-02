@@ -13,6 +13,8 @@ export const Watermark: React.FC = () => {
   const [outputDir, setOutputDir] = useState('');
   const [uniformWidth, setUniformWidth] = useState(false);
   const [uniformTarget, setUniformTarget] = useState(1440);
+  const [outputWidth, setOutputWidth] = useState(false);
+  const [outputTarget, setOutputTarget] = useState(1440);
   const { state, startBatch, cancelBatch, openOutputDir } = useBatch();
 
   const handleSelectFolder = async () => {
@@ -51,6 +53,7 @@ export const Watermark: React.FC = () => {
       fontSize: 12,
       fontColor: '#ffffff',
       uniformWidth: uniformWidth ? uniformTarget : 0,
+      outputWidth: outputWidth ? outputTarget : 0,
     });
   };
 
@@ -136,6 +139,18 @@ export const Watermark: React.FC = () => {
           {uniformWidth && (
             <>
               <input type="number" value={uniformTarget} onChange={e => setUniformTarget(Number(e.target.value))} style={inputStyle} min={1} />
+              <span style={{ fontSize: 13, color: '#888' }}>px</span>
+            </>
+          )}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <label style={{ fontSize: 14, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+            <input type="checkbox" checked={outputWidth} onChange={e => setOutputWidth(e.target.checked)} style={{ accentColor: '#e94560' }} />
+            统一输出宽度
+          </label>
+          {outputWidth && (
+            <>
+              <input type="number" value={outputTarget} onChange={e => setOutputTarget(Number(e.target.value))} style={inputStyle} min={1} />
               <span style={{ fontSize: 13, color: '#888' }}>px</span>
             </>
           )}

@@ -159,6 +159,7 @@ export namespace model {
 	    fontSize: number;
 	    fontColor: string;
 	    uniformWidth: number;
+	    outputWidth: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new WatermarkRequest(source);
@@ -175,6 +176,7 @@ export namespace model {
 	        this.fontSize = source["fontSize"];
 	        this.fontColor = source["fontColor"];
 	        this.uniformWidth = source["uniformWidth"];
+	        this.outputWidth = source["outputWidth"];
 	    }
 	}
 
