@@ -1,0 +1,28 @@
+# Python projects (source reference only, not part of Go project)
+image_convert/
+slice_images/
+seedream/
+watermarked/
+
+# Wails build output
+build/
+
+# Go
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binary
+*.test
+
+# Output of go coverage
+*.out
+
+# VSCode
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db

@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "Bash(where wails *)",
+      "Bash(go version *)",
+      "Read(//c/Go/bin/**)",
+      "Read(//c/Program Files/Go/bin/**)",
+      "Read(//d/Users/HYD/go/bin/**)",
+      "Read(//c/Users/**)",
+      "Bash(winget install *)",
+      "Bash(export PATH=\"/c/Program Files/Go/bin:$HOME/go/bin:$PATH\")",
+      "Bash(go install *)",
+      "Bash(git init *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git rm *)",
+      "Bash(git reset *)"
+    ]
+  }
+}
