@@ -74,3 +74,22 @@ func RunLocalBatch(req model.BatchRequest, progressCh chan<- model.ProgressUpdat
 		Results: results,
 	}
 }
+
+// aggregateResults summarises a slice of ImageResult into a BatchResult.
+func aggregateResults(results []model.ImageResult) model.BatchResult {
+	successCount := 0
+	failedCount := 0
+	for _, r := range results {
+		if r.Success {
+			successCount++
+		} else {
+			failedCount++
+		}
+	}
+	return model.BatchResult{
+		Total:   len(results),
+		Success: successCount,
+		Failed:  failedCount,
+		Results: results,
+	}
+}
