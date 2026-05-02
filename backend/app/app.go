@@ -79,3 +79,66 @@ func (a *App) ProcessImagesBatch(req model.BatchRequest) (model.BatchResult, err
 
 	return result, nil
 }
+
+// SliceImages processes a batch of images with the slicing operation.
+func (a *App) SliceImages(req model.SliceRequest) (model.BatchResult, error) {
+	if len(req.SourcePaths) == 0 && req.OutputDir != "" {
+		paths, err := file.ScanImageFiles(req.OutputDir, false)
+		if err != nil {
+			return model.BatchResult{}, err
+		}
+		req.SourcePaths = paths
+	}
+
+	if req.SliceCount <= 0 {
+		req.SliceCount = 25
+	}
+	if req.Contrast <= 0 {
+		req.Contrast = 1.0
+	}
+	if req.Saturation <= 0 {
+		req.Saturation = 1.0
+	}
+
+	progressCh := make(chan model.ProgressUpdate, 100)
+	go func() {
+		for update := range progressCh {
+			runtime.EventsEmit(a.ctx, "batch-progress", update)
+		}
+	}()
+
+	result := batch.RunSliceBatch(req, progressCh)
+	close(progressCh)
+	return result, nil
+}
+
+// WatermarkImages processes a batch of images with watermark.
+func (a *App) WatermarkImages(req model.WatermarkRequest) (model.BatchResult, error) {
+	if len(req.SourcePaths) == 0 && req.OutputDir != "" {
+		paths, err := file.ScanImageFiles(req.OutputDir, false)
+		if err != nil {
+			return model.BatchResult{}, err
+		}
+		req.SourcePaths = paths
+	}
+
+	if req.Opacity <= 0 {
+		req.Opacity = 0.5
+	} else if req.Opacity > 1.0 {
+		req.Opacity = 1.0
+	}
+	if req.Position == "" {
+		req.Position = "bottomRight"
+	}
+
+	progressCh := make(chan model.ProgressUpdate, 100)
+	go func() {
+		for update := range progressCh {
+			runtime.EventsEmit(a.ctx, "batch-progress", update)
+		}
+	}()
+
+	result := batch.RunWatermarkBatch(req, progressCh)
+	close(progressCh)
+	return result, nil
+}
