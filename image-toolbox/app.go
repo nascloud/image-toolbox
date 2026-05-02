@@ -21,7 +21,8 @@ func NewApp() *App {
 }
 
 // startup is called when the app starts. The context is saved
-// so we can call the runtime methods.
+// and passed to the backend App for runtime operations (dialogs, events).
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
+	a.App.SetContext(ctx)
 }
