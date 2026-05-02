@@ -31,6 +31,10 @@ func RunAIImageBatch(req model.AIBatchRequest, configPath string, progressCh cha
 		return backendAI.ProcessSingleImage(client, srcPath, req.OutputDir, req)
 	}
 
-	results := RunConcurrent(req.SourcePaths, jobFn, 2, progressCh)
+	maxConcurrent := 2
+	if req.Concurrent > 0 {
+		maxConcurrent = req.Concurrent
+	}
+	results := RunConcurrent(req.SourcePaths, jobFn, maxConcurrent, progressCh)
 	return aggregateResults(results)
 }

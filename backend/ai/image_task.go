@@ -27,15 +27,21 @@ func ProcessSingleImage(client *Client, srcPath, outputDir string, opts model.AI
 	}
 
 	req := model.AIImageRequest{
-		Model:           opts.Model,
-		Prompt:          BuildPrompt(opts.Prompt),
-		Size:            opts.Size,
-		Image:           imgData,
-		ReferenceImages: refs,
-		Seed:            opts.Seed,
-		OutputFormat:    opts.OutputFormat,
-		Watermark:       opts.Watermark,
-		GuidanceScale:   opts.GuidanceScale,
+		Model:                     opts.Model,
+		Prompt:                    BuildPrompt(opts.Prompt),
+		Size:                      opts.Size,
+		Image:                     imgData,
+		ReferenceImages:           refs,
+		Seed:                      opts.Seed,
+		OutputFormat:              opts.OutputFormat,
+		Watermark:                 opts.Watermark,
+		GuidanceScale:             opts.GuidanceScale,
+		ResponseFormat:            opts.ResponseFormat,
+		Stream:                    opts.Stream,
+		SequentialImageGeneration: opts.SequentialImageGeneration,
+		MaxImages:                 opts.MaxImages,
+		OptimizePromptMode:        opts.OptimizePromptMode,
+		WebSearch:                 opts.WebSearch,
 	}
 
 	resp, err := client.Generate(req)

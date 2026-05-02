@@ -38,11 +38,18 @@ func (c *Client) Generate(req model.AIImageRequest) (*model.AIImageResponse, err
 		"model":          req.Model,
 		"prompt":         req.Prompt,
 		"size":           req.Size,
-		"stream":         false,
-		"responseFormat": "url",
+		"stream":         req.Stream,
 		"watermark":      req.Watermark,
 	}
 
+	// Response format
+	if req.ResponseFormat != "" {
+		body["responseFormat"] = req.ResponseFormat
+	} else {
+		body["responseFormat"] = "url"
+	}
+
+	// Image and reference images
 	if req.Image != "" {
 		if len(req.ReferenceImages) > 0 {
 			images := append([]string{req.Image}, req.ReferenceImages...)
@@ -51,14 +58,44 @@ func (c *Client) Generate(req model.AIImageRequest) (*model.AIImageResponse, err
 			body["image"] = req.Image
 		}
 	}
+
+	// Seed
 	if req.Seed > 0 {
 		body["seed"] = req.Seed
 	}
+
+	// Output format
 	if req.OutputFormat != "" {
 		body["output_format"] = req.OutputFormat
 	}
+
+	// Guidance scale
 	if req.GuidanceScale > 0 {
 		body["guidance_scale"] = req.GuidanceScale
+	}
+
+	// Sequential image generation (组图)
+	if req.SequentialImageGeneration != "" && req.SequentialImageGeneration != "disabled" {
+		body["sequential_image_generation"] = req.SequentialImageGeneration
+		if req.MaxImages > 0 {
+			body["sequential_image_generation_options"] = map[string]int{
+				"max_images": req.MaxImages,
+			}
+		}
+	}
+
+	// Optimize prompt mode
+	if req.OptimizePromptMode != "" && req.OptimizePromptMode != "standard" {
+		body["optimize_prompt_options"] = map[string]string{
+			"mode": req.OptimizePromptMode,
+		}
+	}
+
+	// Web search (tools)
+	if req.WebSearch {
+		body["tools"] = []map[string]string{
+			{"type": "web_search"},
+		}
 	}
 
 	payload, err := json.Marshal(body)

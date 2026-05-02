@@ -11,6 +11,14 @@ export namespace model {
 	    outputFormat: string;
 	    watermark: boolean;
 	    guidanceScale: number;
+	    responseFormat: string;
+	    stream: boolean;
+	    sequentialImageGeneration: string;
+	    maxImages: number;
+	    optimizePromptMode: string;
+	    webSearch: boolean;
+	    concurrent: number;
+	    downloadWidth: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new AIBatchRequest(source);
@@ -28,6 +36,14 @@ export namespace model {
 	        this.outputFormat = source["outputFormat"];
 	        this.watermark = source["watermark"];
 	        this.guidanceScale = source["guidanceScale"];
+	        this.responseFormat = source["responseFormat"];
+	        this.stream = source["stream"];
+	        this.sequentialImageGeneration = source["sequentialImageGeneration"];
+	        this.maxImages = source["maxImages"];
+	        this.optimizePromptMode = source["optimizePromptMode"];
+	        this.webSearch = source["webSearch"];
+	        this.concurrent = source["concurrent"];
+	        this.downloadWidth = source["downloadWidth"];
 	    }
 	}
 	export class BatchRequest {
