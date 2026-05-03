@@ -5,9 +5,8 @@ import (
 	"fmt"
 	"image"
 	"os"
-	"path/filepath"
-	"strings"
 
+	"image-toolbox/backend/file"
 	backendImage "image-toolbox/backend/image"
 	"image-toolbox/backend/model"
 )
@@ -70,10 +69,7 @@ func RunWatermarkBatch(ctx context.Context, req model.WatermarkRequest, progress
 			}
 		}
 
-		base := filepath.Base(srcPath)
-		ext := filepath.Ext(base)
-		name := strings.TrimSuffix(base, ext)
-		outPath := filepath.Join(req.OutputDir, name+"_watermarked.png")
+		outPath := file.ResolveOutputPath(srcPath, req.OutputDir, req.SaveMode, req.PrefixName, req.SubdirName, "png", "_watermarked")
 
 		if err := savePNG(outputImg, outPath); err != nil {
 			return "", fmt.Errorf("save: %w", err)
