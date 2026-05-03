@@ -295,77 +295,100 @@ export const AIBatch: React.FC = () => {
     cancelRef.current = false;
     setCancelRequested(false);
 
-    const errors: string[] = [];
-    const ids = pendingItems.map(item => item.id);
+    // Mark all pending items as processing in one shot
+    setQueue(prev => prev.map(i =>
+      i.status === 'pending' ? { ...i, status: 'processing' as const } : i
+    ));
 
-    // Process sequentially for reliability
-    for (const item of pendingItems) {
-      if (cancelRef.current) break;
+    try {
+      if (cancelRef.current) { setProcessing(false); return; }
 
-      // Mark as processing
-      setQueue(prev => prev.map(i => i.id === item.id ? { ...i, status: 'processing' as const } : i));
+      const outputDir = aiOutputDir || pendingItems[0].path.substring(0, pendingItems[0].path.lastIndexOf('\\'));
+      const downloadW = downloadWidth === 'custom'
+        ? (parseInt(customWidth) || 0)
+        : downloadWidth === 'original' ? 0 : parseInt(downloadWidth);
+      const result = await (window as any).go.main.App.RunAIImageBatch({
+        sourcePaths: pendingItems.map(i => i.path),
+        outputDir,
+        prompt,
+        model,
+        size,
+        seed: seed >= 0 ? seed : -1,
+        outputFormat,
+        watermark,
+        guidanceScale,
+        responseFormat,
+        sequentialImageGeneration: sequentialMode,
+        maxImages,
+        optimizePromptMode,
+        webSearch,
+        concurrent: Math.min(concurrent, pendingItems.length),
+        referenceImages,
+        downloadWidth: isNaN(downloadW) ? 0 : downloadW,
+      });
 
-      try {
-        const outputDir = aiOutputDir || item.path.substring(0, item.path.lastIndexOf('\\'));
-        const downloadW = downloadWidth === 'custom'
-          ? (parseInt(customWidth) || 0)
-          : downloadWidth === 'original' ? 0 : parseInt(downloadWidth);
-        const result = await (window as any).go.main.App.RunAIImageBatch({
-          sourcePaths: [item.path],
-          outputDir,
-          prompt,
-          model,
-          size,
-          seed: seed >= 0 ? seed : -1,
-          outputFormat,
-          watermark,
-          guidanceScale,
-          responseFormat,
-          sequentialImageGeneration: sequentialMode,
-          maxImages,
-          optimizePromptMode,
-          webSearch,
-          concurrent: 1,
-          referenceImages,
-          downloadWidth: isNaN(downloadW) ? 0 : downloadW,
-        });
-
-        if (cancelRef.current) {
-          setQueue(prev => prev.map(i => i.id === item.id ? { ...i, status: 'cancelled' as const } : i));
-        } else if (result && result.success > 0) {
-          const outputPath = result.results?.[0]?.outputPath || item.path.replace(/\.[^.]+$/, '') + '_ai.' + (outputFormat === 'jpeg' ? 'jpg' : 'png');
-          setQueue(prev => prev.map(i => i.id === item.id ? { ...i, status: 'completed' as const, outputPath } : i));
-          if (outputPath) {
-            (async () => {
-              try {
-                const dataUrl = await (window as any).go.main.App.ReadImageAsBase64(outputPath);
-                if (dataUrl && dataUrl.startsWith('data:')) {
-                  setQueue(prev => prev.map(i => i.id === item.id ? { ...i, thumbUrl: dataUrl } : i));
-                }
-              } catch {
-                setQueue(prev => prev.map(i => i.id === item.id ? { ...i, thumbUrl: toFileUrl(outputPath) } : i));
-              }
-            })();
-          }
-        } else {
-          const errMsg = result?.results?.[0]?.error || result?.error || '处理失败';
-          setQueue(prev => prev.map(i => i.id === item.id ? { ...i, status: 'error' as const, error: errMsg } : i));
+      if (cancelRef.current || !result) {
+        if (!result) showToast('处理失败：无返回结果', 'error');
+        setQueue(prev => prev.map(i =>
+          i.status === 'processing' ? { ...i, status: cancelRef.current ? 'cancelled' as const : 'error' as const, error: !result ? '无返回结果' : undefined } : i
+        ));
+      } else if (result.results && result.results.length > 0) {
+        // Map batch results back to queue items by source path
+        const resultByPath = new Map<string, any>();
+        for (const r of result.results) {
+          if (r.sourcePath) resultByPath.set(r.sourcePath, r);
         }
-      } catch (err: any) {
-        errors.push(`${item.name}: ${err.message}`);
-        setQueue(prev => prev.map(i => i.id === item.id ? { ...i, status: 'error' as const, error: err.message } : i));
-      }
-    }
 
-    // Cancel remaining
-    if (cancelRef.current) {
-      setQueue(prev => prev.map(i => ids.includes(i.id) && i.status === 'pending' ? { ...i, status: 'cancelled' as const } : i));
+        let failedCount = 0;
+        setQueue(prev => prev.map(i => {
+          const r = resultByPath.get(i.path);
+          if (r) {
+            if (r.success && r.outputPath) {
+              return { ...i, status: 'completed' as const, outputPath: r.outputPath };
+            } else {
+              failedCount++;
+              return { ...i, status: 'error' as const, error: r.error || '处理失败' };
+            }
+          }
+          return { ...i, status: 'error' as const, error: '未返回处理结果' };
+        }));
+
+        // Load thumbnails for all completed items in parallel
+        const completed = pendingItems.filter(item => {
+          const r = resultByPath.get(item.path);
+          return r && r.success && r.outputPath;
+        });
+        await Promise.all(completed.map(async (item) => {
+          const r = resultByPath.get(item.path);
+          if (!r || !r.outputPath) return;
+          try {
+            const dataUrl = await (window as any).go.main.App.ReadImageAsBase64(r.outputPath);
+            if (dataUrl && dataUrl.startsWith('data:')) {
+              setQueue(prev => prev.map(i => i.path === item.path ? { ...i, thumbUrl: dataUrl } : i));
+            }
+          } catch {
+            // fallback: use file:// URL
+            setQueue(prev => prev.map(i => i.path === item.path ? { ...i, thumbUrl: toFileUrl(r.outputPath) } : i));
+          }
+        }));
+
+        if (failedCount > 0) showToast(`${failedCount} 张处理失败`, 'error');
+      } else {
+        showToast(result.error || '处理失败', 'error');
+        setQueue(prev => prev.map(i =>
+          i.status === 'processing' ? { ...i, status: 'error' as const, error: result.error || '未返回处理结果' } : i
+        ));
+      }
+    } catch (err: any) {
+      showToast(`处理出错: ${err.message}`, 'error');
+      setQueue(prev => prev.map(i =>
+        i.status === 'processing' ? { ...i, status: 'error' as const, error: err.message } : i
+      ));
     }
 
     setProcessing(false);
     setCancelRequested(false);
     cancelRef.current = false;
-    if (errors.length > 0) showToast(`${errors.length} 张处理失败`, 'error');
   };
 
   const retryAll = () => {
@@ -844,7 +867,7 @@ export const AIBatch: React.FC = () => {
             <div style={{ flex: 1 }} />
 
             {processing ? (
-              <button onClick={() => { cancelRef.current = true; setCancelRequested(true); }} className="btn btn-danger" style={{ fontWeight: 600, padding: '8px 24px' }}>
+              <button onClick={() => { cancelRef.current = true; setCancelRequested(true); try { (window as any).go.main.App.CancelBatch(); } catch { /* no-op */ } }} className="btn btn-danger" style={{ fontWeight: 600, padding: '8px 24px' }}>
                 取消处理
               </button>
             ) : (
