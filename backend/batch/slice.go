@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	backendImage "image-toolbox/backend/image"
+	"image-toolbox/backend/file"
 	"image-toolbox/backend/model"
 )
 
@@ -32,17 +33,18 @@ func RunSliceBatch(ctx context.Context, req model.SliceRequest, progressCh chan<
 			return "", fmt.Errorf("slice returned 0 slices")
 		}
 
-		base := filepath.Base(srcPath)
-		ext := filepath.Ext(base)
-		name := strings.TrimSuffix(base, ext)
+		// Use ResolveOutputPath to get the base output directory for this save mode
+		basePath := file.ResolveOutputPath(srcPath, req.OutputDir, req.SaveMode, req.PrefixName, req.SubdirName, "png", "")
+		outDir := filepath.Dir(basePath)
+		outBase := strings.TrimSuffix(filepath.Base(basePath), ".png")
 
 		for i, slice := range slices {
-			outPath := filepath.Join(req.OutputDir, fmt.Sprintf("%s_slice_%d.png", name, i+1))
+			outPath := filepath.Join(outDir, fmt.Sprintf("%s_slice_%d.png", outBase, i+1))
 			if err := savePNG(slice, outPath); err != nil {
 				return "", fmt.Errorf("save slice %d: %w", i, err)
 			}
 		}
-		return filepath.Join(req.OutputDir, fmt.Sprintf("%s_slice_1.png", name)), nil
+		return filepath.Join(outDir, fmt.Sprintf("%s_slice_1.png", outBase)), nil
 	}
 
 	results := RunConcurrent(ctx, req.SourcePaths, jobFn, 4, progressCh)
