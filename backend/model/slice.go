@@ -7,4 +7,7 @@ type SliceRequest struct {
 	SliceCount  int      `json:"sliceCount"`
 	Contrast    float64  `json:"contrast"`
 	Saturation  float64  `json:"saturation"`
+	SaveMode    string   `json:"saveMode,omitempty"`
+	PrefixName  string   `json:"prefixName,omitempty"`
+	SubdirName  string   `json:"subdirName,omitempty"`
 }

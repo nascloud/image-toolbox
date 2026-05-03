@@ -10,6 +10,9 @@ type BatchRequest struct {
 	ResizeWidth      int      `json:"resizeWidth,omitempty"`
 	ResizeHeight     int      `json:"resizeHeight,omitempty"`
 	PreserveOriginal bool     `json:"preserveOriginal"`
+	SaveMode         string   `json:"saveMode,omitempty"`
+	PrefixName       string   `json:"prefixName,omitempty"`
+	SubdirName       string   `json:"subdirName,omitempty"`
 }
 
 // BatchResult aggregates results from processing multiple images.

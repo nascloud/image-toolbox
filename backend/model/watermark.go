@@ -12,4 +12,7 @@ type WatermarkRequest struct {
 	FontColor      string   `json:"fontColor"`
 	UniformWidth   int      `json:"uniformWidth"`
 	OutputWidth    int      `json:"outputWidth"`
+	SaveMode       string   `json:"saveMode,omitempty"`
+	PrefixName     string   `json:"prefixName,omitempty"`
+	SubdirName     string   `json:"subdirName,omitempty"`
 }
