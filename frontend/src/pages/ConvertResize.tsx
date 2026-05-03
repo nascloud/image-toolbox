@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { ImageList } from '../components/ImageList';
 import { BatchProgress } from '../components/BatchProgress';
 import { useBatch } from '../hooks/useBatch';
+import { SaveModeSelector, SaveModeConfig } from '../components/SaveModeSelector';
 
 export const ConvertResize: React.FC = () => {
   const [files, setFiles] = useState<string[]>([]);
@@ -10,7 +11,7 @@ export const ConvertResize: React.FC = () => {
   const [resizeValue, setResizeValue] = useState(100);
   const [resizeWidth, setResizeWidth] = useState(800);
   const [resizeHeight, setResizeHeight] = useState(600);
-  const [outputDir, setOutputDir] = useState('');
+  const [saveModeConfig, setSaveModeConfig] = useState<SaveModeConfig>({ mode: 'subdir', prefixName: 'output', subdirName: 'output', outputDir: '' });
   const [preserveOriginal, setPreserveOriginal] = useState(true);
   const [recursive, setRecursive] = useState(false);
   const { state, startBatch, cancelBatch, openOutputDir } = useBatch();
@@ -35,16 +36,21 @@ export const ConvertResize: React.FC = () => {
   const handleSelectOutputDir = async () => {
     try {
       const dir = await (window as any).go.main.App.SelectOutputDir();
-      if (dir) setOutputDir(dir);
+      if (dir) setSaveModeConfig(prev => ({ ...prev, outputDir: dir }));
     } catch { /* no-op */ }
   };
 
   const handleRun = async () => {
     const req: any = {
       sourcePaths: files,
-      outputDir: outputDir || (files.length > 0 ? files[0].substring(0, files[0].lastIndexOf('\\')) : ''),
+      outputDir: saveModeConfig.mode === 'custom'
+        ? (saveModeConfig.outputDir || (files.length > 0 ? files[0].substring(0, files[0].lastIndexOf('\\')) : ''))
+        : '',
+      saveMode: saveModeConfig.mode,
+      prefixName: saveModeConfig.prefixName,
+      subdirName: saveModeConfig.subdirName,
       convertTo: convertTo || '',
-      preserveOriginal,
+      preserveOriginal: saveModeConfig.mode === 'overwrite' ? false : preserveOriginal,
     };
     if (resizeMode === 'ratio') {
       req.resizeMode = 'ratio';
@@ -64,105 +70,93 @@ export const ConvertResize: React.FC = () => {
     await cancelBatch();
   };
 
-  const btnStyle: React.CSSProperties = {
-    padding: '8px 20px', background: '#0f3460', color: '#fff',
-    border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 14,
-  };
-  const selectStyle: React.CSSProperties = {
-    padding: '8px 12px', background: '#1a1a2e', color: '#fff',
-    border: '1px solid #333', borderRadius: 6, fontSize: 14,
-  };
-  const inputStyle: React.CSSProperties = {
-    padding: '8px 12px', background: '#1a1a2e', color: '#fff',
-    border: '1px solid #333', borderRadius: 6, fontSize: 14, width: 80,
-  };
-
   return (
-    <div style={{ maxWidth: 800, margin: '0 auto' }}>
-      <h2 style={{ margin: '0 0 20px', fontSize: 22, fontWeight: 600 }}>格式转换 + 缩放</h2>
+    <div style={{ maxWidth: 'var(--content-max-width)', margin: '0 auto' }}>
+      <h2 className="page-title">格式转换 + 缩放</h2>
 
-      <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
-        <button onClick={handleSelectFiles} style={btnStyle}>选择文件</button>
-        <button onClick={handleSelectFolder} style={btnStyle}>选择文件夹</button>
-        <button onClick={handleSelectOutputDir} style={btnStyle}>输出目录</button>
-        {outputDir && (
-          <button onClick={() => openOutputDir(outputDir)} style={{ ...btnStyle, background: '#1a1a2e', border: '1px solid #333' }}>📂 打开</button>
-        )}
+      {/* Action buttons */}
+      <div className="flex gap-6 mb-6">
+        <button onClick={handleSelectFiles} className="btn btn-primary">选择文件</button>
+        <button onClick={handleSelectFolder} className="btn btn-ghost">选择文件夹</button>
       </div>
-
-      {outputDir && (
-        <div style={{ fontSize: 12, color: '#888', marginBottom: 8 }}>输出目录: {outputDir}</div>
-      )}
 
       <ImageList files={files} onRemove={i => setFiles(files.filter((_, j) => j !== i))} onClear={() => setFiles([])} />
 
-      <div style={{ marginTop: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <SaveModeSelector
+        config={saveModeConfig}
+        onChange={setSaveModeConfig}
+        onSelectOutputDir={handleSelectOutputDir}
+        onOpenOutputDir={() => openOutputDir(saveModeConfig.outputDir)}
+      />
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <label style={{ fontSize: 14, minWidth: 80 }}>格式转换</label>
-          <select value={convertTo} onChange={e => setConvertTo(e.target.value)} style={selectStyle}>
-            <option value="">不转换</option>
-            <option value="jpg">JPEG</option>
-            <option value="png">PNG</option>
-            <option value="webp">WebP</option>
-          </select>
+      {/* Parameters */}
+      <div className="card mt-8">
+        <div className="card-header">
+          <span className="card-label">处理参数</span>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <label style={{ fontSize: 14, minWidth: 80 }}>缩放</label>
-          <select value={resizeMode} onChange={e => setResizeMode(e.target.value)} style={selectStyle}>
-            <option value="">不缩放</option>
-            <option value="ratio">按比例</option>
-            <option value="dimensions">指定宽高</option>
-            <option value="maxEdge">限制最大边</option>
-          </select>
-          {resizeMode === 'ratio' && (
-            <>
-              <input type="number" value={resizeValue} onChange={e => setResizeValue(Number(e.target.value))} style={inputStyle} min={1} />
-              <span style={{ fontSize: 13, color: '#888' }}>%</span>
-            </>
-          )}
-          {resizeMode === 'dimensions' && (
-            <>
-              <input type="number" value={resizeWidth} onChange={e => setResizeWidth(Number(e.target.value))} style={inputStyle} min={1} />
-              <span style={{ fontSize: 13, color: '#888' }}>x</span>
-              <input type="number" value={resizeHeight} onChange={e => setResizeHeight(Number(e.target.value))} style={inputStyle} min={1} />
-              <span style={{ fontSize: 13, color: '#888' }}>px</span>
-            </>
-          )}
-          {resizeMode === 'maxEdge' && (
-            <>
-              <input type="number" value={resizeValue} onChange={e => setResizeValue(Number(e.target.value))} style={inputStyle} min={1} />
-              <span style={{ fontSize: 13, color: '#888' }}>px</span>
-            </>
-          )}
-        </div>
+        <div className="flex-col gap-6" style={{ display: 'flex' }}>
+          <div className="form-row">
+            <label className="form-label">格式转换</label>
+            <select value={convertTo} onChange={e => setConvertTo(e.target.value)} className="select" style={{ width: 160 }}>
+              <option value="">不转换</option>
+              <option value="jpg">JPEG</option>
+              <option value="png">PNG</option>
+              <option value="webp">WebP</option>
+            </select>
+          </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          <label style={{ fontSize: 14, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
-            <input type="checkbox" checked={preserveOriginal} onChange={e => setPreserveOriginal(e.target.checked)} style={{ accentColor: '#e94560' }} />
-            保留原文件
-          </label>
-          <label style={{ fontSize: 14, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
-            <input type="checkbox" checked={recursive} onChange={e => setRecursive(e.target.checked)} style={{ accentColor: '#e94560' }} />
-            递归子目录
-          </label>
-        </div>
+          <div className="form-row">
+            <label className="form-label">缩放</label>
+            <select value={resizeMode} onChange={e => setResizeMode(e.target.value)} className="select" style={{ width: 160 }}>
+              <option value="">不缩放</option>
+              <option value="ratio">按比例</option>
+              <option value="dimensions">指定宽高</option>
+              <option value="maxEdge">限制最大边</option>
+            </select>
+            {resizeMode === 'ratio' && (
+              <>
+                <input type="number" value={resizeValue} onChange={e => setResizeValue(Number(e.target.value))} className="input" style={{ width: 80 }} min={1} />
+                <span className="text-sm text-muted">%</span>
+              </>
+            )}
+            {resizeMode === 'dimensions' && (
+              <>
+                <input type="number" value={resizeWidth} onChange={e => setResizeWidth(Number(e.target.value))} className="input" style={{ width: 80 }} min={1} />
+                <span className="text-sm text-muted">x</span>
+                <input type="number" value={resizeHeight} onChange={e => setResizeHeight(Number(e.target.value))} className="input" style={{ width: 80 }} min={1} />
+                <span className="text-sm text-muted">px</span>
+              </>
+            )}
+            {resizeMode === 'maxEdge' && (
+              <>
+                <input type="number" value={resizeValue} onChange={e => setResizeValue(Number(e.target.value))} className="input" style={{ width: 80 }} min={1} />
+                <span className="text-sm text-muted">px</span>
+              </>
+            )}
+          </div>
 
+          <div className="flex gap-8">
+            <label className="checkbox-label">
+              <input type="checkbox" checked={preserveOriginal} onChange={e => setPreserveOriginal(e.target.checked)} />
+              保留原文件
+            </label>
+            <label className="checkbox-label">
+              <input type="checkbox" checked={recursive} onChange={e => setRecursive(e.target.checked)} />
+              递归子目录
+            </label>
+          </div>
+        </div>
       </div>
 
-      <div style={{ display: 'flex', gap: 12, marginTop: 24 }}>
+      {/* Action */}
+      <div className="mt-8">
         {state.running ? (
-          <button onClick={handleCancel}
-            style={{ ...btnStyle, background: '#dc2626', width: '100%', padding: '12px 0', fontSize: 16 }}>
+          <button onClick={handleCancel} className="btn btn-danger btn-lg btn-full">
             取消处理
           </button>
         ) : (
-          <button onClick={handleRun} disabled={files.length === 0}
-            style={{
-              ...btnStyle, background: files.length === 0 ? '#555' : '#e94560',
-              width: '100%', padding: '12px 0', fontSize: 16,
-            }}>
+          <button onClick={handleRun} disabled={files.length === 0} className="btn btn-primary btn-lg btn-full">
             开始处理
           </button>
         )}
@@ -170,7 +164,7 @@ export const ConvertResize: React.FC = () => {
 
       <BatchProgress progress={state.progress} />
       {state.result && (
-        <div style={{ fontSize: 13, color: '#888', marginTop: 8, textAlign: 'center' }}>
+        <div className="result-summary">
           处理完成: {state.result.success || 0} 成功, {state.result.failed || 0} 失败
         </div>
       )}
