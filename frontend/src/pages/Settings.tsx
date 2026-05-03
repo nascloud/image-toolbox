@@ -2,41 +2,53 @@ import React, { useState, useEffect } from 'react';
 
 export const Settings: React.FC = () => {
   const [apiKey, setApiKey] = useState('');
-  const [saved, setSaved] = useState(false);
+  const [aiOutputDir, setAiOutputDir] = useState('');
+  const [apiSaved, setApiSaved] = useState(false);
+  const [dirSaved, setDirSaved] = useState(false);
 
   useEffect(() => {
     (async () => {
       try {
-        const key = await (window as any).go.main.App.GetApiKey();
+        const [key, dir] = await Promise.all([
+          (window as any).go.main.App.GetApiKey(),
+          (window as any).go.main.App.GetAiOutputDir(),
+        ]);
         if (key) setApiKey(key);
+        if (dir) setAiOutputDir(dir);
       } catch { /* no-op */ }
     })();
   }, []);
 
-  const handleSave = async () => {
+  const handleSaveApiKey = async () => {
     try {
       await (window as any).go.main.App.SaveApiKey(apiKey);
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
+      setApiSaved(true);
+      setTimeout(() => setApiSaved(false), 2000);
     } catch { /* no-op */ }
   };
 
-  const btnStyle: React.CSSProperties = {
-    padding: '10px 32px', background: '#e94560', color: '#fff',
-    border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 14,
+  const handleSelectOutputDir = async () => {
+    try {
+      const dir = await (window as any).go.main.App.SelectOutputDir();
+      if (dir) setAiOutputDir(dir);
+    } catch { /* no-op */ }
   };
-  const inputStyle: React.CSSProperties = {
-    padding: '10px 14px', background: '#1a1a2e', color: '#fff',
-    border: '1px solid #333', borderRadius: 6, fontSize: 14, width: '100%',
-    boxSizing: 'border-box',
+
+  const handleSaveOutputDir = async () => {
+    try {
+      await (window as any).go.main.App.SaveAiOutputDir(aiOutputDir);
+      setDirSaved(true);
+      setTimeout(() => setDirSaved(false), 2000);
+    } catch { /* no-op */ }
   };
 
   return (
     <div style={{ maxWidth: 600, margin: '0 auto' }}>
-      <h2 style={{ margin: '0 0 24px', fontSize: 22, fontWeight: 600 }}>设置</h2>
+      <h2 className="page-title">设置</h2>
 
-      <div style={{ marginBottom: 20 }}>
-        <label style={{ fontSize: 14, display: 'block', marginBottom: 8 }}>
+      {/* API Key */}
+      <div className="card mb-8">
+        <label className="card-label" style={{ marginBottom: 8, textTransform: 'none', letterSpacing: 0 }}>
           Volcano Engine API Key
         </label>
         <input
@@ -44,16 +56,34 @@ export const Settings: React.FC = () => {
           value={apiKey}
           onChange={e => setApiKey(e.target.value)}
           placeholder="输入你的火山方舟 API Key"
-          style={inputStyle}
+          className="input"
         />
-        <p style={{ fontSize: 12, color: '#888', marginTop: 6 }}>
+        <p className="text-xs text-muted mt-4">
           API Key 仅保存在本地 ~/.imagetool/config.json，不会上传到任何第三方
         </p>
+        <button onClick={handleSaveApiKey} className="btn btn-primary mt-6">
+          {apiSaved ? '已保存 ✓' : '保存'}
+        </button>
       </div>
 
-      <button onClick={handleSave} style={btnStyle}>
-        {saved ? '已保存 ✓' : '保存'}
-      </button>
+      {/* AI 输出目录 */}
+      <div className="card">
+        <label className="card-label" style={{ marginBottom: 8, textTransform: 'none', letterSpacing: 0 }}>
+          AI 生成输出目录
+        </label>
+        <p className="text-xs text-muted mb-4">
+          设置 AI 图片生成的默认输出文件夹。不设置则使用原图所在目录。
+        </p>
+        <div className="flex gap-3 items-center">
+          <span className="text-sm text-secondary flex-1" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {aiOutputDir || '未设置（使用原图目录）'}
+          </span>
+          <button onClick={handleSelectOutputDir} className="btn btn-sm btn-ghost">选择目录</button>
+          <button onClick={handleSaveOutputDir} className="btn btn-sm btn-primary">
+            {dirSaved ? '已保存 ✓' : '保存'}
+          </button>
+        </div>
+      </div>
     </div>
   );
 };

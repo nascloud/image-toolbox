@@ -9,6 +9,7 @@ import (
 var imageExts = map[string]bool{
 	".jpg":  true,
 	".jpeg": true,
+	".jfif": true,
 	".png":  true,
 	".webp": true,
 	".bmp":  true,

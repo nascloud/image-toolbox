@@ -12,6 +12,7 @@ const (
 	ResizeModeRatio      = "ratio"
 	ResizeModeDimensions = "dimensions"
 	ResizeModeMaxEdge    = "maxEdge"
+	ResizeModeWidth      = "width"
 )
 
 // ResizeOptions specifies how to resize an image.
@@ -60,6 +61,17 @@ func calcDimensions(src image.Image, opts ResizeOptions) (int, int) {
 			h = 1
 		}
 		return w, h
+
+	case ResizeModeWidth:
+		if opts.Width <= 0 {
+			return srcW, srcH
+		}
+		ratio := float64(opts.Width) / float64(srcW)
+		h := int(math.Round(float64(srcH) * ratio))
+		if h < 1 {
+			h = 1
+		}
+		return opts.Width, h
 
 	default:
 		return srcW, srcH

@@ -22,10 +22,6 @@ export function useBatch() {
     result: null,
   });
 
-  // Keep a ref to latest setState so EventsOn callback always has fresh access
-  const stateRef = useRef(state);
-  stateRef.current = state;
-
   // Register progress listener once on mount
   useEffect(() => {
     EventsOn('batch-progress', (update: ProgressUpdate) => {

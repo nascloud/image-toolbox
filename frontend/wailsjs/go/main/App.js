@@ -6,6 +6,10 @@ export function CancelBatch() {
   return window['go']['main']['App']['CancelBatch']();
 }
 
+export function GetAiOutputDir() {
+  return window['go']['main']['App']['GetAiOutputDir']();
+}
+
 export function GetApiKey() {
   return window['go']['main']['App']['GetApiKey']();
 }
@@ -18,8 +22,16 @@ export function ProcessImagesBatch(arg1) {
   return window['go']['main']['App']['ProcessImagesBatch'](arg1);
 }
 
+export function ReadImageAsBase64(arg1) {
+  return window['go']['main']['App']['ReadImageAsBase64'](arg1);
+}
+
 export function RunAIImageBatch(arg1) {
   return window['go']['main']['App']['RunAIImageBatch'](arg1);
+}
+
+export function SaveAiOutputDir(arg1) {
+  return window['go']['main']['App']['SaveAiOutputDir'](arg1);
 }
 
 export function SaveApiKey(arg1) {

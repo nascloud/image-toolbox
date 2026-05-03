@@ -2,10 +2,12 @@ package app
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 
@@ -63,7 +65,7 @@ func (a *App) SelectFiles() ([]string, error) {
 	files, err := runtime.OpenMultipleFilesDialog(a.ctx, runtime.OpenDialogOptions{
 		Title: "选择图片文件",
 		Filters: []runtime.FileFilter{
-			{DisplayName: "图片文件", Pattern: "*.jpg;*.jpeg;*.png;*.webp;*.bmp;*.gif;*.tiff"},
+			{DisplayName: "图片文件", Pattern: "*.jpg;*.jpeg;*.jfif;*.png;*.webp;*.bmp;*.gif;*.tiff"},
 		},
 	})
 	if err != nil {
@@ -92,6 +94,27 @@ func (a *App) SelectOutputDir() (string, error) {
 		return "", fmt.Errorf("select output dir: %w", err)
 	}
 	return dir, nil
+}
+
+// ReadImageAsBase64 reads an image file and returns a data URI for display in the frontend.
+func (a *App) ReadImageAsBase64(path string) (string, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", fmt.Errorf("read image: %w", err)
+	}
+	ext := strings.ToLower(filepath.Ext(path))
+	mime := "image/png"
+	switch ext {
+	case ".jpg", ".jpeg", ".jfif":
+		mime = "image/jpeg"
+	case ".png":
+		mime = "image/png"
+	case ".webp":
+		mime = "image/webp"
+	case ".gif":
+		mime = "image/gif"
+	}
+	return fmt.Sprintf("data:%s;base64,%s", mime, base64.StdEncoding.EncodeToString(data)), nil
 }
 
 // ScanDirectory scans a directory for supported image files.
@@ -219,6 +242,18 @@ func (a *App) SaveApiKey(apiKey string) error {
 func (a *App) GetApiKey() (string, error) {
 	configPath := filepath.Join(getConfigDir(), "config.json")
 	return config.LoadApiKey(configPath)
+}
+
+// SaveAiOutputDir persists the AI output directory.
+func (a *App) SaveAiOutputDir(dir string) error {
+	configPath := filepath.Join(getConfigDir(), "config.json")
+	return config.SaveAiOutputDir(configPath, dir)
+}
+
+// GetAiOutputDir retrieves the stored AI output directory.
+func (a *App) GetAiOutputDir() (string, error) {
+	configPath := filepath.Join(getConfigDir(), "config.json")
+	return config.LoadAiOutputDir(configPath)
 }
 
 func getConfigDir() string {

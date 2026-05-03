@@ -55,6 +55,9 @@ export namespace model {
 	    resizeWidth?: number;
 	    resizeHeight?: number;
 	    preserveOriginal: boolean;
+	    saveMode?: string;
+	    prefixName?: string;
+	    subdirName?: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new BatchRequest(source);
@@ -70,6 +73,9 @@ export namespace model {
 	        this.resizeWidth = source["resizeWidth"];
 	        this.resizeHeight = source["resizeHeight"];
 	        this.preserveOriginal = source["preserveOriginal"];
+	        this.saveMode = source["saveMode"];
+	        this.prefixName = source["prefixName"];
+	        this.subdirName = source["subdirName"];
 	    }
 	}
 	export class ImageResult {
@@ -135,6 +141,9 @@ export namespace model {
 	    sliceCount: number;
 	    contrast: number;
 	    saturation: number;
+	    saveMode?: string;
+	    prefixName?: string;
+	    subdirName?: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new SliceRequest(source);
@@ -147,6 +156,9 @@ export namespace model {
 	        this.sliceCount = source["sliceCount"];
 	        this.contrast = source["contrast"];
 	        this.saturation = source["saturation"];
+	        this.saveMode = source["saveMode"];
+	        this.prefixName = source["prefixName"];
+	        this.subdirName = source["subdirName"];
 	    }
 	}
 	export class WatermarkRequest {
@@ -160,6 +172,9 @@ export namespace model {
 	    fontColor: string;
 	    uniformWidth: number;
 	    outputWidth: number;
+	    saveMode?: string;
+	    prefixName?: string;
+	    subdirName?: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new WatermarkRequest(source);
@@ -177,6 +192,9 @@ export namespace model {
 	        this.fontColor = source["fontColor"];
 	        this.uniformWidth = source["uniformWidth"];
 	        this.outputWidth = source["outputWidth"];
+	        this.saveMode = source["saveMode"];
+	        this.prefixName = source["prefixName"];
+	        this.subdirName = source["subdirName"];
 	    }
 	}
 

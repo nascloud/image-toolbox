@@ -5,13 +5,19 @@ import {context} from '../models';
 
 export function CancelBatch():Promise<void>;
 
+export function GetAiOutputDir():Promise<string>;
+
 export function GetApiKey():Promise<string>;
 
 export function OpenOutputDir(arg1:string):Promise<void>;
 
 export function ProcessImagesBatch(arg1:model.BatchRequest):Promise<model.BatchResult>;
 
+export function ReadImageAsBase64(arg1:string):Promise<string>;
+
 export function RunAIImageBatch(arg1:model.AIBatchRequest):Promise<model.BatchResult>;
+
+export function SaveAiOutputDir(arg1:string):Promise<void>;
 
 export function SaveApiKey(arg1:string):Promise<void>;
 

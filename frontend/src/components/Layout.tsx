@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 
 export interface TabDef {
   id: string;
@@ -14,32 +14,39 @@ interface LayoutProps {
 
 export const Layout: React.FC<LayoutProps> = ({ tabs, activeTab, onTabChange }) => {
   const activeContent = tabs.find(t => t.id === activeTab)?.component;
+  const [animating, setAnimating] = useState(false);
+  const [prevTab, setPrevTab] = useState(activeTab);
+  const contentRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (prevTab !== activeTab) {
+      setAnimating(true);
+      setPrevTab(activeTab);
+      const timer = setTimeout(() => setAnimating(false), 250);
+      return () => clearTimeout(timer);
+    }
+  }, [activeTab, prevTab]);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
-      <nav style={{
-        display: 'flex', gap: 0, background: '#1a1a2e',
-        padding: '0 16px', borderBottom: '2px solid #16213e',
-      }}>
+    <div className="app-layout">
+      <nav className="tab-nav">
         {tabs.map(tab => (
           <button
             key={tab.id}
+            className={`tab-btn${activeTab === tab.id ? ' active' : ''}`}
             onClick={() => onTabChange(tab.id)}
-            style={{
-              padding: '12px 24px', border: 'none',
-              background: activeTab === tab.id ? '#0f3460' : 'transparent',
-              color: activeTab === tab.id ? '#e94560' : '#888',
-              cursor: 'pointer', fontSize: '15px',
-              fontWeight: activeTab === tab.id ? 600 : 400,
-              borderBottom: activeTab === tab.id ? '3px solid #e94560' : '3px solid transparent',
-              transition: 'all 0.2s',
-            }}
           >
             {tab.label}
           </button>
         ))}
       </nav>
-      <main style={{ flex: 1, padding: '24px', overflow: 'auto' }}>
+      <main
+        ref={contentRef}
+        className="main-content"
+        style={{
+          animation: animating ? 'fadeIn 250ms ease' : undefined,
+        }}
+      >
         {activeContent}
       </main>
     </div>

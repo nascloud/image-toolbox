@@ -10,6 +10,7 @@ interface ImageItem {
   status: 'pending' | 'processing' | 'completed' | 'error' | 'cancelled';
   error?: string;
   results?: { url?: string; b64_json?: string; size?: string }[];
+  thumbUrl?: string;
 }
 
 interface PromptPreset {
@@ -46,6 +47,11 @@ const downloadWidthOptions = [
 ];
 
 // ── Helpers ──
+function toFileUrl(path: string): string {
+  // Convert Windows filesystem path to file:// URL for WebView
+  return 'file:///' + path.replace(/\\/g, '/');
+}
+
 function savePresets(presets: PromptPreset[]) {
   try { localStorage.setItem('prompt_presets', JSON.stringify(presets)); } catch { /* no-op */ }
 }
@@ -92,6 +98,7 @@ export const AIBatch: React.FC = () => {
   const [optimizePromptMode, setOptimizePromptMode] = useState('standard');
   const [webSearch, setWebSearch] = useState(false);
   const [concurrent, setConcurrent] = useState(20);
+  const [aiOutputDir, setAiOutputDir] = useState('');
   const [downloadWidth, setDownloadWidth] = useState('1440');
   const [customWidth, setCustomWidth] = useState('');
   const [showCustomWidth, setShowCustomWidth] = useState(false);
@@ -125,7 +132,15 @@ export const AIBatch: React.FC = () => {
   const refInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const nextId = useRef(0);
+  const cancelRef = useRef(false);
   const toastTimer = useRef<ReturnType<typeof setTimeout>>();
+
+  // Clean up toast timer on unmount
+  useEffect(() => {
+    return () => {
+      if (toastTimer.current) clearTimeout(toastTimer.current);
+    };
+  }, []);
 
   // ── Model capability helpers ──
   const isSequentialSupported = model.includes('5-0') || model.includes('4-5') || model.includes('4-0');
@@ -143,6 +158,16 @@ export const AIBatch: React.FC = () => {
       try {
         const key = await (window as any).go.main.App.GetApiKey();
         if (key) setSettingsApiKey(key);
+      } catch { /* no-op */ }
+    })();
+  }, []);
+
+  // Load AI output directory
+  useEffect(() => {
+    (async () => {
+      try {
+        const dir = await (window as any).go.main.App.GetAiOutputDir();
+        if (dir) setAiOutputDir(dir);
       } catch { /* no-op */ }
     })();
   }, []);
@@ -258,72 +283,88 @@ export const AIBatch: React.FC = () => {
 
   // ── Main Processing ──
   const handleRun = async () => {
-    const pending = queue.filter(i => i.status === 'pending');
-    if (pending.length === 0 || !prompt) { showToast('请添加图片和提示词', 'warning'); return; }
+    // Use a local snapshot of pending items
+    const pendingItems = queue.filter(i => i.status === 'pending');
+    if (pendingItems.length === 0 || !prompt) {
+      showToast('请添加图片和提示词', 'warning');
+      return;
+    }
+    if (processing) return; // re-entry guard
 
     setProcessing(true);
+    cancelRef.current = false;
     setCancelRequested(false);
 
-    const concurrency = Math.min(concurrent, pending.length);
-    let currentIdx = 0;
     const errors: string[] = [];
+    const ids = pendingItems.map(item => item.id);
 
-    const worker = async () => {
-      while (currentIdx < pending.length && !cancelRequested) {
-        const idx = currentIdx++;
-        const item = pending[idx];
+    // Process sequentially for reliability
+    for (const item of pendingItems) {
+      if (cancelRef.current) break;
 
-        setQueue(prev => prev.map(i => i.id === item.id ? { ...i, status: 'processing' as const } : i));
+      // Mark as processing
+      setQueue(prev => prev.map(i => i.id === item.id ? { ...i, status: 'processing' as const } : i));
 
-        try {
-          const outputDir = item.path.substring(0, item.path.lastIndexOf('\\'));
-          const fn = (window as any).go.main.App.RunAIImageBatch;
-          const result = await fn({
-            sourcePaths: [item.path],
-            outputDir,
-            prompt,
-            model,
-            size,
-            seed: seed >= 0 ? seed : -1,
-            outputFormat,
-            watermark,
-            guidanceScale,
-            responseFormat,
-            sequentialImageGeneration: sequentialMode,
-            maxImages,
-            optimizePromptMode,
-            webSearch,
-            concurrent: 1,
-            downloadWidth: downloadWidth === 'custom' ? parseInt(customWidth) || 0 : downloadWidth === 'original' ? 0 : parseInt(downloadWidth),
-          });
+      try {
+        const outputDir = aiOutputDir || item.path.substring(0, item.path.lastIndexOf('\\'));
+        const downloadW = downloadWidth === 'custom'
+          ? (parseInt(customWidth) || 0)
+          : downloadWidth === 'original' ? 0 : parseInt(downloadWidth);
+        const result = await (window as any).go.main.App.RunAIImageBatch({
+          sourcePaths: [item.path],
+          outputDir,
+          prompt,
+          model,
+          size,
+          seed: seed >= 0 ? seed : -1,
+          outputFormat,
+          watermark,
+          guidanceScale,
+          responseFormat,
+          sequentialImageGeneration: sequentialMode,
+          maxImages,
+          optimizePromptMode,
+          webSearch,
+          concurrent: 1,
+          referenceImages,
+          downloadWidth: isNaN(downloadW) ? 0 : downloadW,
+        });
 
-          if (cancelRequested) {
-            setQueue(prev => prev.map(i => i.id === item.id ? { ...i, status: 'cancelled' as const } : i));
-          } else if (result && result.success && result.success > 0) {
-            const outputPath = result.results?.[0]?.outputPath || '';
-            setQueue(prev => prev.map(i => i.id === item.id ? { ...i, status: 'completed' as const, outputPath } : i));
-          } else {
-            const errMsg = result?.results?.[0]?.error || result?.error || '处理失败';
-            setQueue(prev => prev.map(i => i.id === item.id ? { ...i, status: 'error' as const, error: errMsg } : i));
+        if (cancelRef.current) {
+          setQueue(prev => prev.map(i => i.id === item.id ? { ...i, status: 'cancelled' as const } : i));
+        } else if (result && result.success > 0) {
+          const outputPath = result.results?.[0]?.outputPath || item.path.replace(/\.[^.]+$/, '') + '_ai.' + (outputFormat === 'jpeg' ? 'jpg' : 'png');
+          setQueue(prev => prev.map(i => i.id === item.id ? { ...i, status: 'completed' as const, outputPath } : i));
+          if (outputPath) {
+            (async () => {
+              try {
+                const dataUrl = await (window as any).go.main.App.ReadImageAsBase64(outputPath);
+                if (dataUrl && dataUrl.startsWith('data:')) {
+                  setQueue(prev => prev.map(i => i.id === item.id ? { ...i, thumbUrl: dataUrl } : i));
+                }
+              } catch {
+                setQueue(prev => prev.map(i => i.id === item.id ? { ...i, thumbUrl: toFileUrl(outputPath) } : i));
+              }
+            })();
           }
-        } catch (err: any) {
-          errors.push(`${item.name}: ${err.message}`);
-          setQueue(prev => prev.map(i => i.id === item.id ? { ...i, status: 'error' as const, error: err.message } : i));
+        } else {
+          const errMsg = result?.results?.[0]?.error || result?.error || '处理失败';
+          setQueue(prev => prev.map(i => i.id === item.id ? { ...i, status: 'error' as const, error: errMsg } : i));
         }
+      } catch (err: any) {
+        errors.push(`${item.name}: ${err.message}`);
+        setQueue(prev => prev.map(i => i.id === item.id ? { ...i, status: 'error' as const, error: err.message } : i));
       }
-    };
+    }
 
-    const workers = Array.from({ length: concurrency }, () => worker());
-    await Promise.all(workers);
-
-    // Mark remaining pending items as cancelled
-    if (cancelRequested) {
-      setQueue(prev => prev.map(i =>
-        i.status === 'pending' ? { ...i, status: 'cancelled' as const } : i
-      ));
+    // Cancel remaining
+    if (cancelRef.current) {
+      setQueue(prev => prev.map(i => ids.includes(i.id) && i.status === 'pending' ? { ...i, status: 'cancelled' as const } : i));
     }
 
     setProcessing(false);
+    setCancelRequested(false);
+    cancelRef.current = false;
     if (errors.length > 0) showToast(`${errors.length} 张处理失败`, 'error');
   };
 
@@ -349,92 +390,88 @@ export const AIBatch: React.FC = () => {
   };
 
   // ── Styles ──
+  // Inline styles kept only where CSS classes can't express the layout
   const s = {
-    card: { background: '#1a1a2e', borderRadius: 12, padding: 16, border: '1px solid #222' },
-    input: { width: '100%' as const, padding: '10px 14px', background: '#1a1a2e', color: '#fff', border: '1px solid #333', borderRadius: 8, fontSize: 14, outline: 'none', boxSizing: 'border-box' as const, fontFamily: 'inherit' },
-    select: { padding: '8px 12px', background: '#1a1a2e', color: '#fff', border: '1px solid #333', borderRadius: 8, fontSize: 13, outline: 'none' },
-    btn: { padding: '8px 18px', border: 'none', borderRadius: 8, cursor: 'pointer' as const, fontSize: 13, color: '#fff', background: '#0f3460' },
-    btnSm: { padding: '4px 10px', border: 'none', borderRadius: 6, cursor: 'pointer' as const, fontSize: 11, color: '#fff', background: '#0f3460' },
-    label: { fontSize: 13, color: '#888', marginBottom: 6, display: 'block' as const },
+    card: { background: 'var(--color-bg-elevated)', borderRadius: 12, padding: 16, border: '1px solid var(--color-border-subtle)' },
+    input: { width: '100%' as const, padding: '10px 14px', background: 'var(--color-bg-surface)', color: 'var(--color-text-primary)', border: '1px solid var(--color-border-default)', borderRadius: 8, fontSize: 14, outline: 'none', boxSizing: 'border-box' as const, fontFamily: 'inherit' },
+    select: { padding: '8px 12px', background: 'var(--color-bg-surface)', color: 'var(--color-text-primary)', border: '1px solid var(--color-border-default)', borderRadius: 8, fontSize: 13, outline: 'none' },
+    btn: { padding: '8px 18px', border: 'none', borderRadius: 8, cursor: 'pointer' as const, fontSize: 13, color: '#fff', background: 'var(--color-accent)' },
+    btnSm: { padding: '4px 10px', border: 'none', borderRadius: 6, cursor: 'pointer' as const, fontSize: 11, color: '#fff', background: 'var(--color-accent)' },
+    label: { fontSize: 13, color: 'var(--color-text-muted)', marginBottom: 6, display: 'block' as const },
     row: { display: 'flex' as const, alignItems: 'center' as const, justifyContent: 'space-between' as const },
-    dangerBtn: { padding: '8px 18px', border: 'none', borderRadius: 8, cursor: 'pointer' as const, fontSize: 13, color: '#fff', background: '#dc2626' },
+    dangerBtn: { padding: '8px 18px', border: 'none', borderRadius: 8, cursor: 'pointer' as const, fontSize: 13, color: '#fff', background: '#c76a6a' },
   };
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', gap: 16, position: 'relative' }}>
       {/* Toast */}
       {toast && (
-        <div style={{
-          position: 'fixed', top: 20, left: '50%', transform: 'translateX(-50%)', zIndex: 9999,
-          padding: '12px 24px', borderRadius: 10, fontSize: 14, color: '#fff', boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
-          background: toast.type === 'error' ? '#dc2626' : toast.type === 'warning' ? '#d97706' : '#16a34a',
-          animation: 'slideDown 0.3s',
-        }}>
+        <div className={`toast ${toast.type === 'error' ? 'toast-error' : toast.type === 'warning' ? 'toast-warning' : 'toast-success'}`}>
           {toast.msg}
-          <button onClick={() => setToast(null)} style={{ background: 'none', border: 'none', color: '#fff', marginLeft: 16, cursor: 'pointer', fontSize: 16 }}>×</button>
+          <button onClick={() => setToast(null)} className="toast-close">×</button>
         </div>
       )}
 
       {/* Settings Modal */}
       {showSettings && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 9000, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setShowSettings(false)}>
-          <div style={{ background: '#1a1a2e', borderRadius: 16, padding: 28, width: 520, maxHeight: '90vh', overflow: 'auto', border: '1px solid #333' }} onClick={e => e.stopPropagation()}>
+        <div className="modal-overlay" onClick={() => setShowSettings(false)}>
+          <div className="modal-content" style={{ width: 520 }} onClick={e => e.stopPropagation()}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-              <h3 style={{ margin: 0, fontSize: 18, color: '#fff' }}>设置</h3>
-              <button onClick={() => setShowSettings(false)} style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: 20 }}>×</button>
+              <h3 style={{ margin: 0, fontSize: 18 }}>设置</h3>
+              <button onClick={() => setShowSettings(false)} className="btn-icon" style={{ fontSize: 20 }}>×</button>
             </div>
 
             {/* API Key */}
             <div style={{ marginBottom: 20 }}>
-              <label style={s.label}>API Key</label>
+              <label className="card-label" style={{ marginBottom: 6, textTransform: 'none', letterSpacing: 0 }}>API Key</label>
               <input type="password" value={settingsApiKey}
                 onChange={e => setSettingsApiKey(e.target.value)}
                 placeholder="输入你的火山方舟 API Key"
-                style={{ ...s.input, marginBottom: 6 }} />
-              <p style={{ fontSize: 11, color: '#64748b', margin: 0 }}>在火山方舟控制台获取 · 保存在本地 ~/.imagetool/config.json</p>
+                className="input" />
+              <p className="text-xs text-muted" style={{ margin: '4px 0 0' }}>在火山方舟控制台获取 · 保存在本地 ~/.imagetool/config.json</p>
               <button onClick={async () => {
                 try {
                   await (window as any).go.main.App.SaveApiKey(settingsApiKey);
                   showToast('API Key 已保存', 'success');
                 } catch { showToast('保存失败', 'error'); }
-              }} style={{ ...s.btn, marginTop: 8 }}>保存 API Key</button>
+              }} className="btn btn-sm mt-6">保存 API Key</button>
             </div>
 
             {/* Model List */}
             <div style={{ marginBottom: 20 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                <label style={s.label}>模型列表</label>
+              <div className="card-header">
+                <label className="card-label" style={{ textTransform: 'none', letterSpacing: 0, marginBottom: 0 }}>模型列表</label>
                 <button onClick={() => { setIsAddingModel(true); setNewModelId(''); setNewModelName(''); }}
-                  style={s.btnSm}>+ 添加模型</button>
+                  className="btn btn-sm">+ 添加模型</button>
               </div>
               {isAddingModel && (
-                <div style={{ display: 'flex', gap: 6, marginBottom: 8, alignItems: 'center' }}>
+                <div className="flex gap-3 items-center mb-4">
                   <input placeholder="名称" value={newModelName} onChange={e => setNewModelName(e.target.value)}
-                    style={{ ...s.input, width: 140, padding: '6px 10px', fontSize: 12 }} />
+                    className="input" style={{ width: 140, padding: '6px 10px', fontSize: 12 }} />
                   <input placeholder="ID" value={newModelId} onChange={e => setNewModelId(e.target.value)}
-                    style={{ ...s.input, width: 160, padding: '6px 10px', fontSize: 12 }} />
-                  <button onClick={handleAddModel} style={s.btnSm}>保存</button>
-                  <button onClick={() => setIsAddingModel(false)} style={{ ...s.btnSm, background: '#555' }}>取消</button>
+                    className="input" style={{ width: 160, padding: '6px 10px', fontSize: 12 }} />
+                  <button onClick={handleAddModel} className="btn btn-sm">保存</button>
+                  <button onClick={() => setIsAddingModel(false)} className="btn btn-sm" style={{ background: '#555' }}>取消</button>
                 </div>
               )}
               <div style={{ maxHeight: 160, overflow: 'auto' }}>
                 {modelList.map(m => (
-                  <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderBottom: '1px solid #1a1a2e' }}>
+                  <div key={m.id} className="queue-item">
                     {editingModel?.id === m.id ? (
                       <>
                         <input value={editingModel.name} onChange={e => setEditingModel({ ...editingModel, name: e.target.value })}
-                          style={{ ...s.input, width: 120, padding: '4px 8px', fontSize: 12 }} />
+                          className="input" style={{ width: 120, padding: '4px 8px', fontSize: 12 }} />
                         <input value={editingModel.id} onChange={e => setEditingModel({ ...editingModel, id: e.target.value })}
-                          style={{ ...s.input, width: 150, padding: '4px 8px', fontSize: 12 }} />
-                        <button onClick={handleEditModelSave} style={s.btnSm}>保存</button>
-                        <button onClick={() => setEditingModel(null)} style={{ ...s.btnSm, background: '#555' }}>取消</button>
+                          className="input" style={{ width: 150, padding: '4px 8px', fontSize: 12 }} />
+                        <button onClick={handleEditModelSave} className="btn btn-sm">保存</button>
+                        <button onClick={() => setEditingModel(null)} className="btn btn-sm" style={{ background: '#555' }}>取消</button>
                       </>
                     ) : (
                       <>
-                        <span style={{ fontSize: 13, color: '#ccc', width: 120 }}>{m.name}</span>
-                        <span style={{ fontSize: 11, color: '#64748b', flex: 1 }}>{m.id}</span>
-                        <button onClick={() => setEditingModel({ ...m })} style={{ ...s.btnSm, background: '#1a1a2e', border: '1px solid #0f3460' }}>编辑</button>
-                        <button onClick={() => handleDeleteModel(m.id)} style={{ ...s.btnSm, background: '#7f1d1d' }}>删除</button>
+                        <span className="text-sm" style={{ width: 120 }}>{m.name}</span>
+                        <span className="text-xs text-muted" style={{ flex: 1 }}>{m.id}</span>
+                        <button onClick={() => setEditingModel({ ...m })} className="btn btn-sm btn-ghost">编辑</button>
+                        <button onClick={() => handleDeleteModel(m.id)} className="btn btn-sm" style={{ background: '#7f1d1d' }}>删除</button>
                       </>
                     )}
                   </div>
@@ -442,8 +479,8 @@ export const AIBatch: React.FC = () => {
               </div>
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-              <button onClick={() => setShowSettings(false)} style={{ ...s.btn, background: '#555' }}>关闭</button>
+            <div className="flex justify-end gap-4">
+              <button onClick={() => setShowSettings(false)} className="btn btn-ghost">关闭</button>
             </div>
           </div>
         </div>
@@ -451,13 +488,13 @@ export const AIBatch: React.FC = () => {
 
       {/* Delete prompt confirmation */}
       {deleteConfirmPreset && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 9500, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ background: '#1a1a2e', borderRadius: 12, padding: 24, width: 360, border: '1px solid #333' }}>
-            <h4 style={{ margin: '0 0 12px', color: '#fff', fontSize: 16 }}>确认删除</h4>
-            <p style={{ fontSize: 14, color: '#888', margin: '0 0 20px' }}>确定要删除提示词「{deleteConfirmPreset}」吗？</p>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-              <button onClick={() => setDeleteConfirmPreset(null)} style={{ ...s.btn, background: '#555' }}>取消</button>
-              <button onClick={() => handleDeletePreset(deleteConfirmPreset)} style={s.dangerBtn}>删除</button>
+        <div className="modal-overlay">
+          <div className="modal-content" style={{ width: 360, padding: 24 }}>
+            <h4 style={{ margin: '0 0 12px', fontSize: 16 }}>确认删除</h4>
+            <p className="text-md text-secondary" style={{ margin: '0 0 20px' }}>确定要删除提示词「{deleteConfirmPreset}」吗？</p>
+            <div className="flex justify-end gap-4">
+              <button onClick={() => setDeleteConfirmPreset(null)} className="btn btn-ghost">取消</button>
+              <button onClick={() => handleDeletePreset(deleteConfirmPreset)} className="btn btn-danger">删除</button>
             </div>
           </div>
         </div>
@@ -465,59 +502,59 @@ export const AIBatch: React.FC = () => {
 
       {/* Preview Modal */}
       {selectedPreview && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 9500, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }} onClick={closePreview}>
+        <div className="modal-overlay" style={{ background: 'rgba(0,0,0,0.85)' }} onClick={closePreview}>
           {/* Controls */}
           <div style={{ position: 'absolute', top: 16, right: 16, display: 'flex', gap: 8, zIndex: 1 }}>
-            <button onClick={() => setCompareMode(!compareMode)} style={{ ...s.btnSm, background: compareMode ? '#e94560' : '#0f3460' }}>
+            <button onClick={() => setCompareMode(!compareMode)} className="btn btn-sm" style={{ background: compareMode ? 'var(--color-accent)' : 'var(--color-bg-elevated)' }}>
               {compareMode ? '单图' : '对比'}
             </button>
-            <button onClick={closePreview} style={{ ...s.btnSm, background: '#555', fontSize: 14 }}>×</button>
+            <button onClick={closePreview} className="btn-icon" style={{ fontSize: 18 }}>×</button>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 16, position: 'absolute', bottom: 40 }}>
+          <div className="flex items-center gap-8" style={{ position: 'absolute', bottom: 40 }}>
             {selectedPreview.results && previewIndex > 0 && (
-              <button onClick={() => { setPreviewIndex(i => i - 1); setPreviewZoom(1); }} style={s.btn}>◀ 上一张</button>
+              <button onClick={() => { setPreviewIndex(i => i - 1); setPreviewZoom(1); }} className="btn btn-sm">◀ 上一张</button>
             )}
-            <span style={{ color: '#888', fontSize: 13 }}>
+            <span className="text-sm text-secondary">
               {previewIndex + 1} / {selectedPreview.results?.length || 1}
             </span>
             {selectedPreview.results && previewIndex < selectedPreview.results.length - 1 && (
-              <button onClick={() => { setPreviewIndex(i => i + 1); setPreviewZoom(1); }} style={s.btn}>下一张 ▶</button>
+              <button onClick={() => { setPreviewIndex(i => i + 1); setPreviewZoom(1); }} className="btn btn-sm">下一张 ▶</button>
             )}
-            <button onClick={() => setPreviewZoom(z => Math.min(3, z + 0.25))} style={s.btnSm}>+放大</button>
-            <button onClick={() => setPreviewZoom(z => Math.max(0.5, z - 0.25))} style={s.btnSm}>-缩小</button>
-            <button onClick={() => setPreviewZoom(1)} style={s.btnSm}>重置</button>
-            <span style={{ color: '#64748b', fontSize: 12 }}>{Math.round(previewZoom * 100)}%</span>
+            <button onClick={() => setPreviewZoom(z => Math.min(3, z + 0.25))} className="btn btn-sm btn-ghost">+放大</button>
+            <button onClick={() => setPreviewZoom(z => Math.max(0.5, z - 0.25))} className="btn btn-sm btn-ghost">-缩小</button>
+            <button onClick={() => setPreviewZoom(1)} className="btn btn-sm btn-ghost">重置</button>
+            <span className="text-xs text-muted">{Math.round(previewZoom * 100)}%</span>
           </div>
           {compareMode && selectedPreview.results?.[previewIndex] ? (
-            <div style={{ display: 'flex', gap: 20, alignItems: 'center' }} onClick={e => e.stopPropagation()}>
-              <div style={{ textAlign: 'center' }}>
-                <p style={{ color: '#888', fontSize: 12, marginBottom: 8 }}>原图</p>
+            <div className="flex gap-10 items-center" onClick={e => e.stopPropagation()}>
+              <div className="text-center">
+                <p className="text-sm text-muted mb-4">原图</p>
                 <div style={{ overflow: 'auto', maxWidth: '40vw', maxHeight: '70vh' }}>
-                  <img src={selectedPreview.path} style={{ transform: `scale(${leftZoom})`, transformOrigin: 'top left' }} alt="original" />
+                  <img src={toFileUrl(selectedPreview.path)} style={{ transform: `scale(${leftZoom})`, transformOrigin: 'top left' }} alt="original" />
                 </div>
-                <div style={{ marginTop: 4 }}>
-                  <button onClick={() => setLeftZoom(z => Math.min(3, z + 0.25))} style={s.btnSm}>+</button>
-                  <button onClick={() => setLeftZoom(z => Math.max(0.5, z - 0.25))} style={{ ...s.btnSm, marginLeft: 4 }}>-</button>
+                <div className="mt-2 flex gap-2 justify-center">
+                  <button onClick={() => setLeftZoom(z => Math.min(3, z + 0.25))} className="btn btn-sm btn-ghost">+</button>
+                  <button onClick={() => setLeftZoom(z => Math.max(0.5, z - 0.25))} className="btn btn-sm btn-ghost">-</button>
                 </div>
               </div>
-              <div style={{ textAlign: 'center' }}>
-                <p style={{ color: '#888', fontSize: 12, marginBottom: 8 }}>AI 结果</p>
+              <div className="text-center">
+                <p className="text-sm text-muted mb-4">AI 结果</p>
                 <div style={{ overflow: 'auto', maxWidth: '40vw', maxHeight: '70vh' }}>
-                  <div style={{ width: 200, height: 200, background: '#1a1a2e', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b', fontSize: 13 }}>
+                  <div style={{ width: 200, height: 200, background: 'var(--color-bg-elevated)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--color-text-muted)', fontSize: 13, borderRadius: 8 }}>
                     结果图片 (URL 需联网加载)
                   </div>
                 </div>
-                <div style={{ marginTop: 4 }}>
-                  <button onClick={() => setRightZoom(z => Math.min(3, z + 0.25))} style={s.btnSm}>+</button>
-                  <button onClick={() => setRightZoom(z => Math.max(0.5, z - 0.25))} style={{ ...s.btnSm, marginLeft: 4 }}>-</button>
+                <div className="mt-2 flex gap-2 justify-center">
+                  <button onClick={() => setRightZoom(z => Math.min(3, z + 0.25))} className="btn btn-sm btn-ghost">+</button>
+                  <button onClick={() => setRightZoom(z => Math.max(0.5, z - 0.25))} className="btn btn-sm btn-ghost">-</button>
                 </div>
               </div>
             </div>
           ) : (
             <div style={{ maxWidth: '80vw', maxHeight: '75vh', overflow: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={e => e.stopPropagation()}>
               <div style={{
-                width: 300, height: 300, background: '#1a1a2e', borderRadius: 12,
-                display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b', fontSize: 14,
+                width: 300, height: 300, background: 'var(--color-bg-elevated)', borderRadius: 12,
+                display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--color-text-muted)', fontSize: 14,
               }}>
                 AI 结果图片<br/>需联网加载
               </div>
@@ -533,53 +570,53 @@ export const AIBatch: React.FC = () => {
         <div style={{ width: '35%', display: 'flex', flexDirection: 'column', gap: 14, overflow: 'auto' }}>
 
           {/* Prompt Card */}
-          <div style={s.card}>
-            <label style={s.label}>提示词 (Prompt)</label>
+          <div className="card" style={s.card}>
+            <label className="card-label" style={{ textTransform: 'none', letterSpacing: 0, marginBottom: 6 }}>提示词 (Prompt)</label>
             <textarea value={prompt} onChange={e => setPrompt(e.target.value)}
               rows={5} placeholder="输入图片生成提示词..."
-              style={{ ...s.input, resize: 'vertical', minHeight: 80, fontFamily: 'inherit' }} />
+              style={{ ...s.input, resize: 'vertical', minHeight: 80 }} />
           </div>
 
           {/* Quick Prompts Card */}
-          <div style={s.card}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-              <label style={{ ...s.label, marginBottom: 0 }}>快速提示词</label>
-              <button onClick={() => setShowPromptForm(!showPromptForm)} style={s.btnSm}>+ 新建</button>
+          <div className="card" style={s.card}>
+            <div className="card-header" style={{ marginBottom: 8 }}>
+              <label className="card-label" style={{ textTransform: 'none', letterSpacing: 0, marginBottom: 0 }}>快速提示词</label>
+              <button onClick={() => setShowPromptForm(!showPromptForm)} className="btn btn-sm">+ 新建</button>
             </div>
 
             {showPromptForm && (
-              <div style={{ marginBottom: 10, padding: 10, background: '#1a1a2e', borderRadius: 8 }}>
+              <div style={{ marginBottom: 10, padding: 10, background: 'var(--color-bg-surface)', borderRadius: 8 }}>
                 <input placeholder="名称" value={newPresetName} onChange={e => setNewPresetName(e.target.value)}
-                  style={{ ...s.input, marginBottom: 6, padding: '6px 10px', fontSize: 12 }} />
+                  className="input" style={{ marginBottom: 6, padding: '6px 10px', fontSize: 12 }} />
                 <textarea placeholder="提示词内容（留空使用当前提示词）" value={newPresetText}
                   onChange={e => setNewPresetText(e.target.value)} rows={2}
-                  style={{ ...s.input, marginBottom: 6, padding: '6px 10px', fontSize: 12, fontFamily: 'inherit' }} />
-                <div style={{ display: 'flex', gap: 6 }}>
+                  className="input" style={{ marginBottom: 6, padding: '6px 10px', fontSize: 12, fontFamily: 'inherit', resize: 'vertical' }} />
+                <div className="flex gap-3">
                   <select value={newPresetCategory} onChange={e => setNewPresetCategory(e.target.value)}
-                    style={{ ...s.select, fontSize: 12, padding: '4px 8px' }}>
+                    className="select" style={{ fontSize: 12, padding: '4px 8px' }}>
                     {['常用', '人像', '风景', '风格', '其他'].map(c => <option key={c} value={c}>{c}</option>)}
                   </select>
-                  <button onClick={handleSavePreset} style={s.btnSm}>保存</button>
-                  <button onClick={() => setShowPromptForm(false)} style={{ ...s.btnSm, background: '#555' }}>取消</button>
+                  <button onClick={handleSavePreset} className="btn btn-sm">保存</button>
+                  <button onClick={() => setShowPromptForm(false)} className="btn btn-sm btn-ghost">取消</button>
                 </div>
               </div>
             )}
 
             {groupedPresets.length === 0 ? (
-              <div style={{ fontSize: 12, color: '#555', textAlign: 'center', padding: 12 }}>暂无保存的提示词</div>
+              <div className="text-xs text-center" style={{ color: '#555', padding: 12 }}>暂无保存的提示词</div>
             ) : (
               groupedPresets.map(g => (
                 <div key={g.category} style={{ marginBottom: 6 }}>
-                  <div style={{ fontSize: 11, color: '#64748b', marginBottom: 4 }}>{g.category}</div>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                  <div className="text-xs text-muted" style={{ marginBottom: 4 }}>{g.category}</div>
+                  <div className="flex flex-wrap" style={{ gap: 4 }}>
                     {g.items.map(p => (
                       <div key={p.name} style={{ position: 'relative', display: 'inline-block' }}>
                         <button onClick={() => setPrompt(p.text)}
-                          style={{ ...s.btnSm, background: '#1a1a2e', border: '1px solid #0f3460', fontSize: 11, padding: '3px 10px', whiteSpace: 'nowrap' }}>
+                          className="btn btn-sm btn-ghost" style={{ fontSize: 11, padding: '3px 10px', whiteSpace: 'nowrap' }}>
                           {p.name}
                         </button>
                         <button onClick={() => setDeleteConfirmPreset(p.name)}
-                          style={{ position: 'absolute', top: -5, right: -5, width: 14, height: 14, borderRadius: '50%', border: 'none', background: '#ef4444', color: '#fff', fontSize: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.7 }}>
+                          className="btn-icon" style={{ position: 'absolute', top: -6, right: -6, width: 14, height: 14, borderRadius: '50%', background: 'var(--color-danger)', fontSize: 10, opacity: 0.7 }}>
                           ×
                         </button>
                       </div>
@@ -591,68 +628,68 @@ export const AIBatch: React.FC = () => {
           </div>
 
           {/* Parameters Card */}
-          <div style={s.card}>
-            <label style={s.label}>生成参数</label>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div className="card" style={s.card}>
+            <label className="card-label" style={{ textTransform: 'none', letterSpacing: 0, marginBottom: 6 }}>生成参数</label>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {/* --- Model --- */}
-              <div style={s.row}>
-                <span style={{ fontSize: 13, color: '#888' }}>模型</span>
-                <div style={{ display: 'flex', gap: 4 }}>
-                  <select value={model} onChange={e => setModel(e.target.value)} style={{ ...s.select, width: 150 }}>
+              <div className="param-row">
+                <span className="param-label">模型</span>
+                <div className="flex gap-2">
+                  <select value={model} onChange={e => setModel(e.target.value)} className="select" style={{ width: 150, fontSize: 12, padding: '4px 8px' }}>
                     {modelList.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
                   </select>
-                  <button onClick={() => setShowSettings(true)} style={{ ...s.btnSm, background: '#1a1a2e', border: '1px solid #0f3460', fontSize: 11, padding: '4px 6px' }} title="管理模型">⚙</button>
+                  <button onClick={() => setShowSettings(true)} className="btn btn-sm btn-ghost" title="管理模型">⚙</button>
                 </div>
               </div>
 
               {/* --- Size --- */}
-              <div style={s.row}>
-                <span style={{ fontSize: 13, color: '#888' }}>尺寸</span>
-                <select value={size} onChange={e => setSize(e.target.value)} style={{ ...s.select, width: 150 }}>
+              <div className="param-row">
+                <span className="param-label">尺寸</span>
+                <select value={size} onChange={e => setSize(e.target.value)} className="select" style={{ width: 150, fontSize: 12, padding: '4px 8px' }}>
                   {sizeOptions.map(sz => <option key={sz} value={sz}>{sz}</option>)}
                 </select>
               </div>
 
               {/* --- Seed --- */}
-              <div style={s.row}>
-                <span style={{ fontSize: 13, color: '#888' }}>种子</span>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <div className="param-row">
+                <span className="param-label">种子</span>
+                <div className="flex items-center gap-3">
                   {!showCustomSeed ? (
                     <button onClick={() => setShowCustomSeed(true)}
-                      style={{ ...s.btnSm, background: '#1a1a2e', border: '1px solid #0f3460', color: seed === -1 ? '#64748b' : '#ccc' }}>
+                      className="btn btn-sm btn-ghost" style={{ color: seed === -1 ? 'var(--color-text-muted)' : 'var(--color-text-secondary)' }}>
                       {seed === -1 ? '随机' : seed}
                     </button>
                   ) : (
                     <>
                       <input type="number" value={seed} onChange={e => setSeed(Number(e.target.value))}
-                        style={{ ...s.input, width: 70, padding: '4px 8px', fontSize: 12 }} min={-1} autoFocus />
-                      <button onClick={() => setSeed(-1)} style={s.btnSm}>重置</button>
+                        className="input" style={{ width: 70, padding: '4px 8px', fontSize: 12 }} min={-1} autoFocus />
+                      <button onClick={() => setSeed(-1)} className="btn btn-sm">重置</button>
                     </>
                   )}
                 </div>
               </div>
 
               {/* --- Watermark --- */}
-              <div style={s.row}>
-                <span style={{ fontSize: 13, color: '#888' }}>水印</span>
-                <label style={{ fontSize: 13, color: '#ccc', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <input type="checkbox" checked={watermark} onChange={e => setWatermark(e.target.checked)} style={{ accentColor: '#e94560' }} /> Seedream 水印
+              <div className="param-row">
+                <span className="param-label">水印</span>
+                <label className="checkbox-label" style={{ fontSize: 12 }}>
+                  <input type="checkbox" checked={watermark} onChange={e => setWatermark(e.target.checked)} /> Seedream 水印
                 </label>
               </div>
 
               {/* --- Response Format --- */}
-              <div style={s.row}>
-                <span style={{ fontSize: 13, color: '#888' }}>返回格式</span>
-                <select value={responseFormat} onChange={e => setResponseFormat(e.target.value)} style={{ ...s.select, width: 150 }}>
+              <div className="param-row">
+                <span className="param-label">返回格式</span>
+                <select value={responseFormat} onChange={e => setResponseFormat(e.target.value)} className="select" style={{ width: 150, fontSize: 12, padding: '4px 8px' }}>
                   <option value="url">URL (推荐)</option>
                   <option value="b64_json">Base64</option>
                 </select>
               </div>
 
               {/* --- Sequential (组图) --- */}
-              {isSequentialSupported && (<div style={s.row}>
-                <span style={{ fontSize: 13, color: '#888' }}>生成模式</span>
-                <select value={sequentialMode} onChange={e => setSequentialMode(e.target.value)} style={{ ...s.select, width: 150 }}>
+              {isSequentialSupported && (<div className="param-row">
+                <span className="param-label">生成模式</span>
+                <select value={sequentialMode} onChange={e => setSequentialMode(e.target.value)} className="select" style={{ width: 150, fontSize: 12, padding: '4px 8px' }}>
                   <option value="disabled">关闭 (单图)</option>
                   <option value="auto">自动 (组图)</option>
                 </select>
@@ -660,58 +697,58 @@ export const AIBatch: React.FC = () => {
 
               {/* --- Max Images --- */}
               {isSequentialSupported && sequentialMode === 'auto' && (
-                <div style={s.row}>
-                  <span style={{ fontSize: 13, color: '#888' }}>最大图片数</span>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <input type="range" min={1} max={15} value={maxImages} onChange={e => setMaxImages(Number(e.target.value))} style={{ width: 80, accentColor: '#e94560' }} />
-                    <span style={{ fontSize: 12, color: '#ccc', width: 24 }}>{maxImages}</span>
+                <div className="param-row">
+                  <span className="param-label">最大图片数</span>
+                  <div className="flex items-center gap-3">
+                    <input type="range" min={1} max={15} value={maxImages} onChange={e => setMaxImages(Number(e.target.value))} style={{ width: 80 }} />
+                    <span className="text-xs" style={{ color: 'var(--color-text-secondary)', width: 24 }}>{maxImages}</span>
                   </div>
                 </div>
               )}
 
               {/* --- Output Format --- */}
-              {isOutputFormatSupported && (<div style={s.row}>
-                <span style={{ fontSize: 13, color: '#888' }}>输出格式</span>
-                <select value={outputFormat} onChange={e => setOutputFormat(e.target.value)} style={{ ...s.select, width: 150 }}>
+              {isOutputFormatSupported && (<div className="param-row">
+                <span className="param-label">输出格式</span>
+                <select value={outputFormat} onChange={e => setOutputFormat(e.target.value)} className="select" style={{ width: 150, fontSize: 12, padding: '4px 8px' }}>
                   <option value="jpeg">JPEG</option>
                   <option value="png">PNG</option>
                 </select>
               </div>)}
 
               {/* --- Guidance Scale --- */}
-              {isGuidanceSupported && (<div style={s.row}>
-                <span style={{ fontSize: 13, color: '#888' }}>文本权重</span>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <span style={{ fontSize: 11, color: '#64748b' }}>1</span>
-                  <input type="range" min={10} max={100} value={guidanceScale * 10} onChange={e => setGuidanceScale(Number(e.target.value) / 10)} style={{ width: 80, accentColor: '#e94560' }} step={5} />
-                  <span style={{ fontSize: 11, color: '#64748b' }}>10</span>
-                  <span style={{ fontSize: 12, color: '#ccc', width: 28 }}>{guidanceScale.toFixed(1)}</span>
+              {isGuidanceSupported && (<div className="param-row">
+                <span className="param-label">文本权重</span>
+                <div className="flex items-center gap-3">
+                  <span className="text-xs text-muted">1</span>
+                  <input type="range" min={10} max={100} value={guidanceScale * 10} onChange={e => setGuidanceScale(Number(e.target.value) / 10)} style={{ width: 80 }} step={5} />
+                  <span className="text-xs text-muted">10</span>
+                  <span className="text-xs text-secondary" style={{ width: 28 }}>{guidanceScale.toFixed(1)}</span>
                 </div>
               </div>)}
 
               {/* --- Optimize Prompt --- */}
-              <div style={s.row}>
-                <span style={{ fontSize: 13, color: '#888' }}>提示词优化</span>
-                <select value={optimizePromptMode} onChange={e => setOptimizePromptMode(e.target.value)} style={{ ...s.select, width: 150 }}>
+              <div className="param-row">
+                <span className="param-label">提示词优化</span>
+                <select value={optimizePromptMode} onChange={e => setOptimizePromptMode(e.target.value)} className="select" style={{ width: 150, fontSize: 12, padding: '4px 8px' }}>
                   <option value="standard">标准模式 (高质量)</option>
                   <option value="fast">快速模式 (低耗时)</option>
                 </select>
               </div>
 
               {/* --- Web Search --- */}
-              {isWebSearchSupported && (<div style={s.row}>
-                <span style={{ fontSize: 13, color: '#888' }}>联网搜索</span>
-                <label style={{ fontSize: 13, color: '#ccc', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <input type="checkbox" checked={webSearch} onChange={e => setWebSearch(e.target.checked)} style={{ accentColor: '#e94560' }} /> 搜索互联网
+              {isWebSearchSupported && (<div className="param-row">
+                <span className="param-label">联网搜索</span>
+                <label className="checkbox-label" style={{ fontSize: 12 }}>
+                  <input type="checkbox" checked={webSearch} onChange={e => setWebSearch(e.target.checked)} /> 搜索互联网
                 </label>
               </div>)}
 
               {/* --- Concurrent --- */}
-              <div style={s.row}>
-                <span style={{ fontSize: 13, color: '#888' }}>并发数</span>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <input type="range" min={1} max={20} value={concurrent} onChange={e => setConcurrent(Number(e.target.value))} style={{ width: 80, accentColor: '#e94560' }} />
-                  <span style={{ fontSize: 12, color: '#ccc', width: 24 }}>{concurrent}</span>
+              <div className="param-row">
+                <span className="param-label">并发数</span>
+                <div className="flex items-center gap-3">
+                  <input type="range" min={1} max={20} value={concurrent} onChange={e => setConcurrent(Number(e.target.value))} style={{ width: 80 }} />
+                  <span className="text-xs text-secondary" style={{ width: 24 }}>{concurrent}</span>
                 </div>
               </div>
             </div>
@@ -722,87 +759,97 @@ export const AIBatch: React.FC = () => {
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 14, minHeight: 0 }}>
 
           {/* Reference Images */}
-          <div style={s.card}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-              <label style={{ ...s.label, marginBottom: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
-                参考图 <span style={{ fontSize: 11, color: '#64748b' }}>({referenceImages.length}/12)</span>
+          <div className="card" style={s.card}>
+            <div className="card-header" style={{ marginBottom: 8 }}>
+              <label className="card-label" style={{ textTransform: 'none', letterSpacing: 0, marginBottom: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+                参考图 <span className="text-xs text-muted">({referenceImages.length}/12)</span>
               </label>
-              <button onClick={handleReferenceUpload} style={s.btnSm}>+ 上传参考图</button>
+              <button onClick={handleReferenceUpload} className="btn btn-sm">+ 上传参考图</button>
             </div>
             {referenceImages.length === 0 ? (
-              <div onClick={handleReferenceUpload}
-                style={{ border: '2px dashed #0f3460', borderRadius: 10, padding: '16px 0', textAlign: 'center', cursor: 'pointer', color: '#64748b', fontSize: 13 }}>
+              <div onClick={handleReferenceUpload} className="drop-zone" style={{ padding: '16px 0' }}>
                 <div style={{ fontSize: 22, marginBottom: 2 }}>+</div>拖拽或点击上传参考图
               </div>
             ) : (
-              <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 4 }}>
+              <div className="flex gap-3" style={{ overflowX: 'auto', paddingBottom: 4 }}>
                 {referenceImages.map((img, i) => (
                   <div key={i} style={{ position: 'relative', flexShrink: 0 }}>
-                    <div style={{ width: 48, height: 48, borderRadius: 8, border: '1px solid #0f3460', background: '#1a1a2e', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: '#64748b' }}>
+                    <div style={{ width: 48, height: 48, borderRadius: 8, border: '1px solid var(--color-accent)', background: 'var(--color-bg-surface)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: 'var(--color-text-muted)' }}>
                       {img.split('\\').pop()?.substring(0, 10) || `ref${i}`}
                     </div>
                     <button onClick={() => removeReference(i)}
-                      style={{ position: 'absolute', top: -6, right: -6, width: 18, height: 18, borderRadius: '50%', border: 'none', background: '#ef4444', color: '#fff', cursor: 'pointer', fontSize: 11, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
+                      className="btn-icon" style={{ position: 'absolute', top: -6, right: -6, width: 18, height: 18, borderRadius: '50%', background: 'var(--color-danger)', fontSize: 11 }}>
+                      ×
+                    </button>
                   </div>
                 ))}
                 {referenceImages.length < 12 && (
                   <div onClick={handleReferenceUpload}
-                    style={{ width: 48, height: 48, borderRadius: 8, border: '2px dashed #0f3460', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#555', fontSize: 18, flexShrink: 0 }}>+</div>
+                    style={{ width: 48, height: 48, borderRadius: 8, border: '2px dashed var(--color-accent)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#555', fontSize: 18, flexShrink: 0 }}>+</div>
                 )}
               </div>
             )}
           </div>
 
           {/* Batch Actions Bar */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0, flexWrap: 'wrap' }}>
-            <button onClick={clearQueue} style={{ ...s.btn, background: 'transparent', border: '1px solid #0f3460', color: '#888' }}>清空</button>
-            <button onClick={handleSelectFolder} style={s.btn}>+ 添加图片</button>
+          <div className="flex items-center gap-3" style={{ flexShrink: 0, flexWrap: 'wrap' }}>
+            <button onClick={clearQueue} className="btn btn-sm btn-ghost">清空</button>
+            <button onClick={handleSelectFolder} className="btn btn-sm btn-primary">+ 添加图片</button>
 
             {queue.length > 0 && (
-              <span style={{ fontSize: 12, color: '#64748b' }}>{completedCount}/{queue.length} 完成</span>
+              <span className="text-xs text-muted">{completedCount}/{queue.length} 完成</span>
             )}
 
             {queue.filter(i => i.status === 'error').length > 0 && (
-              <button onClick={retryAll} style={{ ...s.btn, background: '#1a1a2e', border: '1px solid #eab308', color: '#eab308', fontSize: 12, padding: '4px 12px' }}>全部重试</button>
+              <button onClick={retryAll} className="btn btn-sm" style={{ border: '1px solid var(--color-warning)', color: 'var(--color-warning)', background: 'transparent' }}>全部重试</button>
             )}
 
             {completedCount > 0 && (
               <button onClick={async () => {
-                const completed = queue.filter(i => i.status === 'completed');
+                const completed = queue.filter(i => i.status === 'completed' && i.outputPath);
                 setDownloadProgress({ current: 0, total: completed.length, active: true });
-                for (let i = 0; i < completed.length; i++) {
-                  setDownloadProgress(p => ({ ...p, current: i + 1 }));
+                let count = 0;
+                for (const item of completed) {
+                  try {
+                    const link = document.createElement('a');
+                    link.href = toFileUrl(item.outputPath!);
+                    link.download = item.name;
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    count++;
+                  } catch { /* skip */ }
+                  setDownloadProgress(p => ({ ...p, current: count }));
                 }
                 setDownloadProgress(p => ({ ...p, active: false }));
                 showToast('下载完成', 'success');
-              }} style={{ ...s.btn, background: '#065f46', fontSize: 12, padding: '4px 12px' }}>
+              }} className="btn btn-sm" style={{ background: '#065f46' }}>
                 全部下载
               </button>
             )}
 
             {/* Download Width */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginLeft: 'auto' }}>
-              <span style={{ fontSize: 11, color: '#64748b' }}>宽度:</span>
+            <div className="flex items-center gap-2 ml-auto">
+              <span className="text-xs text-muted">宽度:</span>
               <select value={downloadWidth} onChange={e => { setDownloadWidth(e.target.value); setShowCustomWidth(e.target.value === 'custom'); }}
-                style={{ ...s.select, fontSize: 12, padding: '4px 8px', width: 100 }}>
+                className="select" style={{ fontSize: 12, padding: '4px 8px', width: 100 }}>
                 {downloadWidthOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
               {showCustomWidth && (
                 <input type="number" value={customWidth} onChange={e => setCustomWidth(e.target.value)}
-                  placeholder="px" style={{ ...s.input, width: 70, padding: '4px 8px', fontSize: 12 }} />
+                  placeholder="px" className="input" style={{ width: 70, padding: '4px 8px', fontSize: 12 }} />
               )}
             </div>
 
             <div style={{ flex: 1 }} />
 
             {processing ? (
-              <button onClick={() => setCancelRequested(true)}
-                style={{ padding: '10px 24px', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 14, color: '#fff', background: '#dc2626', fontWeight: 600 }}>
+              <button onClick={() => { cancelRef.current = true; setCancelRequested(true); }} className="btn btn-danger" style={{ fontWeight: 600, padding: '8px 24px' }}>
                 取消处理
               </button>
             ) : (
-              <button onClick={handleRun} disabled={queue.length === 0 || !prompt}
-                style={{ padding: '10px 24px', border: 'none', borderRadius: 8, cursor: queue.length === 0 || !prompt ? 'not-allowed' : 'pointer', fontSize: 14, color: '#fff', background: queue.length === 0 || !prompt ? '#555' : '#e94560', fontWeight: 600 }}>
+              <button onClick={handleRun} disabled={queue.length === 0 || !prompt || processing}
+                className="btn btn-primary" style={{ fontWeight: 600, padding: '8px 24px', opacity: (queue.length === 0 || !prompt || processing) ? 0.4 : 1 }}>
                 开始处理 {pendingCount > 0 ? `(${pendingCount}张)` : ''}
               </button>
             )}
@@ -810,91 +857,95 @@ export const AIBatch: React.FC = () => {
 
           {/* Download Progress */}
           {downloadProgress.active && (
-            <div style={{ position: 'fixed', bottom: 20, left: '50%', transform: 'translateX(-50%)', zIndex: 100, background: '#1a1a2e', border: '1px solid #333', borderRadius: 8, padding: '10px 20px', fontSize: 13, color: '#888' }}>
+            <div style={{ position: 'fixed', bottom: 20, left: '50%', transform: 'translateX(-50%)', zIndex: 100, background: 'var(--color-bg-elevated)', border: '1px solid var(--color-border-default)', borderRadius: 8, padding: '10px 20px', fontSize: 13, color: 'var(--color-text-secondary)' }}>
               下载中 {downloadProgress.current} / {downloadProgress.total}
             </div>
           )}
 
           {/* Hover Preview */}
           {hoverPreviewVisible && hoverPreviewImg && (
-            <div style={{ position: 'fixed', left: hoverPreviewPos.x, top: hoverPreviewPos.y, zIndex: 9999, background: '#000', border: '1px solid #333', borderRadius: 8, padding: 4, pointerEvents: 'none', boxShadow: '0 8px 32px rgba(0,0,0,0.6)' }}>
-              <img src={hoverPreviewImg} style={{ maxWidth: 300, maxHeight: 300, borderRadius: 6, objectFit: 'contain' }} alt="preview" />
+            <div className="hover-preview" style={{ left: hoverPreviewPos.x, top: hoverPreviewPos.y }}>
+              <img src={toFileUrl(hoverPreviewImg)} alt="preview" />
             </div>
           )}
 
           {/* Image Queue */}
-          <div style={{ ...s.card, flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0 10px', fontSize: 12, color: '#64748b', borderBottom: '1px solid #333', marginBottom: 8 }}>
+          <div className="card" style={{ ...s.card, flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0 10px', fontSize: 12, color: 'var(--color-text-muted)', borderBottom: '1px solid var(--color-border-subtle)', marginBottom: 8 }}>
               <span>图片队列</span>
               <span>{completedCount}/{queue.length} 完成</span>
             </div>
 
             <div style={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
               {queue.length === 0 ? (
-                <div onClick={handleSelectFolder}
-                  style={{ border: '2px dashed #0f3460', borderRadius: 10, padding: '40px 0', textAlign: 'center', cursor: 'pointer', color: '#64748b', fontSize: 13 }}>
-                  <div style={{ fontSize: 28, marginBottom: 4 }}>+</div>
+                <div onClick={handleSelectFolder} className="drop-zone" style={{ padding: '40px 0' }}>
+                  <div className="empty-state-icon">+</div>
                   拖拽或点击添加图片到队列<br />
-                  <span style={{ fontSize: 11, color: '#555' }}>支持 JPG/PNG/WebP/BMP/TIFF/GIF</span>
+                  <span className="text-xs" style={{ color: '#555' }}>支持 JPG/PNG/WebP/BMP/TIFF/GIF</span>
                 </div>
               ) : (
                 queue.map(item => (
-                  <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 4px', borderBottom: '1px solid #1a1a2e' }}
+                  <div key={item.id} className="queue-item"
                     onMouseMove={(e) => {
                       if (item.status === 'completed' && item.outputPath) {
-                        setHoverPreviewImg(item.outputPath);
+                        setHoverPreviewImg(item.thumbUrl || item.outputPath);
                         setHoverPreviewPos({ x: e.clientX + 15, y: e.clientY + 15 });
                       }
                     }}
                     onMouseEnter={() => item.status === 'completed' && item.outputPath && setHoverPreviewVisible(true)}
                     onMouseLeave={() => setHoverPreviewVisible(false)}
                   >
-                    <div style={{ width: 40, height: 40, borderRadius: 6, background: '#1a1a2e', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, color: '#555', overflow: 'hidden', cursor: item.outputPath ? 'pointer' : 'default' }}
-                      onClick={() => item.status === 'completed' && item.outputPath && openPreview(item)}>
-                      {item.status === 'completed' && item.outputPath ? (
-                        <img src={item.outputPath} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="result" />
-                      ) : item.status === 'error' ? '❌' : '🖼'}
+                    <div className="queue-thumb"
+                      onClick={() => item.status === 'completed' && item.outputPath && openPreview(item)}
+                      title={item.outputPath || item.name}>
+                      {item.status === 'completed' && item.thumbUrl ? (
+                        <img src={item.thumbUrl} alt="result" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      ) : item.status === 'completed' ? (
+                        <span style={{ fontSize: 9, color: 'var(--color-text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', textAlign: 'center', padding: 2 }}>
+                          {item.name}
+                        </span>
+                      ) : item.status === 'processing' ? (
+                        <span className="icon-spin" style={{ fontSize: 14 }}>⏳</span>
+                      ) : item.status === 'error' ? (
+                        <span style={{ fontSize: 14 }}>❌</span>
+                      ) : (
+                        <span style={{ fontSize: 14, opacity: 0.4 }}>🖼</span>
+                      )}
                     </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 13, color: '#ccc', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'pointer' }}
-                        onClick={() => item.status === 'completed' && openPreview(item)}>
+                    <div className="queue-name">
+                      <div onClick={() => item.status === 'completed' && openPreview(item)}>
                         {item.name}
                       </div>
-                      {item.error && <div style={{ fontSize: 11, color: '#f87171', marginTop: 2 }}>{item.error}</div>}
+                      {item.error && <div className="text-xs text-danger mt-2">{item.error}</div>}
                     </div>
 
                     {/* Status badges */}
-                    {item.status === 'pending' && <span style={{ fontSize: 11, color: '#64748b', background: '#222', padding: '2px 8px', borderRadius: 4, flexShrink: 0 }}>等待处理</span>}
-                    {item.status === 'processing' && (
-                      <span style={{ fontSize: 11, color: '#60a5fa', background: '#1a1a2e', border: '1px solid #0f3460', padding: '2px 8px', borderRadius: 4, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 4 }}>
-                        <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#60a5fa', display: 'inline-block' }} /> 处理中
-                      </span>
-                    )}
+                    {item.status === 'pending' && <span className="badge badge-pending">等待处理</span>}
+                    {item.status === 'processing' && <span className="badge badge-processing">处理中</span>}
                     {item.status === 'completed' && (
-                      <button onClick={() => openPreview(item)} style={{ fontSize: 11, color: '#4ade80', background: '#1a1a2e', border: '1px solid #14532d', padding: '2px 8px', borderRadius: 4, cursor: 'pointer', flexShrink: 0 }}>
+                      <button onClick={() => openPreview(item)} className="badge badge-completed" style={{ cursor: 'pointer', border: 'none' }}>
                         ✓ 完成
                       </button>
                     )}
-                    {item.status === 'error' && <span style={{ fontSize: 11, color: '#f87171', background: '#1a1a2e', border: '1px solid #7f1d1d', padding: '2px 8px', borderRadius: 4, flexShrink: 0 }}>✗ 失败</span>}
-                    {item.status === 'cancelled' && <span style={{ fontSize: 11, color: '#64748b', background: '#1a1a2e', border: '1px solid #555', padding: '2px 8px', borderRadius: 4, flexShrink: 0 }}>已取消</span>}
+                    {item.status === 'error' && <span className="badge badge-error">✗ 失败</span>}
+                    {item.status === 'cancelled' && <span className="badge badge-cancelled">已取消</span>}
 
                     {/* Actions */}
-                    <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                    <div className="flex gap-2 shrink-0">
                       {item.status === 'completed' && item.outputPath && (
                         <button onClick={async () => {
                           try {
-                            // Trigger file save dialog via Wails
                             const link = document.createElement('a');
-                            link.href = item.outputPath!;
+                            link.href = toFileUrl(item.outputPath!);
                             link.download = item.name;
                             document.body.appendChild(link);
                             link.click();
                             document.body.removeChild(link);
                           } catch { /* no-op */ }
-                        }} style={{ ...s.btnSm, background: '#0f3460' }} title="下载">⬇</button>
+                        }} className="btn btn-sm" title="下载">⬇</button>
                       )}
-                      {item.status === 'error' && <button onClick={() => retryItem(item.id)} style={{ ...s.btnSm, background: '#1a1a2e', border: '1px solid #eab308', color: '#eab308' }}>重试</button>}
-                      <button onClick={() => removeItem(item.id)} style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: 15 }}>×</button>
+                      {item.status === 'error' && <button onClick={() => retryItem(item.id)} className="btn btn-sm btn-ghost" style={{ border: '1px solid var(--color-warning)', color: 'var(--color-warning)' }}>重试</button>}
+                      <button onClick={() => removeItem(item.id)} className="btn-icon">×</button>
                     </div>
                   </div>
                 ))

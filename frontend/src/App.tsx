@@ -11,7 +11,7 @@ function App() {
   const [activeTab, setActiveTab] = useState('convert-resize');
 
   const tabs: TabDef[] = [
-    { id: 'convert-resize', label: '转换+缩放', component: <ConvertResize /> },
+    { id: 'convert-resize', label: '转换', component: <ConvertResize /> },
     { id: 'slice', label: '切片', component: <Slice /> },
     { id: 'watermark', label: '水印', component: <Watermark /> },
     { id: 'ai', label: 'AI 生成', component: <AIBatch /> },

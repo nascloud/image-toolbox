@@ -44,6 +44,10 @@ func RunLocalBatch(ctx context.Context, req model.BatchRequest, progressCh chan<
 			resizeOpts = &backendImage.ResizeOptions{
 				Mode: backendImage.ResizeModeMaxEdge, MaxEdge: int(req.ResizeValue),
 			}
+		case "width":
+			resizeOpts = &backendImage.ResizeOptions{
+				Mode: backendImage.ResizeModeWidth, Width: req.ResizeWidth,
+			}
 		}
 
 		outDir := filepath.Dir(outPath)
@@ -56,8 +60,8 @@ func RunLocalBatch(ctx context.Context, req model.BatchRequest, progressCh chan<
 			return "", err
 		}
 
-		// Remove original if requested
-		if !req.PreserveOriginal {
+		// Remove original only in overwrite mode
+		if req.SaveMode == "overwrite" {
 			os.Remove(srcPath)
 		}
 
