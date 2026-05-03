@@ -7,28 +7,28 @@ import (
 	"strings"
 
 	backendImage "image-toolbox/backend/image"
+	"image-toolbox/backend/file"
 	"image-toolbox/backend/model"
 )
 
 // RunLocalBatch processes a batch of images with convert/resize operations.
 func RunLocalBatch(ctx context.Context, req model.BatchRequest, progressCh chan<- model.ProgressUpdate) model.BatchResult {
 	jobFn := func(srcPath string) (string, error) {
-		outPath := srcPath
 		var ext string
-
 		if req.ConvertTo != "" {
 			ext = req.ConvertTo
-			baseName := filepath.Base(srcPath)
-			origExt := filepath.Ext(baseName)
-			name := strings.TrimSuffix(baseName, origExt)
-			outPath = filepath.Join(req.OutputDir, name+"."+ext)
 		} else {
 			baseName := filepath.Base(srcPath)
-			origExt := filepath.Ext(baseName)
-			ext = strings.TrimPrefix(origExt, ".")
-			name := strings.TrimSuffix(baseName, origExt)
-			outPath = filepath.Join(req.OutputDir, name+"_resized"+origExt)
+			ext = strings.TrimPrefix(filepath.Ext(baseName), ".")
 		}
+
+		// _resized suffix only for custom mode resize (backward compat)
+		suffix := ""
+		if (req.SaveMode == "" || req.SaveMode == "custom") && req.ConvertTo == "" && req.ResizeMode != "" {
+			suffix = "_resized"
+		}
+
+		outPath := file.ResolveOutputPath(srcPath, req.OutputDir, req.SaveMode, req.PrefixName, req.SubdirName, ext, suffix)
 
 		var resizeOpts *backendImage.ResizeOptions
 		switch req.ResizeMode {
