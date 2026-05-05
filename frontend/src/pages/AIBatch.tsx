@@ -243,25 +243,33 @@ export const AIBatch: React.FC = () => {
 
   // ── Queue Management ──
   const addFiles = (paths: string[]) => {
-    const items: ImageItem[] = paths.map((path: string) => ({
-      id: nextId.current++,
-      name: path.split('\\').pop() || path.split('/').pop() || path,
-      path,
-      status: 'pending' as const,
-    }));
-    setQueue(prev => [...prev, ...items]);
+    // Deduplicate: skip paths already in the queue
+    setQueue(prev => {
+      const existingPaths = new Set(prev.map(i => i.path));
+      const newPaths = paths.filter(p => !existingPaths.has(p));
+      if (newPaths.length === 0) return prev;
 
-    // Asynchronously load source image thumbnails (uses downscaled 80px JPEG)
-    items.forEach(async (item) => {
-      try {
-        const dataUrl = await (window as any).go.main.App.ReadImageThumbnail(item.path);
-        if (dataUrl && dataUrl.startsWith('data:')) {
-          setQueue(prev => prev.map(i => i.id === item.id ? { ...i, sourceThumbUrl: dataUrl } : i));
+      const items: ImageItem[] = newPaths.map((path: string) => ({
+        id: nextId.current++,
+        name: path.split('\\').pop() || path.split('/').pop() || path,
+        path,
+        status: 'pending' as const,
+      }));
+
+      // Asynchronously load source image thumbnails (uses downscaled 80px JPEG)
+      items.forEach(async (item) => {
+        try {
+          const dataUrl = await (window as any).go.main.App.ReadImageThumbnail(item.path);
+          if (dataUrl && dataUrl.startsWith('data:')) {
+            setQueue(q => q.map(i => i.id === item.id ? { ...i, sourceThumbUrl: dataUrl } : i));
+          }
+        } catch {
+          // fallback: use file:// URL
+          setQueue(q => q.map(i => i.id === item.id ? { ...i, sourceThumbUrl: toFileUrl(item.path) } : i));
         }
-      } catch {
-        // fallback: use file:// URL
-        setQueue(prev => prev.map(i => i.id === item.id ? { ...i, sourceThumbUrl: toFileUrl(item.path) } : i));
-      }
+      });
+
+      return [...prev, ...items];
     });
   };
 
@@ -414,10 +422,13 @@ export const AIBatch: React.FC = () => {
 
   // ── Preview ──
   const openPreview = (item: ImageItem) => {
+    // Always allow preview: show output for completed, source for others
     setSelectedPreview(item);
     setPreviewIndex(0);
     setPreviewZoom(1);
     setCompareMode(false);
+    setLeftZoom(1);
+    setRightZoom(1);
   };
 
   const closePreview = () => {
@@ -538,31 +549,30 @@ export const AIBatch: React.FC = () => {
       )}
 
       {/* Preview Modal */}
-      {selectedPreview && (
+      {selectedPreview && (() => {
+        const hasOutput = selectedPreview.status === 'completed' && selectedPreview.outputPath;
+        const previewImgUrl = hasOutput ? toFileUrl(selectedPreview.outputPath!) : toFileUrl(selectedPreview.path);
+        return (
         <div className="modal-overlay" style={{ background: 'rgba(0,0,0,0.85)' }} onClick={closePreview}>
           {/* Controls */}
           <div style={{ position: 'absolute', top: 16, right: 16, display: 'flex', gap: 8, zIndex: 1 }}>
-            <button onClick={() => setCompareMode(!compareMode)} className="btn btn-sm" style={{ background: compareMode ? 'var(--color-accent)' : 'var(--color-bg-elevated)' }}>
-              {compareMode ? '单图' : '对比'}
-            </button>
+            {hasOutput && (
+              <button onClick={() => setCompareMode(!compareMode)} className="btn btn-sm" style={{ background: compareMode ? 'var(--color-accent)' : 'var(--color-bg-elevated)' }}>
+                {compareMode ? '单图' : '对比'}
+              </button>
+            )}
             <button onClick={closePreview} className="btn-icon" style={{ fontSize: 18 }}>×</button>
           </div>
           <div className="flex items-center gap-8" style={{ position: 'absolute', bottom: 40 }}>
-            {selectedPreview.results && previewIndex > 0 && (
-              <button onClick={() => { setPreviewIndex(i => i - 1); setPreviewZoom(1); }} className="btn btn-sm">◀ 上一张</button>
-            )}
             <span className="text-sm text-secondary">
-              {previewIndex + 1} / {selectedPreview.results?.length || 1}
+              {hasOutput ? 'AI 结果' : '源图'} · {selectedPreview.name}
             </span>
-            {selectedPreview.results && previewIndex < selectedPreview.results.length - 1 && (
-              <button onClick={() => { setPreviewIndex(i => i + 1); setPreviewZoom(1); }} className="btn btn-sm">下一张 ▶</button>
-            )}
             <button onClick={() => setPreviewZoom(z => Math.min(3, z + 0.25))} className="btn btn-sm btn-ghost">+放大</button>
             <button onClick={() => setPreviewZoom(z => Math.max(0.5, z - 0.25))} className="btn btn-sm btn-ghost">-缩小</button>
             <button onClick={() => setPreviewZoom(1)} className="btn btn-sm btn-ghost">重置</button>
             <span className="text-xs text-muted">{Math.round(previewZoom * 100)}%</span>
           </div>
-          {compareMode && selectedPreview.results?.[previewIndex] ? (
+          {compareMode && hasOutput ? (
             <div className="flex gap-10 items-center" onClick={e => e.stopPropagation()}>
               <div className="text-center">
                 <p className="text-sm text-muted mb-4">原图</p>
@@ -577,9 +587,7 @@ export const AIBatch: React.FC = () => {
               <div className="text-center">
                 <p className="text-sm text-muted mb-4">AI 结果</p>
                 <div style={{ overflow: 'auto', maxWidth: '40vw', maxHeight: '70vh' }}>
-                  <div style={{ width: 200, height: 200, background: 'var(--color-bg-elevated)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--color-text-muted)', fontSize: 13, borderRadius: 8 }}>
-                    结果图片 (URL 需联网加载)
-                  </div>
+                  <img src={toFileUrl(selectedPreview.outputPath!)} style={{ transform: `scale(${rightZoom})`, transformOrigin: 'top left' }} alt="ai result" />
                 </div>
                 <div className="mt-2 flex gap-2 justify-center">
                   <button onClick={() => setRightZoom(z => Math.min(3, z + 0.25))} className="btn btn-sm btn-ghost">+</button>
@@ -589,16 +597,12 @@ export const AIBatch: React.FC = () => {
             </div>
           ) : (
             <div style={{ maxWidth: '80vw', maxHeight: '75vh', overflow: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={e => e.stopPropagation()}>
-              <div style={{
-                width: 300, height: 300, background: 'var(--color-bg-elevated)', borderRadius: 12,
-                display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--color-text-muted)', fontSize: 14,
-              }}>
-                AI 结果图片<br/>需联网加载
-              </div>
+              <img src={previewImgUrl} style={{ transform: `scale(${previewZoom})`, transformOrigin: 'center center', maxWidth: '100%', maxHeight: '75vh' }} alt="preview" />
             </div>
           )}
         </div>
-      )}
+        );
+      })()}
 
       {/* ─── Main Two-Column Layout ─── */}
       <div style={{ display: 'flex', gap: 20, flex: 1, minHeight: 0 }}>
@@ -811,8 +815,8 @@ export const AIBatch: React.FC = () => {
               <div className="flex gap-3" style={{ overflowX: 'auto', paddingBottom: 4 }}>
                 {referenceImages.map((img, i) => (
                   <div key={i} style={{ position: 'relative', flexShrink: 0 }}>
-                    <div style={{ width: 48, height: 48, borderRadius: 8, border: '1px solid var(--color-accent)', background: 'var(--color-bg-surface)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: 'var(--color-text-muted)' }}>
-                      {img.split('\\').pop()?.substring(0, 10) || `ref${i}`}
+                    <div style={{ width: 48, height: 48, borderRadius: 8, border: '1px solid var(--color-accent)', background: 'var(--color-bg-surface)', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <img src={toFileUrl(img)} alt={`ref${i}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                     </div>
                     <button onClick={() => removeReference(i)}
                       className="btn-icon" style={{ position: 'absolute', top: -6, right: -6, width: 18, height: 18, borderRadius: '50%', background: 'var(--color-danger)', fontSize: 11 }}>
@@ -932,7 +936,7 @@ export const AIBatch: React.FC = () => {
                     onMouseLeave={() => setHoverPreviewVisible(false)}
                   >
                     <div className="queue-thumb"
-                      onClick={() => item.status === 'completed' && item.outputPath && openPreview(item)}
+                      onClick={() => openPreview(item)}
                       title={item.outputPath || item.name}>
                       {item.status === 'completed' && item.thumbUrl ? (
                         <img src={item.thumbUrl} alt="result" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
@@ -949,7 +953,7 @@ export const AIBatch: React.FC = () => {
                       )}
                     </div>
                     <div className="queue-name">
-                      <div onClick={() => item.status === 'completed' && openPreview(item)}>
+                      <div onClick={() => openPreview(item)} style={{ cursor: 'pointer' }}>
                         {item.name}
                       </div>
                       {item.error && <div className="text-xs text-danger mt-2">{item.error}</div>}
