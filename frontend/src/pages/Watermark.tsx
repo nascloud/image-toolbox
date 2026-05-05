@@ -9,6 +9,8 @@ export const Watermark: React.FC = () => {
   const [mode, setMode] = useState<'image' | 'text'>('image');
   const [watermarkImage, setWatermarkImage] = useState('');
   const [watermarkText, setWatermarkText] = useState('Watermark');
+  const [fontSize, setFontSize] = useState(48);
+  const [fontColor, setFontColor] = useState('#ffffff');
   const [opacity, setOpacity] = useState(1.0);
   const [position, setPosition] = useState('bottomRight');
   const [saveModeConfig, setSaveModeConfig] = useState<SaveModeConfig>({ mode: 'subdir', prefixName: 'output', subdirName: 'output', outputDir: '' });
@@ -17,6 +19,33 @@ export const Watermark: React.FC = () => {
   const [outputWidth, setOutputWidth] = useState(false);
   const [outputTarget, setOutputTarget] = useState(1440);
   const { state, startBatch, cancelBatch, openOutputDir } = useBatch();
+  const [previewDataUrl, setPreviewDataUrl] = useState<string | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewZoom, setPreviewZoom] = useState(1);
+
+  const handlePreview = async (index: number) => {
+    if (files.length === 0 || index < 0 || index >= files.length) return;
+    setPreviewLoading(true);
+    try {
+      const sourcePath = files[index];
+      const dataUrl = await (window as any).go.main.App.PreviewWatermark({
+        sourcePath,
+        watermarkImage: mode === 'image' ? watermarkImage : '',
+        watermarkText: mode === 'text' ? watermarkText : '',
+        opacity,
+        position,
+        fontSize,
+        fontColor,
+      });
+      setPreviewZoom(1);
+      if (dataUrl) setPreviewDataUrl(dataUrl);
+    } catch (e) {
+      console.error("Preview failed:", e);
+      alert("预览失败: " + e);
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
 
   const handleSelectFiles = async () => {
     try {
@@ -67,8 +96,8 @@ export const Watermark: React.FC = () => {
       watermarkText: mode === 'text' ? watermarkText : '',
       opacity,
       position,
-      fontSize: 12,
-      fontColor: '#ffffff',
+      fontSize,
+      fontColor,
       uniformWidth: uniformWidth ? uniformTarget : 0,
       outputWidth: outputWidth ? outputTarget : 0,
     });
@@ -76,6 +105,24 @@ export const Watermark: React.FC = () => {
 
   return (
     <div>
+      {/* Preview Modal */}
+      {previewDataUrl && (
+        <div className="modal-overlay" style={{ background: 'rgba(0,0,0,0.85)' }} onClick={() => setPreviewDataUrl(null)}>
+          <div style={{ position: 'absolute', top: 16, right: 16, display: 'flex', gap: 8, zIndex: 1 }} onClick={e => e.stopPropagation()}>
+            <button onClick={() => setPreviewDataUrl(null)} className="btn-icon" style={{ fontSize: 18, color: '#fff' }}>×</button>
+          </div>
+          <div className="flex items-center gap-8" style={{ position: 'absolute', bottom: 40, color: '#fff', zIndex: 1 }} onClick={e => e.stopPropagation()}>
+            <button onClick={() => setPreviewZoom(z => Math.min(3, z + 0.25))} className="btn btn-sm btn-ghost">+放大</button>
+            <button onClick={() => setPreviewZoom(z => Math.max(0.25, z - 0.25))} className="btn btn-sm btn-ghost">-缩小</button>
+            <button onClick={() => setPreviewZoom(1)} className="btn btn-sm btn-ghost">重置</button>
+            <span className="text-xs">{Math.round(previewZoom * 100)}%</span>
+          </div>
+          <div style={{ maxWidth: '80vw', maxHeight: '75vh', overflow: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={e => e.stopPropagation()}>
+            <img src={previewDataUrl} style={{ transform: `scale(${previewZoom})`, transformOrigin: 'center center', maxWidth: '100%', maxHeight: '75vh' }} alt="preview" />
+          </div>
+        </div>
+      )}
+
       <h2 className="page-title">水印</h2>
 
       <div className="flex gap-8" style={{ alignItems: 'stretch' }}>
@@ -88,7 +135,7 @@ export const Watermark: React.FC = () => {
             </div>
             <div className="mt-4" style={{ flex: 1, minHeight: 0 }}>
               <ImageList files={files} onRemove={i => setFiles(files.filter((_, j) => j !== i))}
-                onClear={() => setFiles([])} onDrop={paths => setFiles(prev => [...prev, ...paths])} onAddClick={handleSelectFiles} />
+                onClear={() => setFiles([])} onDrop={paths => setFiles(prev => [...prev, ...paths])} onAddClick={handleSelectFiles} onPreview={handlePreview} />
             </div>
           </div>
         </div>
@@ -117,11 +164,24 @@ export const Watermark: React.FC = () => {
               </div>
 
               {mode === 'text' ? (
-                <div className="form-row">
-                  <label className="form-label">水印文字</label>
-                  <input type="text" value={watermarkText} onChange={e => setWatermarkText(e.target.value)}
-                    className="input" style={{ flex: 1 }} />
-                </div>
+                <>
+                  <div className="form-row">
+                    <label className="form-label">水印文字</label>
+                    <input type="text" value={watermarkText} onChange={e => setWatermarkText(e.target.value)}
+                      className="input" style={{ flex: 1 }} />
+                  </div>
+                  <div className="form-row">
+                    <label className="form-label">文字大小</label>
+                    <input type="number" value={fontSize} onChange={e => setFontSize(Number(e.target.value))}
+                      className="input" style={{ width: 80 }} min={8} max={500} />
+                    <span className="text-sm text-muted">px</span>
+                  </div>
+                  <div className="form-row">
+                    <label className="form-label">文字颜色</label>
+                    <input type="color" value={fontColor} onChange={e => setFontColor(e.target.value)}
+                      style={{ width: 60, height: 32, cursor: 'pointer', padding: 0, border: 'none', background: 'transparent' }} />
+                  </div>
+                </>
               ) : (
                 <div className="form-row">
                   <label className="form-label">水印图片</label>

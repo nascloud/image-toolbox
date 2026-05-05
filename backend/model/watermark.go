@@ -16,3 +16,14 @@ type WatermarkRequest struct {
 	PrefixName     string   `json:"prefixName,omitempty"`
 	SubdirName     string   `json:"subdirName,omitempty"`
 }
+
+// WatermarkPreviewRequest holds parameters for generating a watermark preview.
+type WatermarkPreviewRequest struct {
+	SourcePath     string  `json:"sourcePath"`
+	WatermarkImage string  `json:"watermarkImage"`
+	WatermarkText  string  `json:"watermarkText"`
+	Opacity        float64 `json:"opacity"`
+	Position       string  `json:"position"`
+	FontSize       int     `json:"fontSize"`
+	FontColor      string  `json:"fontColor"`
+}

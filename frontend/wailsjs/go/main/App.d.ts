@@ -11,6 +11,8 @@ export function GetApiKey():Promise<string>;
 
 export function OpenOutputDir(arg1:string):Promise<void>;
 
+export function PreviewWatermark(arg1:model.WatermarkPreviewRequest):Promise<string>;
+
 export function ProcessImagesBatch(arg1:model.BatchRequest):Promise<model.BatchResult>;
 
 export function ReadImageAsBase64(arg1:string):Promise<string>;

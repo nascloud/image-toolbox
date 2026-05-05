@@ -6,11 +6,12 @@ interface ImageListProps {
   onClear: () => void;
   onDrop?: (paths: string[]) => void;
   onAddClick?: () => void;
+  onPreview?: (index: number) => void;
 }
 
 const IMAGE_EXTS = ['.jpg', '.jpeg', '.jfif', '.png', '.webp', '.bmp', '.gif', '.tiff'];
 
-export const ImageList: React.FC<ImageListProps> = ({ files, onRemove, onClear, onDrop, onAddClick }) => {
+export const ImageList: React.FC<ImageListProps> = ({ files, onRemove, onClear, onDrop, onAddClick, onPreview }) => {
   const [dragOver, setDragOver] = useState(false);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -91,12 +92,19 @@ export const ImageList: React.FC<ImageListProps> = ({ files, onRemove, onClear, 
             display: 'flex', justifyContent: 'space-between', alignItems: 'center',
             padding: '5px 8px', borderBottom: '1px solid var(--color-border-subtle)',
           }}>
-            <span className="text-sm text-secondary" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+            <span className="text-sm text-secondary" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }} title={f}>
               {f}
             </span>
-            <button onClick={() => onRemove(i)} className="btn-icon" style={{ flexShrink: 0 }}>
-              ×
-            </button>
+            <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+              {onPreview && (
+                <button onClick={() => onPreview(i)} className="btn-icon" title="预览" style={{ fontSize: 13 }}>
+                  👁️
+                </button>
+              )}
+              <button onClick={() => onRemove(i)} className="btn-icon" title="移除" style={{ fontSize: 16 }}>
+                ×
+              </button>
+            </div>
           </li>
         ))}
       </ul>

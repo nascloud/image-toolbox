@@ -161,6 +161,30 @@ export namespace model {
 	        this.subdirName = source["subdirName"];
 	    }
 	}
+	export class WatermarkPreviewRequest {
+	    sourcePath: string;
+	    watermarkImage: string;
+	    watermarkText: string;
+	    opacity: number;
+	    position: string;
+	    fontSize: number;
+	    fontColor: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new WatermarkPreviewRequest(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.sourcePath = source["sourcePath"];
+	        this.watermarkImage = source["watermarkImage"];
+	        this.watermarkText = source["watermarkText"];
+	        this.opacity = source["opacity"];
+	        this.position = source["position"];
+	        this.fontSize = source["fontSize"];
+	        this.fontColor = source["fontColor"];
+	    }
+	}
 	export class WatermarkRequest {
 	    sourcePaths: string[];
 	    outputDir: string;

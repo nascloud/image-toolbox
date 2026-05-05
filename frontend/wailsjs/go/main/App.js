@@ -18,6 +18,10 @@ export function OpenOutputDir(arg1) {
   return window['go']['main']['App']['OpenOutputDir'](arg1);
 }
 
+export function PreviewWatermark(arg1) {
+  return window['go']['main']['App']['PreviewWatermark'](arg1);
+}
+
 export function ProcessImagesBatch(arg1) {
   return window['go']['main']['App']['ProcessImagesBatch'](arg1);
 }

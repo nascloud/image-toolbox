@@ -22,6 +22,7 @@ import (
 	"image-toolbox/backend/batch"
 	"image-toolbox/backend/config"
 	"image-toolbox/backend/file"
+	backendImage "image-toolbox/backend/image"
 	"image-toolbox/backend/model"
 )
 
@@ -277,6 +278,93 @@ func (a *App) WatermarkImages(req model.WatermarkRequest) (model.BatchResult, er
 	result := batch.RunWatermarkBatch(ctx, req, progressCh)
 	close(progressCh)
 	return result, nil
+}
+
+// PreviewWatermark generates a base64 encoded thumbnail of the watermarked image for preview.
+func (a *App) PreviewWatermark(req model.WatermarkPreviewRequest) (string, error) {
+	if req.SourcePath == "" {
+		return "", fmt.Errorf("no source path provided")
+	}
+	f, err := os.Open(req.SourcePath)
+	if err != nil {
+		return "", fmt.Errorf("open image: %w", err)
+	}
+	defer f.Close()
+
+	img, _, err := image.Decode(f)
+	if err != nil {
+		return "", fmt.Errorf("decode image: %w", err)
+	}
+
+	// Downscale source image to a reasonable size for preview to speed up processing
+	maxDim := 2000
+	bounds := img.Bounds()
+	if bounds.Dx() > maxDim || bounds.Dy() > maxDim {
+		// Just a simple scale down based on the longest side
+		img = backendImage.ResizeImage(img, backendImage.ResizeOptions{
+			Mode: backendImage.ResizeModeMaxEdge, MaxEdge: maxDim,
+		})
+	}
+
+	var wmImage image.Image
+	if req.WatermarkImage != "" {
+		wf, err := os.Open(req.WatermarkImage)
+		if err != nil {
+			return "", fmt.Errorf("open watermark image: %w", err)
+		}
+		defer wf.Close()
+		wmImage, _, err = image.Decode(wf)
+		if err != nil {
+			return "", fmt.Errorf("decode watermark image: %w", err)
+		}
+		// Scale watermark image proportionally if the source image was scaled
+		if bounds.Dx() > maxDim || bounds.Dy() > maxDim {
+			scale := float64(maxDim) / float64(bounds.Dx())
+			if bounds.Dy() > bounds.Dx() {
+				scale = float64(maxDim) / float64(bounds.Dy())
+			}
+			wmBounds := wmImage.Bounds()
+			newWmW := int(float64(wmBounds.Dx()) * scale)
+			if newWmW < 1 {
+				newWmW = 1
+			}
+			wmImage = backendImage.ResizeImage(wmImage, backendImage.ResizeOptions{
+				Mode: backendImage.ResizeModeMaxEdge, MaxEdge: newWmW,
+			})
+		}
+	}
+
+	var result *image.RGBA
+	if wmImage != nil {
+		result = backendImage.AddImageWatermark(img, wmImage, req.Opacity, req.Position)
+	} else if req.WatermarkText != "" {
+		// Adjust font size for the preview scale
+		fSize := req.FontSize
+		if fSize <= 0 {
+			fSize = 12
+		}
+		if bounds.Dx() > maxDim || bounds.Dy() > maxDim {
+			scale := float64(maxDim) / float64(bounds.Dx())
+			if bounds.Dy() > bounds.Dx() {
+				scale = float64(maxDim) / float64(bounds.Dy())
+			}
+			fSize = int(float64(fSize) * scale)
+			if fSize < 8 {
+				fSize = 8 // ensure it's still somewhat readable
+			}
+		}
+		result = backendImage.AddTextWatermark(img, req.WatermarkText, req.Opacity, req.Position, fSize, req.FontColor)
+	} else {
+		return "", fmt.Errorf("no watermark image or text provided")
+	}
+
+	var buf bytes.Buffer
+	// Encode as JPEG for fast preview
+	if err := jpeg.Encode(&buf, result, &jpeg.Options{Quality: 80}); err != nil {
+		return "", fmt.Errorf("encode preview: %w", err)
+	}
+
+	return "data:image/jpeg;base64," + base64.StdEncoding.EncodeToString(buf.Bytes()), nil
 }
 
 // RunAIImageBatch processes images through AI generation.

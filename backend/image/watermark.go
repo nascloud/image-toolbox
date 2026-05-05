@@ -28,9 +28,21 @@ func systemFontFace(size float64) font.Face {
 		if err != nil {
 			continue
 		}
-		tt, err := opentype.Parse(data)
-		if err != nil {
-			continue
+		var tt *opentype.Font
+		if strings.HasSuffix(strings.ToLower(p), ".ttc") {
+			c, err := opentype.ParseCollection(data)
+			if err != nil {
+				continue
+			}
+			tt, err = c.Font(0)
+			if err != nil {
+				continue
+			}
+		} else {
+			tt, err = opentype.Parse(data)
+			if err != nil {
+				continue
+			}
 		}
 		face, err := opentype.NewFace(tt, &opentype.FaceOptions{
 			Size:    size,
@@ -68,7 +80,7 @@ func AddImageWatermark(base, watermark image.Image, opacity float64, position st
 		x := (bounds.Dx() - wmW) / 2
 		y := (bounds.Dy() - wmH) / 2
 		draw.Draw(dst, image.Rect(x, y, x+wmW, y+wmH), adjustedWM, image.Point{}, draw.Over)
-	case "bottomRight":
+	case "bottomright":
 		x := bounds.Dx() - wmW - 10
 		y := bounds.Dy() - wmH - 10
 		if x < 0 {
@@ -78,7 +90,7 @@ func AddImageWatermark(base, watermark image.Image, opacity float64, position st
 			y = 0
 		}
 		draw.Draw(dst, image.Rect(x, y, x+wmW, y+wmH), adjustedWM, image.Point{}, draw.Over)
-	default: // topLeft
+	default: // topleft
 		draw.Draw(dst, image.Rect(0, 0, wmW, wmH), adjustedWM, image.Point{}, draw.Over)
 	}
 
@@ -123,13 +135,21 @@ func AddTextWatermark(base image.Image, text string, opacity float64, position s
 
 	var x, y int
 	switch strings.ToLower(position) {
+	case "tile":
+		for yTile := 0; yTile < bounds.Dy(); yTile += textH + 50 {
+			for xTile := 0; xTile < bounds.Dx(); xTile += textW + 50 {
+				drawer.Dot = fixed.P(xTile, yTile+textH)
+				drawer.DrawString(text)
+			}
+		}
+		return dst
 	case "center":
 		x = (bounds.Dx() - textW) / 2
 		y = (bounds.Dy()-textH)/2 + textH
-	case "bottomRight":
+	case "bottomright":
 		x = bounds.Dx() - textW - 10
 		y = bounds.Dy() - 10
-	default:
+	default: // topleft
 		x = 10
 		y = textH + 10
 	}
