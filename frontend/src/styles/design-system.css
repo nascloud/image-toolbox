@@ -7,39 +7,39 @@
 
 :root {
   /* ── Color Palette ── */
-  --color-bg-primary: #0d0d0d;
-  --color-bg-surface: #161616;
-  --color-bg-elevated: #1e1e1e;
-  --color-bg-hover: #252525;
-  --color-bg-active: #2a2a2a;
+  --color-bg-primary: #F0F7F4;
+  --color-bg-surface: #FFFFFF;
+  --color-bg-elevated: #FFFFFF;
+  --color-bg-hover: #F6FAF8;
+  --color-bg-active: #E8F5E9;
 
-  --color-border-subtle: #222222;
-  --color-border-default: #2a2a2a;
-  --color-border-strong: #333333;
-  --color-border-accent: #d4a37344;
+  --color-border-subtle: #E2EAE5;
+  --color-border-default: #D8F3DC;
+  --color-border-strong: #52B788;
+  --color-border-accent: #40916C44;
 
-  --color-accent: #d4a373;
-  --color-accent-hover: #e0b88c;
-  --color-accent-muted: #d4a37322;
-  --color-accent-glow: #d4a37315;
+  --color-accent: #40916C;
+  --color-accent-hover: #2D6A4F;
+  --color-accent-muted: #D8F3DC;
+  --color-accent-glow: #52B78833;
 
-  --color-danger: #c76a6a;
-  --color-danger-hover: #d47a7a;
-  --color-danger-bg: #c76a6a15;
+  --color-danger: #E63946;
+  --color-danger-hover: #D90429;
+  --color-danger-bg: #E6394615;
 
-  --color-success: #5a8f7c;
-  --color-success-bg: #5a8f7c15;
+  --color-success: #2D6A4F;
+  --color-success-bg: #D8F3DC;
 
-  --color-warning: #c9a84c;
-  --color-warning-bg: #c9a84c15;
+  --color-warning: #E9C46A;
+  --color-warning-bg: #E9C46A15;
 
-  --color-info: #6b8fa3;
-  --color-info-bg: #6b8fa315;
+  --color-info: #457B9D;
+  --color-info-bg: #457B9D15;
 
-  --color-text-primary: #e8e8e8;
-  --color-text-secondary: #8a8a8a;
-  --color-text-muted: #555555;
-  --color-text-disabled: #383838;
+  --color-text-primary: #1A2F24;
+  --color-text-secondary: #2D6A4F;
+  --color-text-muted: #52B788;
+  --color-text-disabled: #A3B3AC;
 
   /* ── Typography ── */
   --font-heading: 'DM Sans', 'Nunito', sans-serif;
@@ -341,7 +341,7 @@ a:hover {
 
 .btn-primary {
   background: var(--color-accent);
-  color: #0d0d0d;
+  color: #ffffff;
   font-weight: var(--weight-semibold);
 }
 .btn-primary:hover {
@@ -499,7 +499,7 @@ a:hover {
   top: 1px;
   width: 6px;
   height: 10px;
-  border: solid #0d0d0d;
+  border: solid #ffffff;
   border-width: 0 2px 2px 0;
   transform: rotate(45deg);
 }

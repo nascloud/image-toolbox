@@ -502,7 +502,7 @@ export const AIBatch: React.FC = () => {
     btnSm: { padding: '4px 10px', border: 'none', borderRadius: 6, cursor: 'pointer' as const, fontSize: 11, color: '#fff', background: 'var(--color-accent)' },
     label: { fontSize: 13, color: 'var(--color-text-muted)', marginBottom: 6, display: 'block' as const },
     row: { display: 'flex' as const, alignItems: 'center' as const, justifyContent: 'space-between' as const },
-    dangerBtn: { padding: '8px 18px', border: 'none', borderRadius: 8, cursor: 'pointer' as const, fontSize: 13, color: '#fff', background: '#c76a6a' },
+    dangerBtn: { padding: '8px 18px', border: 'none', borderRadius: 8, cursor: 'pointer' as const, fontSize: 13, color: '#fff', background: 'var(--color-danger)' },
   };
 
   return (
@@ -554,7 +554,7 @@ export const AIBatch: React.FC = () => {
                   <input placeholder="ID" value={newModelId} onChange={e => setNewModelId(e.target.value)}
                     className="input" style={{ width: 160, padding: '6px 10px', fontSize: 12 }} />
                   <button onClick={handleAddModel} className="btn btn-sm">保存</button>
-                  <button onClick={() => setIsAddingModel(false)} className="btn btn-sm" style={{ background: '#555' }}>取消</button>
+                  <button onClick={() => setIsAddingModel(false)} className="btn btn-sm" style={{ background: 'var(--color-bg-hover)' }}>取消</button>
                 </div>
               )}
               <div style={{ maxHeight: 160, overflow: 'auto' }}>
@@ -567,14 +567,14 @@ export const AIBatch: React.FC = () => {
                         <input value={editingModel.id} onChange={e => setEditingModel({ ...editingModel, id: e.target.value })}
                           className="input" style={{ width: 150, padding: '4px 8px', fontSize: 12 }} />
                         <button onClick={handleEditModelSave} className="btn btn-sm">保存</button>
-                        <button onClick={() => setEditingModel(null)} className="btn btn-sm" style={{ background: '#555' }}>取消</button>
+                        <button onClick={() => setEditingModel(null)} className="btn btn-sm" style={{ background: 'var(--color-bg-hover)' }}>取消</button>
                       </>
                     ) : (
                       <>
                         <span className="text-sm" style={{ width: 120 }}>{m.name}</span>
                         <span className="text-xs text-muted" style={{ flex: 1 }}>{m.id}</span>
                         <button onClick={() => setEditingModel({ ...m })} className="btn btn-sm btn-ghost">编辑</button>
-                        <button onClick={() => handleDeleteModel(m.id)} className="btn btn-sm" style={{ background: '#7f1d1d' }}>删除</button>
+                        <button onClick={() => handleDeleteModel(m.id)} className="btn btn-sm" style={{ background: 'var(--color-danger)', color: '#fff' }}>删除</button>
                       </>
                     )}
                   </div>
@@ -716,7 +716,7 @@ export const AIBatch: React.FC = () => {
             )}
 
             {groupedPresets.length === 0 ? (
-              <div className="text-xs text-center" style={{ color: '#555', padding: 12 }}>暂无保存的提示词</div>
+              <div className="text-xs text-center" style={{ color: 'var(--color-text-muted)', padding: 12 }}>暂无保存的提示词</div>
             ) : (
               groupedPresets.map(g => (
                 <div key={g.category} style={{ marginBottom: 6 }}>
@@ -902,7 +902,7 @@ export const AIBatch: React.FC = () => {
                 ))}
                 {referenceImages.length < 12 && (
                   <div onClick={handleReferenceUpload}
-                    style={{ width: 48, height: 48, borderRadius: 8, border: '2px dashed var(--color-accent)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#555', fontSize: 18, flexShrink: 0 }}>+</div>
+                    style={{ width: 48, height: 48, borderRadius: 8, border: '2px dashed var(--color-accent)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--color-text-muted)', fontSize: 18, flexShrink: 0 }}>+</div>
                 )}
               </div>
             )}
@@ -998,7 +998,7 @@ export const AIBatch: React.FC = () => {
                 <div onClick={handleSelectFolder} className="drop-zone" style={{ padding: '40px 0' }}>
                   <div className="empty-state-icon">+</div>
                   拖拽或点击添加图片到队列<br />
-                  <span className="text-xs" style={{ color: '#555' }}>支持 JPG/PNG/WebP/BMP/TIFF/GIF</span>
+                  <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>支持 JPG/PNG/WebP/BMP/TIFF/GIF</span>
                 </div>
               ) : (
                 queue.map(item => (
