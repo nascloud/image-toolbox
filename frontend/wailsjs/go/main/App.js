@@ -26,6 +26,10 @@ export function ReadImageAsBase64(arg1) {
   return window['go']['main']['App']['ReadImageAsBase64'](arg1);
 }
 
+export function ReadImageThumbnail(arg1) {
+  return window['go']['main']['App']['ReadImageThumbnail'](arg1);
+}
+
 export function RunAIImageBatch(arg1) {
   return window['go']['main']['App']['RunAIImageBatch'](arg1);
 }

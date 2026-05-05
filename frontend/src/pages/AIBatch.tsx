@@ -11,6 +11,7 @@ interface ImageItem {
   error?: string;
   results?: { url?: string; b64_json?: string; size?: string }[];
   thumbUrl?: string;
+  sourceThumbUrl?: string;
 }
 
 interface PromptPreset {
@@ -249,6 +250,19 @@ export const AIBatch: React.FC = () => {
       status: 'pending' as const,
     }));
     setQueue(prev => [...prev, ...items]);
+
+    // Asynchronously load source image thumbnails (uses downscaled 80px JPEG)
+    items.forEach(async (item) => {
+      try {
+        const dataUrl = await (window as any).go.main.App.ReadImageThumbnail(item.path);
+        if (dataUrl && dataUrl.startsWith('data:')) {
+          setQueue(prev => prev.map(i => i.id === item.id ? { ...i, sourceThumbUrl: dataUrl } : i));
+        }
+      } catch {
+        // fallback: use file:// URL
+        setQueue(prev => prev.map(i => i.id === item.id ? { ...i, sourceThumbUrl: toFileUrl(item.path) } : i));
+      }
+    });
   };
 
   const handleSelectFolder = async () => {
@@ -362,7 +376,7 @@ export const AIBatch: React.FC = () => {
           const r = resultByPath.get(item.path);
           if (!r || !r.outputPath) return;
           try {
-            const dataUrl = await (window as any).go.main.App.ReadImageAsBase64(r.outputPath);
+            const dataUrl = await (window as any).go.main.App.ReadImageThumbnail(r.outputPath);
             if (dataUrl && dataUrl.startsWith('data:')) {
               setQueue(prev => prev.map(i => i.path === item.path ? { ...i, thumbUrl: dataUrl } : i));
             }
@@ -911,7 +925,7 @@ export const AIBatch: React.FC = () => {
                   <div key={item.id} className="queue-item"
                     onMouseMove={(e) => {
                       if (item.status === 'completed' && item.outputPath) {
-                        setHoverPreviewImg(item.thumbUrl || item.outputPath);
+                        setHoverPreviewImg(item.outputPath);
                         setHoverPreviewPos({ x: e.clientX + 15, y: e.clientY + 15 });
                       }
                     }}
@@ -923,10 +937,10 @@ export const AIBatch: React.FC = () => {
                       title={item.outputPath || item.name}>
                       {item.status === 'completed' && item.thumbUrl ? (
                         <img src={item.thumbUrl} alt="result" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                      ) : item.status === 'completed' ? (
-                        <span style={{ fontSize: 9, color: 'var(--color-text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', textAlign: 'center', padding: 2 }}>
-                          {item.name}
-                        </span>
+                      ) : item.status === 'completed' && item.sourceThumbUrl ? (
+                        <img src={item.sourceThumbUrl} alt="source" style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.7 }} />
+                      ) : item.sourceThumbUrl ? (
+                        <img src={item.sourceThumbUrl} alt="source" style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: item.status === 'processing' ? 0.5 : item.status === 'error' ? 0.4 : 1 }} />
                       ) : item.status === 'processing' ? (
                         <span className="icon-spin" style={{ fontSize: 14 }}>⏳</span>
                       ) : item.status === 'error' ? (

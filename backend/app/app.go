@@ -1,15 +1,23 @@
 package app
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"fmt"
+	"image"
+	_ "image/gif"
+	"image/jpeg"
+	_ "image/png"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
+	_ "golang.org/x/image/bmp"
+	_ "golang.org/x/image/tiff"
+	_ "golang.org/x/image/webp"
 
 	"image-toolbox/backend/batch"
 	"image-toolbox/backend/config"
@@ -115,6 +123,57 @@ func (a *App) ReadImageAsBase64(path string) (string, error) {
 		mime = "image/gif"
 	}
 	return fmt.Sprintf("data:%s;base64,%s", mime, base64.StdEncoding.EncodeToString(data)), nil
+}
+
+// ReadImageThumbnail reads an image file, downscales it to a small thumbnail (max 80px),
+// and returns a JPEG base64 data URI suitable for queue display.
+func (a *App) ReadImageThumbnail(path string) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", fmt.Errorf("open image: %w", err)
+	}
+	defer f.Close()
+
+	img, _, err := image.Decode(f)
+	if err != nil {
+		return "", fmt.Errorf("decode image: %w", err)
+	}
+
+	bounds := img.Bounds()
+	srcW := bounds.Dx()
+	srcH := bounds.Dy()
+
+	// Calculate thumbnail dimensions (max 80px on longest side)
+	const maxDim = 80
+	thumbW, thumbH := maxDim, maxDim
+	if srcW > srcH {
+		thumbH = srcH * maxDim / srcW
+		if thumbH < 1 {
+			thumbH = 1
+		}
+	} else {
+		thumbW = srcW * maxDim / srcH
+		if thumbW < 1 {
+			thumbW = 1
+		}
+	}
+
+	// Simple nearest-neighbor downscale (fast, sufficient for 40px thumbnails)
+	thumb := image.NewRGBA(image.Rect(0, 0, thumbW, thumbH))
+	for y := 0; y < thumbH; y++ {
+		srcY := y * srcH / thumbH
+		for x := 0; x < thumbW; x++ {
+			srcX := x * srcW / thumbW
+			thumb.Set(x, y, img.At(bounds.Min.X+srcX, bounds.Min.Y+srcY))
+		}
+	}
+
+	var buf bytes.Buffer
+	if err := jpeg.Encode(&buf, thumb, &jpeg.Options{Quality: 70}); err != nil {
+		return "", fmt.Errorf("encode thumbnail: %w", err)
+	}
+
+	return "data:image/jpeg;base64," + base64.StdEncoding.EncodeToString(buf.Bytes()), nil
 }
 
 // ScanDirectory scans a directory for supported image files.
