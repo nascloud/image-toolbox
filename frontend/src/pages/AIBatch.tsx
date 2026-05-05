@@ -902,7 +902,7 @@ export const AIBatch: React.FC = () => {
           {/* Hover Preview */}
           {hoverPreviewVisible && hoverPreviewImg && (
             <div className="hover-preview" style={{ left: hoverPreviewPos.x, top: hoverPreviewPos.y }}>
-              <img src={toFileUrl(hoverPreviewImg)} alt="preview" />
+              <img src={hoverPreviewImg.startsWith('data:') || hoverPreviewImg.startsWith('file:') ? hoverPreviewImg : toFileUrl(hoverPreviewImg)} alt="preview" />
             </div>
           )}
 
@@ -924,12 +924,11 @@ export const AIBatch: React.FC = () => {
                 queue.map(item => (
                   <div key={item.id} className="queue-item"
                     onMouseMove={(e) => {
-                      if (item.status === 'completed' && item.outputPath) {
-                        setHoverPreviewImg(item.outputPath);
-                        setHoverPreviewPos({ x: e.clientX + 15, y: e.clientY + 15 });
-                      }
+                      const previewPath = item.status === 'completed' && item.outputPath ? item.outputPath : item.path;
+                      setHoverPreviewImg(previewPath);
+                      setHoverPreviewPos({ x: e.clientX + 15, y: e.clientY + 15 });
                     }}
-                    onMouseEnter={() => item.status === 'completed' && item.outputPath && setHoverPreviewVisible(true)}
+                    onMouseEnter={() => setHoverPreviewVisible(true)}
                     onMouseLeave={() => setHoverPreviewVisible(false)}
                   >
                     <div className="queue-thumb"
