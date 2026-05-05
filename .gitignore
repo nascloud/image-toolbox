@@ -1,10 +1,8 @@
-# Python projects (source reference only, not part of Go project)
-image_convert/
-slice_images/
-seedream/
-watermarked/
-
-# Wails build output
+# Wails Build Output
+build/bin/
+build/windows/
+build/darwin/
+build/linux/
 build/
 
 # Go
@@ -13,16 +11,38 @@ build/
 *.dll
 *.so
 *.dylib
-
-# Test binary
 *.test
-
-# Output of go coverage
 *.out
+vendor/
 
-# VSCode
+# Frontend (React/Vite)
+frontend/node_modules/
+frontend/dist/
+frontend/dist_electron/
+frontend/.env
+frontend/.env.local
+frontend/.env.*.local
+frontend/npm-debug.log*
+frontend/yarn-debug.log*
+frontend/yarn-error.log*
+frontend/.pnpm-debug.log*
+
+# IDE / Editors
 .vscode/
-
-# OS
+.idea/
+.claude/
+*.swp
+*.swo
 .DS_Store
 Thumbs.db
+
+# Logs & Temporary Files
+*.log
+tmp/
+temp/
+
+# App Specific Reference (Python projects / output dirs)
+image_convert/
+slice_images/
+seedream/
+watermarked/
