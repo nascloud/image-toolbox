@@ -280,6 +280,37 @@ func (a *App) WatermarkImages(req model.WatermarkRequest) (model.BatchResult, er
 	return result, nil
 }
 
+// GetImageInfo returns basic metadata about an image file.
+func (a *App) GetImageInfo(filePath string) (map[string]interface{}, error) {
+	info := map[string]interface{}{}
+	if filePath == "" {
+		return info, fmt.Errorf("no file path provided")
+	}
+
+	stat, err := os.Stat(filePath)
+	if err != nil {
+		return info, fmt.Errorf("stat file: %w", err)
+	}
+	info["fileName"] = stat.Name()
+	info["fileSize"] = stat.Size()
+
+	f, err := os.Open(filePath)
+	if err != nil {
+		return info, fmt.Errorf("open file: %w", err)
+	}
+	defer f.Close()
+
+	cfg, format, err := image.DecodeConfig(f)
+	if err != nil {
+		return info, nil // still return partial info
+	}
+	info["width"] = cfg.Width
+	info["height"] = cfg.Height
+	info["format"] = strings.ToUpper(format)
+
+	return info, nil
+}
+
 // PreviewWatermark generates a base64 encoded thumbnail of the watermarked image for preview.
 func (a *App) PreviewWatermark(req model.WatermarkPreviewRequest) (string, error) {
 	if req.SourcePath == "" {
@@ -334,7 +365,7 @@ func (a *App) PreviewWatermark(req model.WatermarkPreviewRequest) (string, error
 		}
 	}
 
-	var result *image.RGBA
+	var result image.Image = img
 	if wmImage != nil {
 		result = backendImage.AddImageWatermark(img, wmImage, req.Opacity, req.Position)
 	} else if req.WatermarkText != "" {
@@ -354,8 +385,6 @@ func (a *App) PreviewWatermark(req model.WatermarkPreviewRequest) (string, error
 			}
 		}
 		result = backendImage.AddTextWatermark(img, req.WatermarkText, req.Opacity, req.Position, fSize, req.FontColor)
-	} else {
-		return "", fmt.Errorf("no watermark image or text provided")
 	}
 
 	var buf bytes.Buffer

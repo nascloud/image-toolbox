@@ -9,6 +9,8 @@ export function GetAiOutputDir():Promise<string>;
 
 export function GetApiKey():Promise<string>;
 
+export function GetImageInfo(arg1:string):Promise<Record<string, any>>;
+
 export function OpenOutputDir(arg1:string):Promise<void>;
 
 export function PreviewWatermark(arg1:model.WatermarkPreviewRequest):Promise<string>;

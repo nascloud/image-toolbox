@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ImageList } from '../components/ImageList';
 import { useBatch } from '../hooks/useBatch';
 import { BatchProgress } from '../components/BatchProgress';
@@ -6,6 +6,7 @@ import { SaveModeSelector, SaveModeConfig } from '../components/SaveModeSelector
 
 export const Watermark: React.FC = () => {
   const [files, setFiles] = useState<string[]>([]);
+  const [selectedIndex, setSelectedIndex] = useState(0);
   const [mode, setMode] = useState<'image' | 'text'>('image');
   const [watermarkImage, setWatermarkImage] = useState('');
   const [watermarkText, setWatermarkText] = useState('Watermark');
@@ -19,33 +20,63 @@ export const Watermark: React.FC = () => {
   const [outputWidth, setOutputWidth] = useState(false);
   const [outputTarget, setOutputTarget] = useState(1440);
   const { state, startBatch, cancelBatch, openOutputDir } = useBatch();
+  
   const [previewDataUrl, setPreviewDataUrl] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewZoom, setPreviewZoom] = useState(1);
+  const [imageInfo, setImageInfo] = useState<any>(null);
 
-  const handlePreview = async (index: number) => {
-    if (files.length === 0 || index < 0 || index >= files.length) return;
-    setPreviewLoading(true);
-    try {
-      const sourcePath = files[index];
-      const dataUrl = await (window as any).go.main.App.PreviewWatermark({
-        sourcePath,
-        watermarkImage: mode === 'image' ? watermarkImage : '',
-        watermarkText: mode === 'text' ? watermarkText : '',
-        opacity,
-        position,
-        fontSize,
-        fontColor,
-      });
-      setPreviewZoom(1);
-      if (dataUrl) setPreviewDataUrl(dataUrl);
-    } catch (e) {
-      console.error("Preview failed:", e);
-      alert("预览失败: " + e);
-    } finally {
-      setPreviewLoading(false);
+  // Fetch image info when selected file changes
+  useEffect(() => {
+    if (files.length === 0) {
+      setImageInfo(null);
+      return;
     }
-  };
+    const idx = selectedIndex >= files.length ? 0 : selectedIndex;
+    (window as any).go.main.App.GetImageInfo(files[idx])
+      .then((info: any) => setImageInfo(info))
+      .catch(() => setImageInfo(null));
+  }, [files, selectedIndex]);
+
+  useEffect(() => {
+    if (files.length === 0) {
+      setPreviewDataUrl(null);
+      return;
+    }
+    const idx = selectedIndex >= files.length ? 0 : selectedIndex;
+    if (idx !== selectedIndex) {
+      setSelectedIndex(idx);
+    }
+    
+    let isCancelled = false;
+    const timeout = setTimeout(async () => {
+      setPreviewLoading(true);
+      try {
+        const sourcePath = files[idx];
+        const dataUrl = await (window as any).go.main.App.PreviewWatermark({
+          sourcePath,
+          watermarkImage: mode === 'image' ? watermarkImage : '',
+          watermarkText: mode === 'text' ? watermarkText : '',
+          opacity,
+          position,
+          fontSize,
+          fontColor,
+        });
+        if (!isCancelled && dataUrl) {
+          setPreviewDataUrl(dataUrl);
+        }
+      } catch (e) {
+        console.error("Preview failed:", e);
+      } finally {
+        if (!isCancelled) setPreviewLoading(false);
+      }
+    }, 300);
+
+    return () => {
+      isCancelled = true;
+      clearTimeout(timeout);
+    };
+  }, [files, selectedIndex, mode, watermarkImage, watermarkText, opacity, position, fontSize, fontColor]);
 
   const handleSelectFiles = async () => {
     try {
@@ -81,7 +112,6 @@ export const Watermark: React.FC = () => {
 
   const handleRun = async () => {
     if (mode === 'image' && !watermarkImage) {
-      // fallback to text mode with current text
       setMode('text');
     }
     await startBatch('WatermarkImages', {
@@ -104,30 +134,12 @@ export const Watermark: React.FC = () => {
   };
 
   return (
-    <div>
-      {/* Preview Modal */}
-      {previewDataUrl && (
-        <div className="modal-overlay" style={{ background: 'rgba(0,0,0,0.85)' }} onClick={() => setPreviewDataUrl(null)}>
-          <div style={{ position: 'absolute', top: 16, right: 16, display: 'flex', gap: 8, zIndex: 1 }} onClick={e => e.stopPropagation()}>
-            <button onClick={() => setPreviewDataUrl(null)} className="btn-icon" style={{ fontSize: 18, color: '#fff' }}>×</button>
-          </div>
-          <div className="flex items-center gap-8" style={{ position: 'absolute', bottom: 40, color: '#fff', zIndex: 1 }} onClick={e => e.stopPropagation()}>
-            <button onClick={() => setPreviewZoom(z => Math.min(3, z + 0.25))} className="btn btn-sm btn-ghost">+放大</button>
-            <button onClick={() => setPreviewZoom(z => Math.max(0.25, z - 0.25))} className="btn btn-sm btn-ghost">-缩小</button>
-            <button onClick={() => setPreviewZoom(1)} className="btn btn-sm btn-ghost">重置</button>
-            <span className="text-xs">{Math.round(previewZoom * 100)}%</span>
-          </div>
-          <div style={{ maxWidth: '80vw', maxHeight: '75vh', overflow: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={e => e.stopPropagation()}>
-            <img src={previewDataUrl} style={{ transform: `scale(${previewZoom})`, transformOrigin: 'center center', maxWidth: '100%', maxHeight: '75vh' }} alt="preview" />
-          </div>
-        </div>
-      )}
-
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
       <h2 className="page-title">水印</h2>
 
-      <div className="flex gap-8" style={{ alignItems: 'stretch' }}>
+      <div className="flex gap-6" style={{ alignItems: 'stretch', flex: 1, minHeight: 0 }}>
         {/* ── LEFT COLUMN: files ── */}
-        <div style={{ width: '35%', flexShrink: 0, display: 'flex', flexDirection: 'column' }}>
+        <div style={{ flex: '0 0 22%', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
           <div className="card" style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
             <div className="flex gap-3" style={{ flexWrap: 'wrap' }}>
               <button onClick={handleSelectFiles} className="btn btn-sm btn-primary">选择文件</button>
@@ -135,13 +147,70 @@ export const Watermark: React.FC = () => {
             </div>
             <div className="mt-4" style={{ flex: 1, minHeight: 0 }}>
               <ImageList files={files} onRemove={i => setFiles(files.filter((_, j) => j !== i))}
-                onClear={() => setFiles([])} onDrop={paths => setFiles(prev => [...prev, ...paths])} onAddClick={handleSelectFiles} onPreview={handlePreview} />
+                onClear={() => setFiles([])} onDrop={paths => setFiles(prev => [...prev, ...paths])} onAddClick={handleSelectFiles} onPreview={setSelectedIndex} selectedIndex={selectedIndex} />
             </div>
           </div>
         </div>
 
+        {/* ── MIDDLE COLUMN: Realtime Preview ── */}
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 12, minWidth: 0 }}>
+          {/* Preview Image */}
+          <div className="card" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+            <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span className="card-label">实时预览</span>
+              <div className="flex items-center gap-4">
+                {previewLoading && <span className="text-xs text-muted">渲染中...</span>}
+                {previewDataUrl && (
+                  <>
+                    <button onClick={() => setPreviewZoom(z => Math.max(0.25, z - 0.25))} className="btn-icon" title="缩小" style={{ fontSize: 14 }}>−</button>
+                    <span className="text-xs text-muted">{Math.round(previewZoom * 100)}%</span>
+                    <button onClick={() => setPreviewZoom(z => Math.min(3, z + 0.25))} className="btn-icon" title="放大" style={{ fontSize: 14 }}>+</button>
+                    <button onClick={() => setPreviewZoom(1)} className="btn-icon" title="重置" style={{ fontSize: 12 }}>↺</button>
+                  </>
+                )}
+              </div>
+            </div>
+            <div style={{ flex: 1, overflow: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--color-bg-inset)', borderRadius: 'var(--radius-lg)' }}>
+              {previewDataUrl ? (
+                <img src={previewDataUrl} style={{ transform: `scale(${previewZoom})`, transformOrigin: 'center center', maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', transition: 'transform 0.2s' }} alt="preview" />
+              ) : (
+                <span className="text-secondary text-sm">选择一张图片以预览</span>
+              )}
+            </div>
+          </div>
+
+          {/* Image Info Panel */}
+          <div className="card" style={{ flexShrink: 0 }}>
+            <div className="card-header">
+              <span className="card-label">图片信息</span>
+            </div>
+            {imageInfo ? (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 16px' }}>
+                <div className="flex items-center gap-4">
+                  <span className="text-xs text-muted">文件名</span>
+                  <span className="text-sm" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{imageInfo.fileName || '-'}</span>
+                </div>
+                <div className="flex items-center gap-4">
+                  <span className="text-xs text-muted">格式</span>
+                  <span className="text-sm">{imageInfo.format || '-'}</span>
+                </div>
+                <div className="flex items-center gap-4">
+                  <span className="text-xs text-muted">尺寸</span>
+                  <span className="text-sm">{imageInfo.width && imageInfo.height ? `${imageInfo.width} × ${imageInfo.height} px` : '-'}</span>
+                </div>
+                <div className="flex items-center gap-4">
+                  <span className="text-xs text-muted">大小</span>
+                  <span className="text-sm">{imageInfo.fileSize ? (imageInfo.fileSize > 1024 * 1024 ? `${(imageInfo.fileSize / 1024 / 1024).toFixed(2)} MB` : `${(imageInfo.fileSize / 1024).toFixed(1)} KB`) : '-'}</span>
+                </div>
+              </div>
+            ) : (
+              <span className="text-sm text-muted">暂无图片信息</span>
+            )}
+          </div>
+        </div>
+
         {/* ── RIGHT COLUMN: config + action ── */}
-        <div style={{ width: '65%', flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <div style={{ flex: '0 0 28%', display: 'flex', flexDirection: 'column', gap: 16, overflowY: 'auto', minWidth: 0 }}>
           <SaveModeSelector
             config={saveModeConfig}
             onChange={setSaveModeConfig}
@@ -183,12 +252,14 @@ export const Watermark: React.FC = () => {
                   </div>
                 </>
               ) : (
-                <div className="form-row">
+                <div className="form-row" style={{ flexWrap: 'wrap' }}>
                   <label className="form-label">水印图片</label>
-                  <span className="text-sm text-secondary" style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {watermarkImage || '未选择'}
-                  </span>
-                  <button onClick={handleSelectWatermark} className="btn btn-sm btn-primary">选择图片</button>
+                  <div className="flex items-center gap-4" style={{ flex: 1, minWidth: 0 }}>
+                    <span className="text-sm text-secondary" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0 }}>
+                      {watermarkImage ? watermarkImage.split('\\').pop() : '未选择'}
+                    </span>
+                    <button onClick={handleSelectWatermark} className="btn btn-sm btn-primary" style={{ flexShrink: 0 }}>选择</button>
+                  </div>
                 </div>
               )}
 
@@ -196,7 +267,7 @@ export const Watermark: React.FC = () => {
                 <label className="form-label">透明度</label>
                 <input type="range" min="0" max="100" value={opacity * 100}
                   onChange={e => setOpacity(Number(e.target.value) / 100)}
-                  style={{ width: 200 }} />
+                  style={{ width: 160 }} />
                 <span className="text-sm text-muted" style={{ minWidth: 32 }}>{Math.round(opacity * 100)}%</span>
               </div>
 
@@ -241,14 +312,14 @@ export const Watermark: React.FC = () => {
           </div>
 
           {/* Action */}
-          <div className="mt-8">
+          <div className="mt-4 mb-4">
             {state.running ? (
               <button onClick={cancelBatch} className="btn btn-danger btn-lg btn-full">
                 取消处理
               </button>
             ) : (
               <button onClick={handleRun} disabled={files.length === 0} className="btn btn-primary btn-lg btn-full">
-                添加水印
+                开始添加水印
               </button>
             )}
           </div>

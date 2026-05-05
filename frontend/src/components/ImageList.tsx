@@ -7,11 +7,12 @@ interface ImageListProps {
   onDrop?: (paths: string[]) => void;
   onAddClick?: () => void;
   onPreview?: (index: number) => void;
+  selectedIndex?: number;
 }
 
 const IMAGE_EXTS = ['.jpg', '.jpeg', '.jfif', '.png', '.webp', '.bmp', '.gif', '.tiff'];
 
-export const ImageList: React.FC<ImageListProps> = ({ files, onRemove, onClear, onDrop, onAddClick, onPreview }) => {
+export const ImageList: React.FC<ImageListProps> = ({ files, onRemove, onClear, onDrop, onAddClick, onPreview, selectedIndex }) => {
   const [dragOver, setDragOver] = useState(false);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -88,19 +89,16 @@ export const ImageList: React.FC<ImageListProps> = ({ files, onRemove, onClear, 
         listStyle: 'none', padding: 0, margin: 0, flex: 1, overflow: 'auto', minHeight: 0,
       }}>
         {files.map((f, i) => (
-          <li key={i} style={{
+          <li key={i} onClick={() => onPreview?.(i)} style={{
             display: 'flex', justifyContent: 'space-between', alignItems: 'center',
             padding: '5px 8px', borderBottom: '1px solid var(--color-border-subtle)',
+            background: selectedIndex === i ? 'var(--color-accent-glow)' : 'transparent',
+            cursor: onPreview ? 'pointer' : 'default',
           }}>
-            <span className="text-sm text-secondary" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }} title={f}>
+            <span className="text-sm text-secondary" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, color: selectedIndex === i ? 'var(--color-accent)' : undefined }} title={f}>
               {f}
             </span>
-            <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
-              {onPreview && (
-                <button onClick={() => onPreview(i)} className="btn-icon" title="预览" style={{ fontSize: 13 }}>
-                  👁️
-                </button>
-              )}
+            <div style={{ display: 'flex', gap: 4, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
               <button onClick={() => onRemove(i)} className="btn-icon" title="移除" style={{ fontSize: 16 }}>
                 ×
               </button>

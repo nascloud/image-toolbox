@@ -14,6 +14,10 @@ export function GetApiKey() {
   return window['go']['main']['App']['GetApiKey']();
 }
 
+export function GetImageInfo(arg1) {
+  return window['go']['main']['App']['GetImageInfo'](arg1);
+}
+
 export function OpenOutputDir(arg1) {
   return window['go']['main']['App']['OpenOutputDir'](arg1);
 }
