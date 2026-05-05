@@ -609,7 +609,7 @@ export const AIBatch: React.FC = () => {
         return (
         <div className="modal-overlay" style={{ background: 'rgba(0,0,0,0.85)' }} onClick={closePreview}>
           {/* Controls */}
-          <div style={{ position: 'absolute', top: 16, right: 16, display: 'flex', gap: 8, zIndex: 1 }}>
+          <div style={{ position: 'absolute', top: 16, right: 16, display: 'flex', gap: 8, zIndex: 1 }} onClick={e => e.stopPropagation()}>
             {hasOutput && (
               <button onClick={() => {
                 const next = !compareMode;
@@ -621,7 +621,7 @@ export const AIBatch: React.FC = () => {
             )}
             <button onClick={closePreview} className="btn-icon" style={{ fontSize: 18 }}>×</button>
           </div>
-          <div className="flex items-center gap-8" style={{ position: 'absolute', bottom: 40 }}>
+          <div className="flex items-center gap-8" style={{ position: 'absolute', bottom: 40 }} onClick={e => e.stopPropagation()}>
             <span className="text-sm text-secondary">
               {hasOutput ? 'AI 结果' : '源图'} · {selectedPreview.name}
             </span>
