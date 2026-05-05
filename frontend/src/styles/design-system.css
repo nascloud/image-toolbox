@@ -965,8 +965,8 @@ input[type="range"]::-moz-range-thumb {
 }
 
 .hover-preview img {
-  max-width: 300px;
-  max-height: 300px;
+  max-width: 480px;
+  max-height: 480px;
   border-radius: var(--radius-lg);
   object-fit: contain;
 }

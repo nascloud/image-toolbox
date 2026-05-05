@@ -15,7 +15,7 @@ export function ProcessImagesBatch(arg1:model.BatchRequest):Promise<model.BatchR
 
 export function ReadImageAsBase64(arg1:string):Promise<string>;
 
-export function ReadImageThumbnail(arg1:string):Promise<string>;
+export function ReadImageThumbnail(arg1:string,arg2:number):Promise<string>;
 
 export function RunAIImageBatch(arg1:model.AIBatchRequest):Promise<model.BatchResult>;
 

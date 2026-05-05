@@ -125,9 +125,13 @@ func (a *App) ReadImageAsBase64(path string) (string, error) {
 	return fmt.Sprintf("data:%s;base64,%s", mime, base64.StdEncoding.EncodeToString(data)), nil
 }
 
-// ReadImageThumbnail reads an image file, downscales it to a small thumbnail (max 80px),
-// and returns a JPEG base64 data URI suitable for queue display.
-func (a *App) ReadImageThumbnail(path string) (string, error) {
+// ReadImageThumbnail reads an image file, downscales it to the given maxDim (longest side),
+// and returns a JPEG base64 data URI. Use maxDim=80 for queue icons, 320 for hover preview.
+func (a *App) ReadImageThumbnail(path string, maxDim int) (string, error) {
+	if maxDim <= 0 || maxDim > 1024 {
+		maxDim = 80
+	}
+
 	f, err := os.Open(path)
 	if err != nil {
 		return "", fmt.Errorf("open image: %w", err)
@@ -143,8 +147,16 @@ func (a *App) ReadImageThumbnail(path string) (string, error) {
 	srcW := bounds.Dx()
 	srcH := bounds.Dy()
 
-	// Calculate thumbnail dimensions (max 80px on longest side)
-	const maxDim = 80
+	// If image is already smaller than maxDim, no need to downscale
+	if srcW <= maxDim && srcH <= maxDim {
+		var buf bytes.Buffer
+		if err := jpeg.Encode(&buf, img, &jpeg.Options{Quality: 80}); err != nil {
+			return "", fmt.Errorf("encode thumbnail: %w", err)
+		}
+		return "data:image/jpeg;base64," + base64.StdEncoding.EncodeToString(buf.Bytes()), nil
+	}
+
+	// Calculate thumbnail dimensions (max maxDim on longest side)
 	thumbW, thumbH := maxDim, maxDim
 	if srcW > srcH {
 		thumbH = srcH * maxDim / srcW
@@ -158,7 +170,7 @@ func (a *App) ReadImageThumbnail(path string) (string, error) {
 		}
 	}
 
-	// Simple nearest-neighbor downscale (fast, sufficient for 40px thumbnails)
+	// Simple nearest-neighbor downscale
 	thumb := image.NewRGBA(image.Rect(0, 0, thumbW, thumbH))
 	for y := 0; y < thumbH; y++ {
 		srcY := y * srcH / thumbH
@@ -169,7 +181,7 @@ func (a *App) ReadImageThumbnail(path string) (string, error) {
 	}
 
 	var buf bytes.Buffer
-	if err := jpeg.Encode(&buf, thumb, &jpeg.Options{Quality: 70}); err != nil {
+	if err := jpeg.Encode(&buf, thumb, &jpeg.Options{Quality: 75}); err != nil {
 		return "", fmt.Errorf("encode thumbnail: %w", err)
 	}
 

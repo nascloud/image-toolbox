@@ -12,6 +12,7 @@ interface ImageItem {
   results?: { url?: string; b64_json?: string; size?: string }[];
   thumbUrl?: string;
   sourceThumbUrl?: string;
+  hoverThumbUrl?: string;
 }
 
 interface PromptPreset {
@@ -262,16 +263,21 @@ export const AIBatch: React.FC = () => {
         status: 'pending' as const,
       }));
 
-      // Asynchronously load source image thumbnails (uses downscaled 80px JPEG)
+      // Asynchronously load source image thumbnails
       items.forEach(async (item) => {
         try {
-          const dataUrl = await (window as any).go.main.App.ReadImageThumbnail(item.path);
+          // Load small thumbnail (80px) for queue display
+          const dataUrl = await (window as any).go.main.App.ReadImageThumbnail(item.path, 80);
           if (dataUrl && dataUrl.startsWith('data:')) {
             setQueue(q => q.map(i => i.id === item.id ? { ...i, sourceThumbUrl: dataUrl } : i));
           }
+          // Load larger thumbnail (320px) for hover preview
+          const hoverUrl = await (window as any).go.main.App.ReadImageThumbnail(item.path, 320);
+          if (hoverUrl && hoverUrl.startsWith('data:')) {
+            setQueue(q => q.map(i => i.id === item.id ? { ...i, hoverThumbUrl: hoverUrl } : i));
+          }
         } catch {
-          // fallback: use file:// URL
-          setQueue(q => q.map(i => i.id === item.id ? { ...i, sourceThumbUrl: toFileUrl(item.path) } : i));
+          // no-op
         }
       });
 
@@ -310,7 +316,7 @@ export const AIBatch: React.FC = () => {
         for (const imgPath of result) {
           if (refThumbUrls[imgPath]) continue;
           try {
-            const dataUrl = await (window as any).go.main.App.ReadImageThumbnail(imgPath);
+            const dataUrl = await (window as any).go.main.App.ReadImageThumbnail(imgPath, 80);
             if (dataUrl && dataUrl.startsWith('data:')) {
               setRefThumbUrls(prev => ({ ...prev, [imgPath]: dataUrl }));
             }
@@ -403,7 +409,7 @@ export const AIBatch: React.FC = () => {
           const r = resultByPath.get(item.path);
           if (!r || !r.outputPath) return;
           try {
-            const dataUrl = await (window as any).go.main.App.ReadImageThumbnail(r.outputPath);
+            const dataUrl = await (window as any).go.main.App.ReadImageThumbnail(r.outputPath, 80);
             if (dataUrl && dataUrl.startsWith('data:')) {
               setQueue(prev => prev.map(i => i.path === item.path ? { ...i, thumbUrl: dataUrl } : i));
             }
@@ -998,10 +1004,10 @@ export const AIBatch: React.FC = () => {
                 queue.map(item => (
                   <div key={item.id} className="queue-item"
                     onMouseMove={(e) => {
-                      // Use already-loaded data URIs for hover (WebView2 blocks file:// URLs)
+                      // Use higher-res (320px) thumbnail for hover preview
                       const hoverSrc = item.status === 'completed' && item.thumbUrl
                         ? item.thumbUrl
-                        : item.sourceThumbUrl || null;
+                        : item.hoverThumbUrl || item.sourceThumbUrl || null;
                       setHoverPreviewImg(hoverSrc);
                       setHoverPreviewPos({ x: e.clientX + 15, y: e.clientY + 15 });
                     }}
