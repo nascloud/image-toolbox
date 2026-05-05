@@ -56,3 +56,37 @@ func TestRunLocalBatch(t *testing.T) {
 		t.Errorf("expected failed 0, got %d", result.Failed)
 	}
 }
+
+func TestRunLocalBatchOverwriteSamePathDoesNotDeleteOutput(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "a.png")
+	createTestPNG(t, src)
+
+	req := model.BatchRequest{
+		SourcePaths: []string{src},
+		ResizeMode:  "width",
+		ResizeWidth: 5,
+		SaveMode:    "overwrite",
+	}
+
+	result := RunLocalBatch(context.Background(), req, nil)
+	if result.Success != 1 {
+		t.Fatalf("expected success 1, got result: %+v", result)
+	}
+	if _, err := os.Stat(src); err != nil {
+		t.Fatalf("expected overwritten source to exist: %v", err)
+	}
+
+	f, err := os.Open(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	img, err := png.Decode(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if img.Bounds().Dx() != 5 {
+		t.Fatalf("expected overwritten image width 5, got %d", img.Bounds().Dx())
+	}
+}

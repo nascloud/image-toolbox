@@ -9,13 +9,17 @@ import (
 	"path/filepath"
 	"strings"
 
-	backendImage "image-toolbox/backend/image"
 	"image-toolbox/backend/file"
+	backendImage "image-toolbox/backend/image"
 	"image-toolbox/backend/model"
 )
 
 // RunSliceBatch processes images with the slicing operation.
 func RunSliceBatch(ctx context.Context, req model.SliceRequest, progressCh chan<- model.ProgressUpdate) model.BatchResult {
+	basePaths := uniqueOutputPaths(req.SourcePaths, func(srcPath string) string {
+		return file.ResolveOutputPath(srcPath, req.OutputDir, req.SaveMode, req.PrefixName, req.SubdirName, "png", "")
+	})
+
 	jobFn := func(srcPath string) (string, error) {
 		f, err := os.Open(srcPath)
 		if err != nil {
@@ -33,8 +37,8 @@ func RunSliceBatch(ctx context.Context, req model.SliceRequest, progressCh chan<
 			return "", fmt.Errorf("slice returned 0 slices")
 		}
 
-		// Use ResolveOutputPath to get the base output directory for this save mode
-		basePath := file.ResolveOutputPath(srcPath, req.OutputDir, req.SaveMode, req.PrefixName, req.SubdirName, "png", "")
+		// Use the resolved base output path to derive all slice filenames.
+		basePath := basePaths[srcPath]
 		outDir := filepath.Dir(basePath)
 		outBase := strings.TrimSuffix(filepath.Base(basePath), ".png")
 

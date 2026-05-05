@@ -3,6 +3,8 @@ package batch
 import (
 	"context"
 	"fmt"
+	"path/filepath"
+	"strings"
 
 	backendAI "image-toolbox/backend/ai"
 	"image-toolbox/backend/config"
@@ -28,8 +30,17 @@ func RunAIImageBatch(ctx context.Context, req model.AIBatchRequest, configPath s
 		req.Size = "2048x2048"
 	}
 
+	outputPaths := uniqueOutputPaths(req.SourcePaths, func(srcPath string) string {
+		outExt := ".png"
+		if req.OutputFormat == "jpeg" {
+			outExt = ".jpg"
+		}
+		name := trimImageExt(srcPath)
+		return filepath.Join(req.OutputDir, name+"_ai"+outExt)
+	})
+
 	jobFn := func(srcPath string) (string, error) {
-		return backendAI.ProcessSingleImage(client, srcPath, req.OutputDir, req)
+		return backendAI.ProcessSingleImageWithContext(ctx, client, srcPath, req.OutputDir, req, outputPaths[srcPath])
 	}
 
 	maxConcurrent := 2
@@ -38,4 +49,9 @@ func RunAIImageBatch(ctx context.Context, req model.AIBatchRequest, configPath s
 	}
 	results := RunConcurrent(ctx, req.SourcePaths, jobFn, maxConcurrent, progressCh)
 	return aggregateResults(results)
+}
+
+func trimImageExt(srcPath string) string {
+	base := filepath.Base(srcPath)
+	return strings.TrimSuffix(base, filepath.Ext(base))
 }

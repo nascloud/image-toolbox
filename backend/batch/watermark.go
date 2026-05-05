@@ -13,6 +13,10 @@ import (
 
 // RunWatermarkBatch processes images with watermark operation.
 func RunWatermarkBatch(ctx context.Context, req model.WatermarkRequest, progressCh chan<- model.ProgressUpdate) model.BatchResult {
+	outputPaths := uniqueOutputPaths(req.SourcePaths, func(srcPath string) string {
+		return file.ResolveOutputPath(srcPath, req.OutputDir, req.SaveMode, req.PrefixName, req.SubdirName, "png", "_watermarked")
+	})
+
 	var wmImage image.Image
 	if req.WatermarkImage != "" {
 		f, err := os.Open(req.WatermarkImage)
@@ -69,7 +73,7 @@ func RunWatermarkBatch(ctx context.Context, req model.WatermarkRequest, progress
 			}
 		}
 
-		outPath := file.ResolveOutputPath(srcPath, req.OutputDir, req.SaveMode, req.PrefixName, req.SubdirName, "png", "_watermarked")
+		outPath := outputPaths[srcPath]
 
 		if err := savePNG(outputImg, outPath); err != nil {
 			return "", fmt.Errorf("save: %w", err)

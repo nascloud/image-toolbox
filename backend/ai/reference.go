@@ -11,10 +11,10 @@ import (
 	"strings"
 
 	// Register decoders so image.Decode can handle these formats.
-	_ "image/gif"
-	_ "image/jpeg"
 	_ "golang.org/x/image/bmp"
 	_ "golang.org/x/image/tiff"
+	_ "image/gif"
+	_ "image/jpeg"
 
 	"golang.org/x/image/draw"
 )
@@ -23,7 +23,7 @@ import (
 var aiSupportedExt = map[string]bool{
 	".png":  true,
 	".jpg":  true,
-".jpeg": true,
+	".jpeg": true,
 	".webp": true,
 	".jfif": true,
 }

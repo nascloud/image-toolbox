@@ -6,29 +6,25 @@ import (
 	"path/filepath"
 	"strings"
 
-	backendImage "image-toolbox/backend/image"
 	"image-toolbox/backend/file"
+	backendImage "image-toolbox/backend/image"
 	"image-toolbox/backend/model"
 )
 
 // RunLocalBatch processes a batch of images with convert/resize operations.
 func RunLocalBatch(ctx context.Context, req model.BatchRequest, progressCh chan<- model.ProgressUpdate) model.BatchResult {
-	jobFn := func(srcPath string) (string, error) {
-		var ext string
-		if req.ConvertTo != "" {
-			ext = req.ConvertTo
-		} else {
-			baseName := filepath.Base(srcPath)
-			ext = strings.TrimPrefix(filepath.Ext(baseName), ".")
-		}
-
-		// _resized suffix only for custom mode resize (backward compat)
+	outputPaths := uniqueOutputPaths(req.SourcePaths, func(srcPath string) string {
+		ext := outputExt(srcPath, req.ConvertTo)
 		suffix := ""
 		if (req.SaveMode == "" || req.SaveMode == "custom") && req.ConvertTo == "" && req.ResizeMode != "" {
 			suffix = "_resized"
 		}
+		return file.ResolveOutputPath(srcPath, req.OutputDir, req.SaveMode, req.PrefixName, req.SubdirName, ext, suffix)
+	})
 
-		outPath := file.ResolveOutputPath(srcPath, req.OutputDir, req.SaveMode, req.PrefixName, req.SubdirName, ext, suffix)
+	jobFn := func(srcPath string) (string, error) {
+		ext := outputExt(srcPath, req.ConvertTo)
+		outPath := outputPaths[srcPath]
 
 		var resizeOpts *backendImage.ResizeOptions
 		switch req.ResizeMode {
@@ -60,9 +56,9 @@ func RunLocalBatch(ctx context.Context, req model.BatchRequest, progressCh chan<
 			return "", err
 		}
 
-		// Remove original only in overwrite mode
-		if req.SaveMode == "overwrite" {
-			os.Remove(srcPath)
+		// Remove original only when overwrite conversion wrote a different file.
+		if req.SaveMode == "overwrite" && !samePath(srcPath, resultPath) {
+			_ = os.Remove(srcPath)
 		}
 
 		return resultPath, nil
@@ -70,6 +66,23 @@ func RunLocalBatch(ctx context.Context, req model.BatchRequest, progressCh chan<
 
 	results := RunConcurrent(ctx, req.SourcePaths, jobFn, 4, progressCh)
 	return aggregateResults(results)
+}
+
+func outputExt(srcPath, convertTo string) string {
+	if convertTo != "" {
+		return convertTo
+	}
+	baseName := filepath.Base(srcPath)
+	return strings.TrimPrefix(filepath.Ext(baseName), ".")
+}
+
+func samePath(a, b string) bool {
+	absA, errA := filepath.Abs(a)
+	absB, errB := filepath.Abs(b)
+	if errA == nil && errB == nil {
+		return absA == absB
+	}
+	return filepath.Clean(a) == filepath.Clean(b)
 }
 
 // aggregateResults summarises a slice of ImageResult into a BatchResult.

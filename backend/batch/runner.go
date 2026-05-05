@@ -13,41 +13,41 @@ type JobFunc func(srcPath string) (string, error)
 // RunConcurrent executes jobs concurrently with a progress channel.
 // If ctx is cancelled, remaining pending jobs are skipped and marked as cancelled.
 func RunConcurrent(ctx context.Context, sources []string, fn JobFunc, maxConcurrent int, progressCh chan<- model.ProgressUpdate) []model.ImageResult {
+	if maxConcurrent <= 0 {
+		maxConcurrent = 1
+	}
 	total := len(sources)
 	results := make([]model.ImageResult, total)
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, maxConcurrent)
 	var mu sync.Mutex
-	cancelled := false
 
 	for i, src := range sources {
-		// Check for cancellation before starting each job
 		select {
 		case <-ctx.Done():
-			cancelled = true
-		default:
-		}
-
-		if cancelled {
+			mu.Lock()
 			results[i] = model.ImageResult{SourcePath: src, Error: "cancelled"}
+			mu.Unlock()
 			continue
+		case sem <- struct{}{}:
 		}
 
 		wg.Add(1)
 		go func(idx int, path string) {
 			defer wg.Done()
-			if maxConcurrent > 0 {
-				sem <- struct{}{}
-				defer func() { <-sem }()
-			}
+			defer func() { <-sem }()
 
-			outPath, err := fn(path)
 			r := model.ImageResult{SourcePath: path}
-			if err != nil {
-				r.Error = err.Error()
+			if ctx.Err() != nil {
+				r.Error = "cancelled"
 			} else {
-				r.Success = true
-				r.OutputPath = outPath
+				outPath, err := fn(path)
+				if err != nil {
+					r.Error = err.Error()
+				} else {
+					r.Success = true
+					r.OutputPath = outPath
+				}
 			}
 
 			mu.Lock()

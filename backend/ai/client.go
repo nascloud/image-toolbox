@@ -2,6 +2,7 @@ package ai
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -34,12 +35,17 @@ func NewClient(apiKey string) *Client {
 
 // Generate sends an image generation request and returns the response.
 func (c *Client) Generate(req model.AIImageRequest) (*model.AIImageResponse, error) {
+	return c.GenerateWithContext(context.Background(), req)
+}
+
+// GenerateWithContext sends an image generation request bound to ctx.
+func (c *Client) GenerateWithContext(ctx context.Context, req model.AIImageRequest) (*model.AIImageResponse, error) {
 	body := map[string]any{
-		"model":          req.Model,
-		"prompt":         req.Prompt,
-		"size":           req.Size,
-		"stream":         req.Stream,
-		"watermark":      req.Watermark,
+		"model":     req.Model,
+		"prompt":    req.Prompt,
+		"size":      req.Size,
+		"stream":    req.Stream,
+		"watermark": req.Watermark,
 	}
 
 	// Response format
@@ -103,7 +109,7 @@ func (c *Client) Generate(req model.AIImageRequest) (*model.AIImageResponse, err
 		return nil, fmt.Errorf("marshal request: %w", err)
 	}
 
-	httpReq, err := http.NewRequest("POST", c.BaseURL+"/images/generations", bytes.NewReader(payload))
+	httpReq, err := http.NewRequestWithContext(ctx, "POST", c.BaseURL+"/images/generations", bytes.NewReader(payload))
 	if err != nil {
 		return nil, fmt.Errorf("create request: %w", err)
 	}
@@ -139,8 +145,17 @@ func (c *Client) Generate(req model.AIImageRequest) (*model.AIImageResponse, err
 
 // DownloadImage downloads an image from URL and returns the bytes.
 func DownloadImage(url string) ([]byte, error) {
+	return DownloadImageWithContext(context.Background(), url)
+}
+
+// DownloadImageWithContext downloads an image from URL and returns the bytes.
+func DownloadImageWithContext(ctx context.Context, url string) ([]byte, error) {
 	client := &http.Client{Timeout: 60 * time.Second}
-	resp, err := client.Get(url)
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("create download request: %w", err)
+	}
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("download: %w", err)
 	}
@@ -149,6 +164,9 @@ func DownloadImage(url string) ([]byte, error) {
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("read download: %w", err)
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("download HTTP %d: %s", resp.StatusCode, string(data))
 	}
 	return data, nil
 }
