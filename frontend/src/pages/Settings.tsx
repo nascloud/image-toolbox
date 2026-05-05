@@ -1,10 +1,36 @@
 import React, { useState, useEffect } from 'react';
 
-export const Settings: React.FC = () => {
+const defaultModels = [
+  { id: 'doubao-seedream-5-0-260128', name: 'Seedream 5.0' },
+  { id: 'doubao-seedream-5-0-lite-260128', name: 'Seedream 5.0 Lite' },
+  { id: 'doubao-seedream-4-5-251128', name: 'Seedream 4.5' },
+  { id: 'doubao-seedream-4-0-250828', name: 'Seedream 4.0' },
+  { id: 'doubao-seedream-3-0-t2i-250415', name: 'Seedream 3.0' },
+];
+
+function saveModelList(models: { id: string; name: string }[]) {
+  try { localStorage.setItem('model_list', JSON.stringify(models)); } catch { /* no-op */ }
+}
+
+function loadModelList(): { id: string; name: string }[] {
+  try {
+    const raw = localStorage.getItem('model_list');
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch { /* no-op */ }
+  return defaultModels;
+}export const Settings: React.FC = () => {
   const [apiKey, setApiKey] = useState('');
   const [aiOutputDir, setAiOutputDir] = useState('');
   const [apiSaved, setApiSaved] = useState(false);
   const [dirSaved, setDirSaved] = useState(false);
+  const [modelList, setModelList] = useState<{ id: string; name: string }[]>(loadModelList);
+  const [editingModel, setEditingModel] = useState<{ id: string; name: string } | null>(null);
+  const [isAddingModel, setIsAddingModel] = useState(false);
+  const [newModelId, setNewModelId] = useState('');
+  const [newModelName, setNewModelName] = useState('');
 
   useEffect(() => {
     (async () => {
@@ -40,6 +66,35 @@ export const Settings: React.FC = () => {
       setDirSaved(true);
       setTimeout(() => setDirSaved(false), 2000);
     } catch { /* no-op */ }
+  };
+
+  const handleAddModel = () => {
+    if (!newModelId.trim() || !newModelName.trim()) return;
+    if (modelList.find(m => m.id === newModelId.trim())) {
+      alert('模型 ID 已存在');
+      return;
+    }
+    const updated = [...modelList, { id: newModelId.trim(), name: newModelName.trim() }];
+    setModelList(updated);
+    saveModelList(updated);
+    setNewModelId('');
+    setNewModelName('');
+    setIsAddingModel(false);
+  };
+
+  const handleEditModelSave = () => {
+    if (!editingModel) return;
+    const updated = modelList.map(m => m.id === editingModel.id ? editingModel : m);
+    setModelList(updated);
+    saveModelList(updated);
+    setEditingModel(null);
+  };
+
+  const handleDeleteModel = (id: string) => {
+    if (modelList.length <= 1) { alert('至少保留一个模型'); return; }
+    const updated = modelList.filter(m => m.id !== id);
+    setModelList(updated);
+    saveModelList(updated);
   };
 
   return (
@@ -82,6 +137,52 @@ export const Settings: React.FC = () => {
           <button onClick={handleSaveOutputDir} className="btn btn-sm btn-primary">
             {dirSaved ? '已保存 ✓' : '保存'}
           </button>
+        </div>
+      </div>
+
+      {/* Model List */}
+      <div className="card mb-8">
+        <div className="flex justify-between items-center mb-4">
+          <label className="card-label" style={{ textTransform: 'none', letterSpacing: 0, marginBottom: 0 }}>
+            模型列表
+          </label>
+          <button onClick={() => { setIsAddingModel(true); setNewModelId(''); setNewModelName(''); }}
+            className="btn btn-sm">+ 添加模型</button>
+        </div>
+        
+        {isAddingModel && (
+          <div className="flex gap-3 items-center mb-4 p-4" style={{ background: 'var(--color-bg-surface)', borderRadius: 8 }}>
+            <input placeholder="名称" value={newModelName} onChange={e => setNewModelName(e.target.value)}
+              className="input" style={{ width: 160, padding: '6px 10px', fontSize: 13 }} />
+            <input placeholder="ID" value={newModelId} onChange={e => setNewModelId(e.target.value)}
+              className="input" style={{ flex: 1, padding: '6px 10px', fontSize: 13 }} />
+            <button onClick={handleAddModel} className="btn btn-sm btn-primary">保存</button>
+            <button onClick={() => setIsAddingModel(false)} className="btn btn-sm btn-ghost">取消</button>
+          </div>
+        )}
+
+        <div className="flex flex-col gap-2">
+          {modelList.map(m => (
+            <div key={m.id} className="flex items-center gap-3 p-3" style={{ background: 'var(--color-bg-surface)', borderRadius: 8, border: '1px solid var(--color-border-subtle)' }}>
+              {editingModel?.id === m.id ? (
+                <>
+                  <input value={editingModel.name} onChange={e => setEditingModel({ ...editingModel, name: e.target.value })}
+                    className="input" style={{ width: 160, padding: '4px 8px', fontSize: 13 }} />
+                  <input value={editingModel.id} onChange={e => setEditingModel({ ...editingModel, id: e.target.value })}
+                    className="input" style={{ flex: 1, padding: '4px 8px', fontSize: 13 }} />
+                  <button onClick={handleEditModelSave} className="btn btn-sm btn-primary">保存</button>
+                  <button onClick={() => setEditingModel(null)} className="btn btn-sm btn-ghost">取消</button>
+                </>
+              ) : (
+                <>
+                  <span className="text-sm font-medium" style={{ width: 160 }}>{m.name}</span>
+                  <span className="text-xs text-muted" style={{ flex: 1 }}>{m.id}</span>
+                  <button onClick={() => setEditingModel({ ...m })} className="btn btn-sm btn-ghost">编辑</button>
+                  <button onClick={() => handleDeleteModel(m.id)} className="btn btn-sm" style={{ color: 'var(--color-danger)' }}>删除</button>
+                </>
+              )}
+            </div>
+          ))}
         </div>
       </div>
     </div>

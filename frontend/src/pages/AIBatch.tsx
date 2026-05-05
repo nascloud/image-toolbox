@@ -115,12 +115,6 @@ export const AIBatch: React.FC = () => {
   const [newPresetText, setNewPresetText] = useState('');
   const [newPresetCategory, setNewPresetCategory] = useState('常用');
   const [deleteConfirmPreset, setDeleteConfirmPreset] = useState<string | null>(null);
-  const [showSettings, setShowSettings] = useState(false);
-  const [settingsApiKey, setSettingsApiKey] = useState('');
-  const [editingModel, setEditingModel] = useState<{ id: string; name: string } | null>(null);
-  const [isAddingModel, setIsAddingModel] = useState(false);
-  const [newModelId, setNewModelId] = useState('');
-  const [newModelName, setNewModelName] = useState('');
   const [toast, setToast] = useState<{ msg: string; type: ToastType } | null>(null);
   const [selectedPreview, setSelectedPreview] = useState<ImageItem | null>(null);
   const [previewIndex, setPreviewIndex] = useState(0);
@@ -160,15 +154,7 @@ export const AIBatch: React.FC = () => {
   const pendingCount = queue.filter(i => i.status === 'pending' || i.status === 'error').length;
   const completedCount = queue.filter(i => i.status === 'completed').length;
 
-  // Load API key
-  useEffect(() => {
-    (async () => {
-      try {
-        const key = await (window as any).go.main.App.GetApiKey();
-        if (key) setSettingsApiKey(key);
-      } catch { /* no-op */ }
-    })();
-  }, []);
+
 
   // Load AI output directory
   useEffect(() => {
@@ -217,36 +203,7 @@ export const AIBatch: React.FC = () => {
     setDeleteConfirmPreset(null);
   };
 
-  // ── Model List Management ──
-  const handleAddModel = () => {
-    if (!newModelId.trim() || !newModelName.trim()) return;
-    if (modelList.find(m => m.id === newModelId.trim())) {
-      showToast('模型 ID 已存在', 'warning');
-      return;
-    }
-    const updated = [...modelList, { id: newModelId.trim(), name: newModelName.trim() }];
-    setModelList(updated);
-    saveModelList(updated);
-    setNewModelId('');
-    setNewModelName('');
-    setIsAddingModel(false);
-  };
 
-  const handleEditModelSave = () => {
-    if (!editingModel) return;
-    const updated = modelList.map(m => m.id === editingModel.id ? editingModel : m);
-    setModelList(updated);
-    saveModelList(updated);
-    setEditingModel(null);
-  };
-
-  const handleDeleteModel = (id: string) => {
-    if (modelList.length <= 1) { showToast('至少保留一个模型', 'warning'); return; }
-    const updated = modelList.filter(m => m.id !== id);
-    setModelList(updated);
-    saveModelList(updated);
-    if (model === id) setModel(updated[0].id);
-  };
 
   // ── Queue Management ──
   const addFiles = (paths: string[]) => {
@@ -271,8 +228,8 @@ export const AIBatch: React.FC = () => {
           if (dataUrl && dataUrl.startsWith('data:')) {
             setQueue(q => q.map(i => i.id === item.id ? { ...i, sourceThumbUrl: dataUrl } : i));
           }
-          // Load larger thumbnail (320px) for hover preview
-          const hoverUrl = await (window as any).go.main.App.ReadImageThumbnail(item.path, 320);
+          // Load larger thumbnail (640px) for hover preview
+          const hoverUrl = await (window as any).go.main.App.ReadImageThumbnail(item.path, 640);
           if (hoverUrl && hoverUrl.startsWith('data:')) {
             setQueue(q => q.map(i => i.id === item.id ? { ...i, hoverThumbUrl: hoverUrl } : i));
           }
@@ -283,6 +240,13 @@ export const AIBatch: React.FC = () => {
 
       return [...prev, ...items];
     });
+  };
+
+  const handleSelectFiles = async () => {
+    try {
+      const result = await (window as any).go.main.App.SelectFiles();
+      if (result) addFiles(result);
+    } catch { /* no-op */ }
   };
 
   const handleSelectFolder = async () => {
@@ -515,79 +479,7 @@ export const AIBatch: React.FC = () => {
         </div>
       )}
 
-      {/* Settings Modal */}
-      {showSettings && (
-        <div className="modal-overlay" onClick={() => setShowSettings(false)}>
-          <div className="modal-content" style={{ width: 520 }} onClick={e => e.stopPropagation()}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-              <h3 style={{ margin: 0, fontSize: 18 }}>设置</h3>
-              <button onClick={() => setShowSettings(false)} className="btn-icon" style={{ fontSize: 20 }}>×</button>
-            </div>
 
-            {/* API Key */}
-            <div style={{ marginBottom: 20 }}>
-              <label className="card-label" style={{ marginBottom: 6, textTransform: 'none', letterSpacing: 0 }}>API Key</label>
-              <input type="password" value={settingsApiKey}
-                onChange={e => setSettingsApiKey(e.target.value)}
-                placeholder="输入你的火山方舟 API Key"
-                className="input" />
-              <p className="text-xs text-muted" style={{ margin: '4px 0 0' }}>在火山方舟控制台获取 · 保存在本地 ~/.imagetool/config.json</p>
-              <button onClick={async () => {
-                try {
-                  await (window as any).go.main.App.SaveApiKey(settingsApiKey);
-                  showToast('API Key 已保存', 'success');
-                } catch { showToast('保存失败', 'error'); }
-              }} className="btn btn-sm mt-6">保存 API Key</button>
-            </div>
-
-            {/* Model List */}
-            <div style={{ marginBottom: 20 }}>
-              <div className="card-header">
-                <label className="card-label" style={{ textTransform: 'none', letterSpacing: 0, marginBottom: 0 }}>模型列表</label>
-                <button onClick={() => { setIsAddingModel(true); setNewModelId(''); setNewModelName(''); }}
-                  className="btn btn-sm">+ 添加模型</button>
-              </div>
-              {isAddingModel && (
-                <div className="flex gap-3 items-center mb-4">
-                  <input placeholder="名称" value={newModelName} onChange={e => setNewModelName(e.target.value)}
-                    className="input" style={{ width: 140, padding: '6px 10px', fontSize: 12 }} />
-                  <input placeholder="ID" value={newModelId} onChange={e => setNewModelId(e.target.value)}
-                    className="input" style={{ width: 160, padding: '6px 10px', fontSize: 12 }} />
-                  <button onClick={handleAddModel} className="btn btn-sm">保存</button>
-                  <button onClick={() => setIsAddingModel(false)} className="btn btn-sm" style={{ background: 'var(--color-bg-hover)' }}>取消</button>
-                </div>
-              )}
-              <div style={{ maxHeight: 160, overflow: 'auto' }}>
-                {modelList.map(m => (
-                  <div key={m.id} className="queue-item">
-                    {editingModel?.id === m.id ? (
-                      <>
-                        <input value={editingModel.name} onChange={e => setEditingModel({ ...editingModel, name: e.target.value })}
-                          className="input" style={{ width: 120, padding: '4px 8px', fontSize: 12 }} />
-                        <input value={editingModel.id} onChange={e => setEditingModel({ ...editingModel, id: e.target.value })}
-                          className="input" style={{ width: 150, padding: '4px 8px', fontSize: 12 }} />
-                        <button onClick={handleEditModelSave} className="btn btn-sm">保存</button>
-                        <button onClick={() => setEditingModel(null)} className="btn btn-sm" style={{ background: 'var(--color-bg-hover)' }}>取消</button>
-                      </>
-                    ) : (
-                      <>
-                        <span className="text-sm" style={{ width: 120 }}>{m.name}</span>
-                        <span className="text-xs text-muted" style={{ flex: 1 }}>{m.id}</span>
-                        <button onClick={() => setEditingModel({ ...m })} className="btn btn-sm btn-ghost">编辑</button>
-                        <button onClick={() => handleDeleteModel(m.id)} className="btn btn-sm" style={{ background: 'var(--color-danger)', color: '#fff' }}>删除</button>
-                      </>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="flex justify-end gap-4">
-              <button onClick={() => setShowSettings(false)} className="btn btn-ghost">关闭</button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Delete prompt confirmation */}
       {deleteConfirmPreset && (
@@ -744,17 +636,6 @@ export const AIBatch: React.FC = () => {
           <div className="card" style={s.card}>
             <label className="card-label" style={{ textTransform: 'none', letterSpacing: 0, marginBottom: 6 }}>生成参数</label>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {/* --- Model --- */}
-              <div className="param-row">
-                <span className="param-label">模型</span>
-                <div className="flex gap-2">
-                  <select value={model} onChange={e => setModel(e.target.value)} className="select" style={{ width: 150, fontSize: 12, padding: '4px 8px' }}>
-                    {modelList.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-                  </select>
-                  <button onClick={() => setShowSettings(true)} className="btn btn-sm btn-ghost" title="管理模型">⚙</button>
-                </div>
-              </div>
-
               {/* --- Size --- */}
               <div className="param-row">
                 <span className="param-label">尺寸</span>
@@ -911,11 +792,8 @@ export const AIBatch: React.FC = () => {
           {/* Batch Actions Bar */}
           <div className="flex items-center gap-3" style={{ flexShrink: 0, flexWrap: 'wrap' }}>
             <button onClick={clearQueue} className="btn btn-sm btn-ghost">清空</button>
-            <button onClick={handleSelectFolder} className="btn btn-sm btn-primary">+ 添加图片</button>
-
-            {queue.length > 0 && (
-              <span className="text-xs text-muted">{completedCount}/{queue.length} 完成</span>
-            )}
+            <button onClick={handleSelectFiles} className="btn btn-sm btn-primary">+ 添加图片</button>
+            <button onClick={handleSelectFolder} className="btn btn-sm btn-ghost">添加文件夹</button>
 
             {queue.filter(i => i.status === 'error').length > 0 && (
               <button onClick={retryAll} className="btn btn-sm" style={{ border: '1px solid var(--color-warning)', color: 'var(--color-warning)', background: 'transparent' }}>全部重试</button>
@@ -945,17 +823,28 @@ export const AIBatch: React.FC = () => {
               </button>
             )}
 
-            {/* Download Width */}
-            <div className="flex items-center gap-2 ml-auto">
-              <span className="text-xs text-muted">宽度:</span>
-              <select value={downloadWidth} onChange={e => { setDownloadWidth(e.target.value); setShowCustomWidth(e.target.value === 'custom'); }}
-                className="select" style={{ fontSize: 12, padding: '4px 8px', width: 100 }}>
-                {downloadWidthOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-              </select>
-              {showCustomWidth && (
-                <input type="number" value={customWidth} onChange={e => setCustomWidth(e.target.value)}
-                  placeholder="px" className="input" style={{ width: 70, padding: '4px 8px', fontSize: 12 }} />
-              )}
+            {/* Model & Download Width */}
+            <div className="flex items-center gap-4 ml-auto">
+              {/* Model */}
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted">模型:</span>
+                <select value={model} onChange={e => setModel(e.target.value)} className="select" style={{ width: 140, fontSize: 12, padding: '4px 8px' }}>
+                  {modelList.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                </select>
+              </div>
+
+              {/* Download Width */}
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted">输出宽度:</span>
+                <select value={downloadWidth} onChange={e => { setDownloadWidth(e.target.value); setShowCustomWidth(e.target.value === 'custom'); }}
+                  className="select" style={{ fontSize: 12, padding: '4px 8px', width: 90 }}>
+                  {downloadWidthOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+                {showCustomWidth && (
+                  <input type="number" value={customWidth} onChange={e => setCustomWidth(e.target.value)}
+                    placeholder="px" className="input" style={{ width: 60, padding: '4px 8px', fontSize: 12 }} />
+                )}
+              </div>
             </div>
 
             <div style={{ flex: 1 }} />
@@ -980,11 +869,20 @@ export const AIBatch: React.FC = () => {
           )}
 
           {/* Hover Preview */}
-          {hoverPreviewVisible && hoverPreviewImg && (
-            <div className="hover-preview" style={{ left: hoverPreviewPos.x, top: hoverPreviewPos.y }}>
-              <img src={hoverPreviewImg} alt="preview" />
-            </div>
-          )}
+          {hoverPreviewVisible && hoverPreviewImg && (() => {
+            const isRightHalf = hoverPreviewPos.x > window.innerWidth / 2;
+            const isBottomHalf = hoverPreviewPos.y > window.innerHeight / 2;
+            return (
+              <div className="hover-preview" style={{ 
+                left: isRightHalf ? 'auto' : hoverPreviewPos.x + 15,
+                right: isRightHalf ? window.innerWidth - hoverPreviewPos.x + 15 : 'auto',
+                top: isBottomHalf ? 'auto' : hoverPreviewPos.y + 15,
+                bottom: isBottomHalf ? window.innerHeight - hoverPreviewPos.y + 15 : 'auto'
+              }}>
+                <img src={hoverPreviewImg} alt="preview" />
+              </div>
+            );
+          })()}
 
           {/* Image Queue */}
           <div className="card" style={{ ...s.card, flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden' }}>
@@ -995,26 +893,25 @@ export const AIBatch: React.FC = () => {
 
             <div style={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
               {queue.length === 0 ? (
-                <div onClick={handleSelectFolder} className="drop-zone" style={{ padding: '40px 0' }}>
+                <div onClick={handleSelectFiles} className="drop-zone" style={{ padding: '40px 0' }}>
                   <div className="empty-state-icon">+</div>
                   拖拽或点击添加图片到队列<br />
                   <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>支持 JPG/PNG/WebP/BMP/TIFF/GIF</span>
                 </div>
               ) : (
                 queue.map(item => (
-                  <div key={item.id} className="queue-item"
-                    onMouseMove={(e) => {
-                      // Use higher-res (320px) thumbnail for hover preview
-                      const hoverSrc = item.status === 'completed' && item.thumbUrl
-                        ? item.thumbUrl
-                        : item.hoverThumbUrl || item.sourceThumbUrl || null;
-                      setHoverPreviewImg(hoverSrc);
-                      setHoverPreviewPos({ x: e.clientX + 15, y: e.clientY + 15 });
-                    }}
-                    onMouseEnter={() => setHoverPreviewVisible(true)}
-                    onMouseLeave={() => setHoverPreviewVisible(false)}
-                  >
+                  <div key={item.id} className="queue-item">
                     <div className="queue-thumb"
+                      onMouseMove={(e) => {
+                        // Use higher-res (640px) thumbnail for hover preview
+                        const hoverSrc = item.status === 'completed' && item.thumbUrl
+                          ? item.thumbUrl
+                          : item.hoverThumbUrl || item.sourceThumbUrl || null;
+                        setHoverPreviewImg(hoverSrc);
+                        setHoverPreviewPos({ x: e.clientX, y: e.clientY });
+                      }}
+                      onMouseEnter={() => setHoverPreviewVisible(true)}
+                      onMouseLeave={() => setHoverPreviewVisible(false)}
                       onClick={() => openPreview(item)}
                       title={item.outputPath || item.name}>
                       {item.status === 'completed' && item.thumbUrl ? (
