@@ -104,6 +104,7 @@ export const AIBatch: React.FC = () => {
   const [customWidth, setCustomWidth] = useState('');
   const [showCustomWidth, setShowCustomWidth] = useState(false);
   const [referenceImages, setReferenceImages] = useState<string[]>([]);
+  const [refThumbUrls, setRefThumbUrls] = useState<Record<string, string>>({});
   const [queue, setQueue] = useState<ImageItem[]>([]);
   const [processing, setProcessing] = useState(false);
   const [cancelRequested, setCancelRequested] = useState(false);
@@ -130,6 +131,11 @@ export const AIBatch: React.FC = () => {
   const [hoverPreviewImg, setHoverPreviewImg] = useState<string | null>(null);
   const [hoverPreviewPos, setHoverPreviewPos] = useState({ x: 0, y: 0 });
   const [hoverPreviewVisible, setHoverPreviewVisible] = useState(false);
+  // Preview modal: full-res base64 data URLs (loaded on demand)
+  const [previewDataUrl, setPreviewDataUrl] = useState<string | null>(null);
+  const [compareSourceUrl, setCompareSourceUrl] = useState<string | null>(null);
+  const [compareOutputUrl, setCompareOutputUrl] = useState<string | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
   const refInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const nextId = useRef(0);
@@ -297,7 +303,20 @@ export const AIBatch: React.FC = () => {
   const handleReferenceUpload = async () => {
     try {
       const result = await (window as any).go.main.App.SelectFiles();
-      if (result) setReferenceImages(prev => [...prev, ...result].slice(0, 12));
+      if (result) {
+        const updated = [...referenceImages, ...result].slice(0, 12);
+        setReferenceImages(updated);
+        // Load thumbnails for new reference images
+        for (const imgPath of result) {
+          if (refThumbUrls[imgPath]) continue;
+          try {
+            const dataUrl = await (window as any).go.main.App.ReadImageThumbnail(imgPath);
+            if (dataUrl && dataUrl.startsWith('data:')) {
+              setRefThumbUrls(prev => ({ ...prev, [imgPath]: dataUrl }));
+            }
+          } catch { /* no-op */ }
+        }
+      }
     } catch { /* no-op */ }
   };
 
@@ -421,20 +440,50 @@ export const AIBatch: React.FC = () => {
   };
 
   // ── Preview ──
-  const openPreview = (item: ImageItem) => {
-    // Always allow preview: show output for completed, source for others
+  const openPreview = async (item: ImageItem) => {
     setSelectedPreview(item);
     setPreviewIndex(0);
     setPreviewZoom(1);
     setCompareMode(false);
     setLeftZoom(1);
     setRightZoom(1);
+    setPreviewDataUrl(null);
+    setCompareSourceUrl(null);
+    setCompareOutputUrl(null);
+    setPreviewLoading(true);
+
+    // Load full-res image via backend (WebView2 blocks file:// URLs)
+    const hasOutput = item.status === 'completed' && item.outputPath;
+    const targetPath = hasOutput ? item.outputPath! : item.path;
+    try {
+      const dataUrl = await (window as any).go.main.App.ReadImageAsBase64(targetPath);
+      if (dataUrl) setPreviewDataUrl(dataUrl);
+    } catch { /* no-op */ }
+    setPreviewLoading(false);
+  };
+
+  // Load compare mode images on demand
+  const loadCompareImages = async (item: ImageItem) => {
+    if (!item.outputPath) return;
+    setCompareSourceUrl(null);
+    setCompareOutputUrl(null);
+    try {
+      const [srcUrl, outUrl] = await Promise.all([
+        (window as any).go.main.App.ReadImageAsBase64(item.path),
+        (window as any).go.main.App.ReadImageAsBase64(item.outputPath),
+      ]);
+      if (srcUrl) setCompareSourceUrl(srcUrl);
+      if (outUrl) setCompareOutputUrl(outUrl);
+    } catch { /* no-op */ }
   };
 
   const closePreview = () => {
     setSelectedPreview(null);
     setPreviewIndex(0);
     setPreviewZoom(1);
+    setPreviewDataUrl(null);
+    setCompareSourceUrl(null);
+    setCompareOutputUrl(null);
   };
 
   // ── Styles ──
@@ -551,13 +600,16 @@ export const AIBatch: React.FC = () => {
       {/* Preview Modal */}
       {selectedPreview && (() => {
         const hasOutput = selectedPreview.status === 'completed' && selectedPreview.outputPath;
-        const previewImgUrl = hasOutput ? toFileUrl(selectedPreview.outputPath!) : toFileUrl(selectedPreview.path);
         return (
         <div className="modal-overlay" style={{ background: 'rgba(0,0,0,0.85)' }} onClick={closePreview}>
           {/* Controls */}
           <div style={{ position: 'absolute', top: 16, right: 16, display: 'flex', gap: 8, zIndex: 1 }}>
             {hasOutput && (
-              <button onClick={() => setCompareMode(!compareMode)} className="btn btn-sm" style={{ background: compareMode ? 'var(--color-accent)' : 'var(--color-bg-elevated)' }}>
+              <button onClick={() => {
+                const next = !compareMode;
+                setCompareMode(next);
+                if (next && !compareSourceUrl) loadCompareImages(selectedPreview);
+              }} className="btn btn-sm" style={{ background: compareMode ? 'var(--color-accent)' : 'var(--color-bg-elevated)' }}>
                 {compareMode ? '单图' : '对比'}
               </button>
             )}
@@ -577,7 +629,11 @@ export const AIBatch: React.FC = () => {
               <div className="text-center">
                 <p className="text-sm text-muted mb-4">原图</p>
                 <div style={{ overflow: 'auto', maxWidth: '40vw', maxHeight: '70vh' }}>
-                  <img src={toFileUrl(selectedPreview.path)} style={{ transform: `scale(${leftZoom})`, transformOrigin: 'top left' }} alt="original" />
+                  {compareSourceUrl ? (
+                    <img src={compareSourceUrl} style={{ transform: `scale(${leftZoom})`, transformOrigin: 'top left' }} alt="original" />
+                  ) : (
+                    <div style={{ padding: 40, color: 'var(--color-text-muted)' }}>加载中...</div>
+                  )}
                 </div>
                 <div className="mt-2 flex gap-2 justify-center">
                   <button onClick={() => setLeftZoom(z => Math.min(3, z + 0.25))} className="btn btn-sm btn-ghost">+</button>
@@ -587,7 +643,11 @@ export const AIBatch: React.FC = () => {
               <div className="text-center">
                 <p className="text-sm text-muted mb-4">AI 结果</p>
                 <div style={{ overflow: 'auto', maxWidth: '40vw', maxHeight: '70vh' }}>
-                  <img src={toFileUrl(selectedPreview.outputPath!)} style={{ transform: `scale(${rightZoom})`, transformOrigin: 'top left' }} alt="ai result" />
+                  {compareOutputUrl ? (
+                    <img src={compareOutputUrl} style={{ transform: `scale(${rightZoom})`, transformOrigin: 'top left' }} alt="ai result" />
+                  ) : (
+                    <div style={{ padding: 40, color: 'var(--color-text-muted)' }}>加载中...</div>
+                  )}
                 </div>
                 <div className="mt-2 flex gap-2 justify-center">
                   <button onClick={() => setRightZoom(z => Math.min(3, z + 0.25))} className="btn btn-sm btn-ghost">+</button>
@@ -597,7 +657,13 @@ export const AIBatch: React.FC = () => {
             </div>
           ) : (
             <div style={{ maxWidth: '80vw', maxHeight: '75vh', overflow: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={e => e.stopPropagation()}>
-              <img src={previewImgUrl} style={{ transform: `scale(${previewZoom})`, transformOrigin: 'center center', maxWidth: '100%', maxHeight: '75vh' }} alt="preview" />
+              {previewLoading ? (
+                <div style={{ padding: 40, color: 'var(--color-text-muted)', fontSize: 16 }}>加载中...</div>
+              ) : previewDataUrl ? (
+                <img src={previewDataUrl} style={{ transform: `scale(${previewZoom})`, transformOrigin: 'center center', maxWidth: '100%', maxHeight: '75vh' }} alt="preview" />
+              ) : (
+                <div style={{ padding: 40, color: 'var(--color-text-muted)', fontSize: 14 }}>无法加载图片</div>
+              )}
             </div>
           )}
         </div>
@@ -816,7 +882,11 @@ export const AIBatch: React.FC = () => {
                 {referenceImages.map((img, i) => (
                   <div key={i} style={{ position: 'relative', flexShrink: 0 }}>
                     <div style={{ width: 48, height: 48, borderRadius: 8, border: '1px solid var(--color-accent)', background: 'var(--color-bg-surface)', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <img src={toFileUrl(img)} alt={`ref${i}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      {refThumbUrls[img] ? (
+                        <img src={refThumbUrls[img]} alt={`ref${i}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      ) : (
+                        <span style={{ fontSize: 9, color: 'var(--color-text-muted)' }}>{img.split('\\').pop()?.substring(0, 6) || `ref${i}`}</span>
+                      )}
                     </div>
                     <button onClick={() => removeReference(i)}
                       className="btn-icon" style={{ position: 'absolute', top: -6, right: -6, width: 18, height: 18, borderRadius: '50%', background: 'var(--color-danger)', fontSize: 11 }}>
@@ -906,7 +976,7 @@ export const AIBatch: React.FC = () => {
           {/* Hover Preview */}
           {hoverPreviewVisible && hoverPreviewImg && (
             <div className="hover-preview" style={{ left: hoverPreviewPos.x, top: hoverPreviewPos.y }}>
-              <img src={hoverPreviewImg.startsWith('data:') || hoverPreviewImg.startsWith('file:') ? hoverPreviewImg : toFileUrl(hoverPreviewImg)} alt="preview" />
+              <img src={hoverPreviewImg} alt="preview" />
             </div>
           )}
 
@@ -928,8 +998,11 @@ export const AIBatch: React.FC = () => {
                 queue.map(item => (
                   <div key={item.id} className="queue-item"
                     onMouseMove={(e) => {
-                      const previewPath = item.status === 'completed' && item.outputPath ? item.outputPath : item.path;
-                      setHoverPreviewImg(previewPath);
+                      // Use already-loaded data URIs for hover (WebView2 blocks file:// URLs)
+                      const hoverSrc = item.status === 'completed' && item.thumbUrl
+                        ? item.thumbUrl
+                        : item.sourceThumbUrl || null;
+                      setHoverPreviewImg(hoverSrc);
                       setHoverPreviewPos({ x: e.clientX + 15, y: e.clientY + 15 });
                     }}
                     onMouseEnter={() => setHoverPreviewVisible(true)}
