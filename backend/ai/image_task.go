@@ -24,18 +24,25 @@ func ProcessSingleImage(client *Client, srcPath, outputDir string, opts model.AI
 
 // ProcessSingleImageWithContext handles one image through the AI generation pipeline.
 func ProcessSingleImageWithContext(ctx context.Context, client *Client, srcPath, outputDir string, opts model.AIBatchRequest, outputPath string) (string, error) {
-	imgData, err := EncodeImageToBase64(srcPath)
-	if err != nil {
-		return "", fmt.Errorf("encode input: %w", err)
-	}
+	caps := CapabilitiesForModel(opts.Model)
+	effectiveOutputFormat := EffectiveOutputFormat(opts.Model, opts.OutputFormat)
 
+	var imgData string
 	var refs []string
-	for _, refPath := range opts.ReferenceImages {
-		refData, err := EncodeImageToBase64(refPath)
+	if caps.SupportsImageInput {
+		var err error
+		imgData, err = EncodeImageToBase64(srcPath)
 		if err != nil {
-			return "", fmt.Errorf("encode reference %s: %w", refPath, err)
+			return "", fmt.Errorf("encode input: %w", err)
 		}
-		refs = append(refs, refData)
+
+		for _, refPath := range opts.ReferenceImages {
+			refData, err := EncodeImageToBase64(refPath)
+			if err != nil {
+				return "", fmt.Errorf("encode reference %s: %w", refPath, err)
+			}
+			refs = append(refs, refData)
+		}
 	}
 
 	req := model.AIImageRequest{
@@ -45,7 +52,7 @@ func ProcessSingleImageWithContext(ctx context.Context, client *Client, srcPath,
 		Image:                     imgData,
 		ReferenceImages:           refs,
 		Seed:                      opts.Seed,
-		OutputFormat:              opts.OutputFormat,
+		OutputFormat:              effectiveOutputFormat,
 		Watermark:                 opts.Watermark,
 		GuidanceScale:             opts.GuidanceScale,
 		ResponseFormat:            opts.ResponseFormat,
@@ -92,11 +99,11 @@ func ProcessSingleImageWithContext(ctx context.Context, client *Client, srcPath,
 	}
 
 	outExt := ".png"
-	if opts.OutputFormat == "jpeg" {
+	if effectiveOutputFormat == "jpeg" {
 		outExt = ".jpg"
 	}
 	if opts.DownloadWidth > 0 {
-		resized, err := resizeImageBytes(imageData, opts.DownloadWidth, opts.OutputFormat)
+		resized, err := resizeImageBytes(imageData, opts.DownloadWidth, effectiveOutputFormat)
 		if err != nil {
 			return "", fmt.Errorf("resize download: %w", err)
 		}

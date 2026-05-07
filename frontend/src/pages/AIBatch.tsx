@@ -1,5 +1,5 @@
 // AI Batch page — full-featured image generation client for Volcano Engine Seedream API
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 
 // ── Types ──
 interface ImageItem {
@@ -30,8 +30,6 @@ const defaultModels = [
   { id: 'doubao-seedream-4-0-250828', name: 'Seedream 4.0' },
   { id: 'doubao-seedream-3-0-t2i-250415', name: 'Seedream 3.0' },
 ];
-
-const sizeOptions = ['1K', '2K', '3K', '4K'];
 
 const defaultPromptPresets: PromptPreset[] = [
   { name: '默认人像', text: 'A beautiful portrait photo, high quality, detailed', category: '人像' },
@@ -79,6 +77,12 @@ function loadModelList(): { id: string; name: string }[] {
     }
   } catch { /* no-op */ }
   return defaultModels;
+}
+
+function getSizeOptions(model: string): string[] {
+  if (model.includes('5-0')) return ['1K', '2K', '3K'];
+  if (model.includes('3-0-t2i')) return ['2K', '3K'];
+  return ['1K', '2K', '3K', '4K'];
 }
 
 // ── Component ──
@@ -146,15 +150,33 @@ export const AIBatch: React.FC = () => {
 
   // ── Model capability helpers ──
   const isSequentialSupported = model.includes('5-0') || model.includes('4-5') || model.includes('4-0');
-  const isOutputFormatSupported = model.includes('5-0-lite') || model.includes('5-0-260128');
+  const isOutputFormatSupported = model.includes('5-0');
   const isGuidanceSupported = model.includes('3-0-t2i');
-  const isWebSearchSupported = model.includes('5-0-lite') || model.includes('5-0-260128');
+  const isWebSearchSupported = model.includes('5-0');
+  const isFastPromptOptimizeSupported = model.includes('4-0');
+  const modelSizeOptions = useMemo(() => getSizeOptions(model), [model]);
 
   // ── Computed-like ──
   const pendingCount = queue.filter(i => i.status === 'pending' || i.status === 'error').length;
   const completedCount = queue.filter(i => i.status === 'completed').length;
 
-
+  useEffect(() => {
+    if (!modelSizeOptions.includes(size)) {
+      setSize(modelSizeOptions[0] || '2K');
+    }
+    if (!isOutputFormatSupported && outputFormat !== 'jpeg') {
+      setOutputFormat('jpeg');
+    }
+    if (!isSequentialSupported && sequentialMode !== 'disabled') {
+      setSequentialMode('disabled');
+    }
+    if (!isWebSearchSupported && webSearch) {
+      setWebSearch(false);
+    }
+    if (!isFastPromptOptimizeSupported && optimizePromptMode === 'fast') {
+      setOptimizePromptMode('standard');
+    }
+  }, [model, modelSizeOptions, size, isOutputFormatSupported, outputFormat, isSequentialSupported, sequentialMode, isWebSearchSupported, webSearch, isFastPromptOptimizeSupported, optimizePromptMode]);
 
   // Load AI output directory
   useEffect(() => {
@@ -318,21 +340,22 @@ export const AIBatch: React.FC = () => {
       const downloadW = downloadWidth === 'custom'
         ? (parseInt(customWidth) || 0)
         : downloadWidth === 'original' ? 0 : parseInt(downloadWidth);
+      const maxGeneratedImages = Math.max(1, 15 - (1 + referenceImages.length));
       const result = await (window as any).go.main.App.RunAIImageBatch({
         sourcePaths: pendingItems.map(i => i.path),
         outputDir,
         prompt,
         model,
         size,
-        seed: seed >= 0 ? seed : -1,
-        outputFormat,
+        seed: isGuidanceSupported && seed >= 0 ? seed : -1,
+        outputFormat: isOutputFormatSupported ? outputFormat : 'jpeg',
         watermark,
-        guidanceScale,
+        guidanceScale: isGuidanceSupported ? guidanceScale : 0,
         responseFormat,
-        sequentialImageGeneration: sequentialMode,
-        maxImages,
-        optimizePromptMode,
-        webSearch,
+        sequentialImageGeneration: isSequentialSupported ? sequentialMode : 'disabled',
+        maxImages: Math.min(maxImages, maxGeneratedImages),
+        optimizePromptMode: isFastPromptOptimizeSupported ? optimizePromptMode : 'standard',
+        webSearch: isWebSearchSupported && webSearch,
         concurrent: Math.min(concurrent, pendingItems.length),
         referenceImages,
         downloadWidth: isNaN(downloadW) ? 0 : downloadW,
@@ -640,7 +663,7 @@ export const AIBatch: React.FC = () => {
               <div className="param-row">
                 <span className="param-label">尺寸</span>
                 <select value={size} onChange={e => setSize(e.target.value)} className="select" style={{ width: 150, fontSize: 12, padding: '4px 8px' }}>
-                  {sizeOptions.map(sz => <option key={sz} value={sz}>{sz}</option>)}
+                  {modelSizeOptions.map(sz => <option key={sz} value={sz}>{sz}</option>)}
                 </select>
               </div>
 
@@ -725,7 +748,7 @@ export const AIBatch: React.FC = () => {
                 <span className="param-label">提示词优化</span>
                 <select value={optimizePromptMode} onChange={e => setOptimizePromptMode(e.target.value)} className="select" style={{ width: 150, fontSize: 12, padding: '4px 8px' }}>
                   <option value="standard">标准模式 (高质量)</option>
-                  <option value="fast">快速模式 (低耗时)</option>
+                  {isFastPromptOptimizeSupported && <option value="fast">快速模式 (低耗时)</option>}
                 </select>
               </div>
 
@@ -929,10 +952,10 @@ export const AIBatch: React.FC = () => {
                       )}
                     </div>
                     <div className="queue-name">
-                      <div onClick={() => openPreview(item)} style={{ cursor: 'pointer' }}>
+                      <div className="queue-title" onClick={() => openPreview(item)} style={{ cursor: 'pointer' }}>
                         {item.name}
                       </div>
-                      {item.error && <div className="text-xs text-danger mt-2">{item.error}</div>}
+                      {item.error && <div className="queue-error text-xs text-danger mt-2" title={item.error}>{item.error}</div>}
                     </div>
 
                     {/* Status badges */}

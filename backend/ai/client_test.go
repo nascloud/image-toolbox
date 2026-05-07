@@ -27,6 +27,12 @@ func TestGenerateImage(t *testing.T) {
 		if req["prompt"] != "test prompt" {
 			t.Errorf("expected prompt 'test prompt', got %v", req["prompt"])
 		}
+		if req["response_format"] != "url" {
+			t.Errorf("expected response_format url, got %v", req["response_format"])
+		}
+		if _, ok := req["responseFormat"]; ok {
+			t.Error("did not expect camelCase responseFormat")
+		}
 
 		resp := model.AIImageResponse{
 			Data: []struct {
@@ -87,6 +93,197 @@ func TestGenerateImageAPIError(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatal("expected error for unauthorized, got nil")
+	}
+}
+
+func TestGenerateIncludesGuidanceScaleForSupportedModel(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		if req["guidance_scale"] != 2.5 {
+			t.Fatalf("expected guidance_scale 2.5, got %v", req["guidance_scale"])
+		}
+		json.NewEncoder(w).Encode(model.AIImageResponse{
+			Data: []struct {
+				URL     string `json:"url,omitempty"`
+				B64JSON string `json:"b64_json,omitempty"`
+				Size    string `json:"size,omitempty"`
+				Error   *struct {
+					Code    string `json:"code"`
+					Message string `json:"message"`
+				} `json:"error,omitempty"`
+			}{{URL: "http://example.com/img.png"}},
+		})
+	}))
+	defer server.Close()
+
+	client := NewClient("test-key")
+	client.BaseURL = server.URL
+
+	_, err := client.Generate(model.AIImageRequest{
+		Model:         "doubao-seedream-3-0-t2i-250415",
+		Prompt:        "test",
+		Size:          "1024x1024",
+		GuidanceScale: 2.5,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestGenerateOmitsGuidanceScaleForUnsupportedModel(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		if _, ok := req["guidance_scale"]; ok {
+			t.Fatalf("did not expect guidance_scale for unsupported model: %+v", req)
+		}
+		json.NewEncoder(w).Encode(model.AIImageResponse{
+			Data: []struct {
+				URL     string `json:"url,omitempty"`
+				B64JSON string `json:"b64_json,omitempty"`
+				Size    string `json:"size,omitempty"`
+				Error   *struct {
+					Code    string `json:"code"`
+					Message string `json:"message"`
+				} `json:"error,omitempty"`
+			}{{URL: "http://example.com/img.png"}},
+		})
+	}))
+	defer server.Close()
+
+	client := NewClient("test-key")
+	client.BaseURL = server.URL
+
+	_, err := client.Generate(model.AIImageRequest{
+		Model:         "doubao-seedream-5-0-lite-260128",
+		Prompt:        "test",
+		Size:          "1024x1024",
+		GuidanceScale: 2.5,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestGenerateOmitsUnsupportedOutputFormat(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		if _, ok := req["output_format"]; ok {
+			t.Fatalf("did not expect output_format for Seedream 4.5: %+v", req)
+		}
+		json.NewEncoder(w).Encode(model.AIImageResponse{
+			Data: []struct {
+				URL     string `json:"url,omitempty"`
+				B64JSON string `json:"b64_json,omitempty"`
+				Size    string `json:"size,omitempty"`
+				Error   *struct {
+					Code    string `json:"code"`
+					Message string `json:"message"`
+				} `json:"error,omitempty"`
+			}{{URL: "http://example.com/img.png"}},
+		})
+	}))
+	defer server.Close()
+
+	client := NewClient("test-key")
+	client.BaseURL = server.URL
+
+	_, err := client.Generate(model.AIImageRequest{
+		Model:        "doubao-seedream-4-5-251128",
+		Prompt:       "test",
+		Size:         "2K",
+		OutputFormat: "png",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestGenerateIncludesOutputFormatForSeedream5(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		if req["output_format"] != "png" {
+			t.Fatalf("expected output_format png, got %v", req["output_format"])
+		}
+		json.NewEncoder(w).Encode(model.AIImageResponse{
+			Data: []struct {
+				URL     string `json:"url,omitempty"`
+				B64JSON string `json:"b64_json,omitempty"`
+				Size    string `json:"size,omitempty"`
+				Error   *struct {
+					Code    string `json:"code"`
+					Message string `json:"message"`
+				} `json:"error,omitempty"`
+			}{{URL: "http://example.com/img.png"}},
+		})
+	}))
+	defer server.Close()
+
+	client := NewClient("test-key")
+	client.BaseURL = server.URL
+
+	_, err := client.Generate(model.AIImageRequest{
+		Model:        "doubao-seedream-5-0-lite-260128",
+		Prompt:       "test",
+		Size:         "2K",
+		OutputFormat: "png",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestGenerateOmitsImageAndSequentialForSeedream3(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		if _, ok := req["image"]; ok {
+			t.Fatalf("did not expect image for Seedream 3.0: %+v", req)
+		}
+		if _, ok := req["sequential_image_generation"]; ok {
+			t.Fatalf("did not expect sequential_image_generation for Seedream 3.0: %+v", req)
+		}
+		json.NewEncoder(w).Encode(model.AIImageResponse{
+			Data: []struct {
+				URL     string `json:"url,omitempty"`
+				B64JSON string `json:"b64_json,omitempty"`
+				Size    string `json:"size,omitempty"`
+				Error   *struct {
+					Code    string `json:"code"`
+					Message string `json:"message"`
+				} `json:"error,omitempty"`
+			}{{URL: "http://example.com/img.png"}},
+		})
+	}))
+	defer server.Close()
+
+	client := NewClient("test-key")
+	client.BaseURL = server.URL
+
+	_, err := client.Generate(model.AIImageRequest{
+		Model:                     "doubao-seedream-3-0-t2i-250415",
+		Prompt:                    "test",
+		Size:                      "2K",
+		Image:                     "data:image/png;base64,abc",
+		ReferenceImages:           []string{"data:image/png;base64,def"},
+		SequentialImageGeneration: "auto",
+		MaxImages:                 4,
+	})
+	if err != nil {
+		t.Fatal(err)
 	}
 }
 

@@ -29,10 +29,11 @@ func RunAIImageBatch(ctx context.Context, req model.AIBatchRequest, configPath s
 	if req.Size == "" {
 		req.Size = "2048x2048"
 	}
+	effectiveOutputFormat := backendAI.EffectiveOutputFormat(req.Model, req.OutputFormat)
 
 	outputPaths := uniqueOutputPaths(req.SourcePaths, func(srcPath string) string {
 		outExt := ".png"
-		if req.OutputFormat == "jpeg" {
+		if effectiveOutputFormat == "jpeg" {
 			outExt = ".jpg"
 		}
 		name := trimImageExt(srcPath)

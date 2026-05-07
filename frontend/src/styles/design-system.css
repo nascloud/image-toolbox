@@ -798,16 +798,29 @@ input[type="range"]::-moz-range-thumb {
 .queue-name {
   font-size: var(--text-sm);
   color: var(--color-text-secondary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
   cursor: pointer;
   flex: 1;
   min-width: 0;
 }
 
+.queue-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .queue-name:hover {
   color: var(--color-text-primary);
+}
+
+.queue-error {
+  cursor: default;
+  max-width: 100%;
+  max-height: 48px;
+  overflow: auto;
+  overflow-wrap: anywhere;
+  white-space: normal;
+  line-height: var(--leading-normal);
 }
 
 /* ── Progress ── */
@@ -893,6 +906,7 @@ input[type="range"]::-moz-range-thumb {
   left: 50%;
   transform: translateX(-50%);
   z-index: var(--z-toast);
+  max-width: min(720px, calc(100vw - 40px));
   padding: var(--space-6) var(--space-10);
   border-radius: var(--radius-xl);
   font-size: var(--text-md);
@@ -900,8 +914,10 @@ input[type="range"]::-moz-range-thumb {
   box-shadow: var(--shadow-lg);
   animation: slideDown var(--transition-slow);
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: var(--space-8);
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .toast-error { background: var(--color-danger); }

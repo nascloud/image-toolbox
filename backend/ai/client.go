@@ -40,23 +40,32 @@ func (c *Client) Generate(req model.AIImageRequest) (*model.AIImageResponse, err
 
 // GenerateWithContext sends an image generation request bound to ctx.
 func (c *Client) GenerateWithContext(ctx context.Context, req model.AIImageRequest) (*model.AIImageResponse, error) {
+	caps := CapabilitiesForModel(req.Model)
 	body := map[string]any{
 		"model":     req.Model,
 		"prompt":    req.Prompt,
-		"size":      req.Size,
-		"stream":    req.Stream,
 		"watermark": req.Watermark,
+	}
+
+	if req.Size != "" {
+		if isPixelSize(req.Size) || caps.AllowedSizes[req.Size] {
+			body["size"] = req.Size
+		}
+	}
+
+	if req.Stream && caps.SupportsStream {
+		body["stream"] = req.Stream
 	}
 
 	// Response format
 	if req.ResponseFormat != "" {
-		body["responseFormat"] = req.ResponseFormat
+		body["response_format"] = req.ResponseFormat
 	} else {
-		body["responseFormat"] = "url"
+		body["response_format"] = "url"
 	}
 
 	// Image and reference images
-	if req.Image != "" {
+	if req.Image != "" && caps.SupportsImageInput {
 		if len(req.ReferenceImages) > 0 {
 			images := append([]string{req.Image}, req.ReferenceImages...)
 			body["image"] = images
@@ -66,39 +75,47 @@ func (c *Client) GenerateWithContext(ctx context.Context, req model.AIImageReque
 	}
 
 	// Seed
-	if req.Seed > 0 {
+	if req.Seed >= -1 && caps.SupportsGuidanceScale {
 		body["seed"] = req.Seed
 	}
 
 	// Output format
-	if req.OutputFormat != "" {
+	if req.OutputFormat != "" && caps.SupportsOutputFormat {
 		body["output_format"] = req.OutputFormat
 	}
 
-	// Guidance scale
-	if req.GuidanceScale > 0 {
+	// Guidance scale is only accepted by Seedream 3.0 text-to-image models.
+	if req.GuidanceScale > 0 && caps.SupportsGuidanceScale {
 		body["guidance_scale"] = req.GuidanceScale
 	}
 
 	// Sequential image generation (组图)
-	if req.SequentialImageGeneration != "" && req.SequentialImageGeneration != "disabled" {
+	if req.SequentialImageGeneration != "" && req.SequentialImageGeneration != "disabled" && caps.SupportsSequential {
 		body["sequential_image_generation"] = req.SequentialImageGeneration
 		if req.MaxImages > 0 {
+			maxImages := req.MaxImages
+			if inputCount := 1 + len(req.ReferenceImages); inputCount > 0 {
+				if allowed := 15 - inputCount; allowed > 0 && maxImages > allowed {
+					maxImages = allowed
+				}
+			}
 			body["sequential_image_generation_options"] = map[string]int{
-				"max_images": req.MaxImages,
+				"max_images": maxImages,
 			}
 		}
 	}
 
 	// Optimize prompt mode
 	if req.OptimizePromptMode != "" && req.OptimizePromptMode != "standard" {
-		body["optimize_prompt_options"] = map[string]string{
-			"mode": req.OptimizePromptMode,
+		if req.OptimizePromptMode == "fast" && caps.SupportsFastPromptOptimize {
+			body["optimize_prompt_options"] = map[string]string{
+				"mode": req.OptimizePromptMode,
+			}
 		}
 	}
 
 	// Web search (tools)
-	if req.WebSearch {
+	if req.WebSearch && caps.SupportsWebSearch {
 		body["tools"] = []map[string]string{
 			{"type": "web_search"},
 		}
