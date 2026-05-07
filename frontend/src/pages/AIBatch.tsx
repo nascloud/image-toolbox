@@ -958,6 +958,38 @@ export const AIBatch: React.FC = () => {
                       {item.error && <div className="queue-error text-xs text-danger mt-2" title={item.error}>{item.error}</div>}
                     </div>
 
+                    {/* Spacer to push AI results toward middle-right */}
+                    <div className="queue-item-spacer" />
+
+                    {/* AI result thumbnails — inline on the same row */}
+                    {item.status === 'completed' && item.outputPaths && item.outputPaths.length > 0 && (
+                      <div className="queue-results">
+                        {item.outputPaths.slice(0, 5).map((outPath, idx) => (
+                          <button
+                            key={outPath}
+                            className="queue-result-thumb"
+                            onClick={() => openPreview(item, outPath)}
+                            title={fileNameFromPath(outPath)}
+                            onMouseMove={(e) => {
+                              setHoverPreviewImg(toFileUrl(outPath));
+                              setHoverPreviewPos({ x: e.clientX, y: e.clientY });
+                            }}
+                            onMouseEnter={() => setHoverPreviewVisible(true)}
+                            onMouseLeave={() => setHoverPreviewVisible(false)}
+                          >
+                            {item.thumbUrls?.[idx] ? (
+                              <img src={item.thumbUrls[idx]} alt={`AI result ${idx + 1}`} />
+                            ) : (
+                              <span>{idx + 1}</span>
+                            )}
+                          </button>
+                        ))}
+                        {item.outputPaths.length > 5 && (
+                          <span className="queue-result-more">+{item.outputPaths.length - 5}</span>
+                        )}
+                      </div>
+                    )}
+
                     {/* Status badges */}
                     {item.status === 'pending' && <span className="badge badge-pending">等待处理</span>}
                     {item.status === 'processing' && <span className="badge badge-processing">处理中</span>}
