@@ -40,15 +40,15 @@ func RunAIImageBatch(ctx context.Context, req model.AIBatchRequest, configPath s
 		return filepath.Join(req.OutputDir, name+"_ai"+outExt)
 	})
 
-	jobFn := func(srcPath string) (string, error) {
-		return backendAI.ProcessSingleImageWithContext(ctx, client, srcPath, req.OutputDir, req, outputPaths[srcPath])
+	jobFn := func(srcPath string) ([]string, error) {
+		return backendAI.ProcessSingleImagesWithContext(ctx, client, srcPath, req.OutputDir, req, outputPaths[srcPath])
 	}
 
 	maxConcurrent := 2
 	if req.Concurrent > 0 {
 		maxConcurrent = req.Concurrent
 	}
-	results := RunConcurrent(ctx, req.SourcePaths, jobFn, maxConcurrent, progressCh)
+	results := RunConcurrentPaths(ctx, req.SourcePaths, jobFn, maxConcurrent, progressCh)
 	return aggregateResults(results)
 }
 

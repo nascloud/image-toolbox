@@ -10,9 +10,26 @@ import (
 // JobFunc processes a single source path and returns the output path or error.
 type JobFunc func(srcPath string) (string, error)
 
+// JobFuncPaths processes a single source path and returns all output paths or error.
+type JobFuncPaths func(srcPath string) ([]string, error)
+
 // RunConcurrent executes jobs concurrently with a progress channel.
 // If ctx is cancelled, remaining pending jobs are skipped and marked as cancelled.
 func RunConcurrent(ctx context.Context, sources []string, fn JobFunc, maxConcurrent int, progressCh chan<- model.ProgressUpdate) []model.ImageResult {
+	return RunConcurrentPaths(ctx, sources, func(srcPath string) ([]string, error) {
+		outPath, err := fn(srcPath)
+		if err != nil {
+			return nil, err
+		}
+		if outPath == "" {
+			return nil, nil
+		}
+		return []string{outPath}, nil
+	}, maxConcurrent, progressCh)
+}
+
+// RunConcurrentPaths executes jobs concurrently and supports multiple output paths per source.
+func RunConcurrentPaths(ctx context.Context, sources []string, fn JobFuncPaths, maxConcurrent int, progressCh chan<- model.ProgressUpdate) []model.ImageResult {
 	if maxConcurrent <= 0 {
 		maxConcurrent = 1
 	}
@@ -41,12 +58,15 @@ func RunConcurrent(ctx context.Context, sources []string, fn JobFunc, maxConcurr
 			if ctx.Err() != nil {
 				r.Error = "cancelled"
 			} else {
-				outPath, err := fn(path)
+				outPaths, err := fn(path)
 				if err != nil {
 					r.Error = err.Error()
 				} else {
 					r.Success = true
-					r.OutputPath = outPath
+					r.OutputPaths = outPaths
+					if len(outPaths) > 0 {
+						r.OutputPath = outPaths[0]
+					}
 				}
 			}
 

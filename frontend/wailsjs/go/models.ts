@@ -81,6 +81,7 @@ export namespace model {
 	export class ImageResult {
 	    sourcePath: string;
 	    outputPath?: string;
+	    outputPaths?: string[];
 	    success: boolean;
 	    error?: string;
 	
@@ -92,6 +93,7 @@ export namespace model {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.sourcePath = source["sourcePath"];
 	        this.outputPath = source["outputPath"];
+	        this.outputPaths = source["outputPaths"];
 	        this.success = source["success"];
 	        this.error = source["error"];
 	    }

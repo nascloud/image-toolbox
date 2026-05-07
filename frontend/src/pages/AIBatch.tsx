@@ -7,10 +7,12 @@ interface ImageItem {
   name: string;
   path: string;
   outputPath?: string;
+  outputPaths?: string[];
   status: 'pending' | 'processing' | 'completed' | 'error' | 'cancelled';
   error?: string;
   results?: { url?: string; b64_json?: string; size?: string }[];
   thumbUrl?: string;
+  thumbUrls?: string[];
   sourceThumbUrl?: string;
   hoverThumbUrl?: string;
 }
@@ -50,6 +52,10 @@ const downloadWidthOptions = [
 function toFileUrl(path: string): string {
   // Convert Windows filesystem path to file:// URL for WebView
   return 'file:///' + path.replace(/\\/g, '/');
+}
+
+function fileNameFromPath(path: string): string {
+  return path.split('\\').pop() || path.split('/').pop() || path;
 }
 
 function savePresets(presets: PromptPreset[]) {
@@ -121,6 +127,7 @@ export const AIBatch: React.FC = () => {
   const [deleteConfirmPreset, setDeleteConfirmPreset] = useState<string | null>(null);
   const [toast, setToast] = useState<{ msg: string; type: ToastType } | null>(null);
   const [selectedPreview, setSelectedPreview] = useState<ImageItem | null>(null);
+  const [selectedOutputPath, setSelectedOutputPath] = useState<string | null>(null);
   const [previewIndex, setPreviewIndex] = useState(0);
   const [previewZoom, setPreviewZoom] = useState(1);
   const [compareMode, setCompareMode] = useState(false);
@@ -282,7 +289,7 @@ export const AIBatch: React.FC = () => {
   };
 
   const retryItem = (id: number) => {
-    setQueue(prev => prev.map(i => i.id === id ? { ...i, status: 'pending' as const, error: undefined, results: undefined } : i));
+    setQueue(prev => prev.map(i => i.id === id ? { ...i, status: 'pending' as const, error: undefined, results: undefined, outputPath: undefined, outputPaths: undefined, thumbUrl: undefined, thumbUrls: undefined } : i));
   };
 
   const removeItem = (id: number) => {
@@ -377,8 +384,11 @@ export const AIBatch: React.FC = () => {
         setQueue(prev => prev.map(i => {
           const r = resultByPath.get(i.path);
           if (r) {
-            if (r.success && r.outputPath) {
-              return { ...i, status: 'completed' as const, outputPath: r.outputPath };
+            const outputPaths = Array.isArray(r.outputPaths) && r.outputPaths.length > 0
+              ? r.outputPaths
+              : r.outputPath ? [r.outputPath] : [];
+            if (r.success && outputPaths.length > 0) {
+              return { ...i, status: 'completed' as const, outputPath: outputPaths[0], outputPaths };
             } else {
               failedCount++;
               return { ...i, status: 'error' as const, error: r.error || '处理失败' };
@@ -390,20 +400,29 @@ export const AIBatch: React.FC = () => {
         // Load thumbnails for all completed items in parallel
         const completed = pendingItems.filter(item => {
           const r = resultByPath.get(item.path);
-          return r && r.success && r.outputPath;
+          const outputPaths = Array.isArray(r?.outputPaths) && r.outputPaths.length > 0
+            ? r.outputPaths
+            : r?.outputPath ? [r.outputPath] : [];
+          return r && r.success && outputPaths.length > 0;
         });
         await Promise.all(completed.map(async (item) => {
           const r = resultByPath.get(item.path);
-          if (!r || !r.outputPath) return;
-          try {
-            const dataUrl = await (window as any).go.main.App.ReadImageThumbnail(r.outputPath, 80);
-            if (dataUrl && dataUrl.startsWith('data:')) {
-              setQueue(prev => prev.map(i => i.path === item.path ? { ...i, thumbUrl: dataUrl } : i));
+          const outputPaths = Array.isArray(r?.outputPaths) && r.outputPaths.length > 0
+            ? r.outputPaths
+            : r?.outputPath ? [r.outputPath] : [];
+          if (!r || outputPaths.length === 0) return;
+          const thumbUrls = await Promise.all(outputPaths.map(async (outPath: string) => {
+            try {
+              const dataUrl = await (window as any).go.main.App.ReadImageThumbnail(outPath, 80);
+              return dataUrl && dataUrl.startsWith('data:') ? dataUrl : toFileUrl(outPath);
+            } catch {
+              return toFileUrl(outPath);
             }
-          } catch {
-            // fallback: use file:// URL
-            setQueue(prev => prev.map(i => i.path === item.path ? { ...i, thumbUrl: toFileUrl(r.outputPath) } : i));
-          }
+          }));
+          setQueue(prev => prev.map(i => {
+            if (i.path !== item.path) return i;
+            return { ...i, thumbUrl: thumbUrls[0], thumbUrls };
+          }));
         }));
 
         if (failedCount > 0) showToast(`${failedCount} 张处理失败`, 'error');
@@ -428,16 +447,17 @@ export const AIBatch: React.FC = () => {
   const retryAll = () => {
     if (processing) return;
     setQueue(prev => prev.map(i =>
-      i.status === 'error' ? { ...i, status: 'pending' as const, error: undefined, results: undefined } : i
+      i.status === 'error' ? { ...i, status: 'pending' as const, error: undefined, results: undefined, outputPath: undefined, outputPaths: undefined, thumbUrl: undefined, thumbUrls: undefined } : i
     ));
   };
 
   // ── Preview ──
-  const openPreview = async (item: ImageItem) => {
+  const openPreview = async (item: ImageItem, outputPath?: string) => {
     setSelectedPreview(item);
+    setSelectedOutputPath(outputPath || null);
     setPreviewIndex(0);
     setPreviewZoom(1);
-    setCompareMode(false);
+    setCompareMode(Boolean(outputPath));
     setLeftZoom(1);
     setRightZoom(1);
     setPreviewDataUrl(null);
@@ -445,25 +465,27 @@ export const AIBatch: React.FC = () => {
     setCompareOutputUrl(null);
     setPreviewLoading(true);
 
-    // Load full-res image via backend (WebView2 blocks file:// URLs)
-    const hasOutput = item.status === 'completed' && item.outputPath;
-    const targetPath = hasOutput ? item.outputPath! : item.path;
-    try {
-      const dataUrl = await (window as any).go.main.App.ReadImageAsBase64(targetPath);
-      if (dataUrl) setPreviewDataUrl(dataUrl);
-    } catch { /* no-op */ }
+    if (outputPath) {
+      await loadCompareImages(item, outputPath);
+    } else {
+      try {
+        const dataUrl = await (window as any).go.main.App.ReadImageAsBase64(item.path);
+        if (dataUrl) setPreviewDataUrl(dataUrl);
+      } catch { /* no-op */ }
+    }
     setPreviewLoading(false);
   };
 
   // Load compare mode images on demand
-  const loadCompareImages = async (item: ImageItem) => {
-    if (!item.outputPath) return;
+  const loadCompareImages = async (item: ImageItem, outputPath?: string) => {
+    const targetOutputPath = outputPath || selectedOutputPath || item.outputPath;
+    if (!targetOutputPath) return;
     setCompareSourceUrl(null);
     setCompareOutputUrl(null);
     try {
       const [srcUrl, outUrl] = await Promise.all([
         (window as any).go.main.App.ReadImageAsBase64(item.path),
-        (window as any).go.main.App.ReadImageAsBase64(item.outputPath),
+        (window as any).go.main.App.ReadImageAsBase64(targetOutputPath),
       ]);
       if (srcUrl) setCompareSourceUrl(srcUrl);
       if (outUrl) setCompareOutputUrl(outUrl);
@@ -474,6 +496,7 @@ export const AIBatch: React.FC = () => {
     setSelectedPreview(null);
     setPreviewIndex(0);
     setPreviewZoom(1);
+    setSelectedOutputPath(null);
     setPreviewDataUrl(null);
     setCompareSourceUrl(null);
     setCompareOutputUrl(null);
@@ -520,7 +543,8 @@ export const AIBatch: React.FC = () => {
 
       {/* Preview Modal */}
       {selectedPreview && (() => {
-        const hasOutput = selectedPreview.status === 'completed' && selectedPreview.outputPath;
+        const hasOutput = selectedPreview.status === 'completed' && (selectedOutputPath || selectedPreview.outputPath);
+        const outputName = selectedOutputPath ? fileNameFromPath(selectedOutputPath) : selectedPreview.name;
         return (
         <div className="modal-overlay" style={{ background: 'rgba(0,0,0,0.85)' }} onClick={closePreview}>
           {/* Controls */}
@@ -538,41 +562,37 @@ export const AIBatch: React.FC = () => {
           </div>
           <div className="flex items-center gap-8" style={{ position: 'absolute', bottom: 40 }} onClick={e => e.stopPropagation()}>
             <span className="text-sm text-secondary">
-              {hasOutput ? 'AI 结果' : '源图'} · {selectedPreview.name}
+              {compareMode && hasOutput ? '前后对比' : hasOutput ? 'AI 结果' : '源图'} · {outputName}
             </span>
-            <button onClick={() => setPreviewZoom(z => Math.min(3, z + 0.25))} className="btn btn-sm btn-ghost">+放大</button>
-            <button onClick={() => setPreviewZoom(z => Math.max(0.5, z - 0.25))} className="btn btn-sm btn-ghost">-缩小</button>
-            <button onClick={() => setPreviewZoom(1)} className="btn btn-sm btn-ghost">重置</button>
-            <span className="text-xs text-muted">{Math.round(previewZoom * 100)}%</span>
+            {!compareMode && (
+              <>
+                <button onClick={() => setPreviewZoom(z => Math.min(3, z + 0.25))} className="btn btn-sm btn-ghost">+放大</button>
+                <button onClick={() => setPreviewZoom(z => Math.max(0.5, z - 0.25))} className="btn btn-sm btn-ghost">-缩小</button>
+                <button onClick={() => setPreviewZoom(1)} className="btn btn-sm btn-ghost">重置</button>
+                <span className="text-xs text-muted">{Math.round(previewZoom * 100)}%</span>
+              </>
+            )}
           </div>
           {compareMode && hasOutput ? (
-            <div className="flex gap-10 items-center" onClick={e => e.stopPropagation()}>
-              <div className="text-center">
+            <div className="compare-view" onClick={e => e.stopPropagation()}>
+              <div className="compare-pane">
                 <p className="text-sm text-muted mb-4">原图</p>
-                <div style={{ overflow: 'auto', maxWidth: '40vw', maxHeight: '70vh' }}>
+                <div className="compare-image-frame">
                   {compareSourceUrl ? (
-                    <img src={compareSourceUrl} style={{ transform: `scale(${leftZoom})`, transformOrigin: 'top left' }} alt="original" />
+                    <img src={compareSourceUrl} alt="original" />
                   ) : (
                     <div style={{ padding: 40, color: 'var(--color-text-muted)' }}>加载中...</div>
                   )}
-                </div>
-                <div className="mt-2 flex gap-2 justify-center">
-                  <button onClick={() => setLeftZoom(z => Math.min(3, z + 0.25))} className="btn btn-sm btn-ghost">+</button>
-                  <button onClick={() => setLeftZoom(z => Math.max(0.5, z - 0.25))} className="btn btn-sm btn-ghost">-</button>
                 </div>
               </div>
-              <div className="text-center">
+              <div className="compare-pane">
                 <p className="text-sm text-muted mb-4">AI 结果</p>
-                <div style={{ overflow: 'auto', maxWidth: '40vw', maxHeight: '70vh' }}>
+                <div className="compare-image-frame">
                   {compareOutputUrl ? (
-                    <img src={compareOutputUrl} style={{ transform: `scale(${rightZoom})`, transformOrigin: 'top left' }} alt="ai result" />
+                    <img src={compareOutputUrl} alt="ai result" />
                   ) : (
                     <div style={{ padding: 40, color: 'var(--color-text-muted)' }}>加载中...</div>
                   )}
-                </div>
-                <div className="mt-2 flex gap-2 justify-center">
-                  <button onClick={() => setRightZoom(z => Math.min(3, z + 0.25))} className="btn btn-sm btn-ghost">+</button>
-                  <button onClick={() => setRightZoom(z => Math.max(0.5, z - 0.25))} className="btn btn-sm btn-ghost">-</button>
                 </div>
               </div>
             </div>
@@ -824,14 +844,14 @@ export const AIBatch: React.FC = () => {
 
             {completedCount > 0 && (
               <button onClick={async () => {
-                const completed = queue.filter(i => i.status === 'completed' && i.outputPath);
-                setDownloadProgress({ current: 0, total: completed.length, active: true });
+                const completedPaths = queue.flatMap(i => i.status === 'completed' ? (i.outputPaths && i.outputPaths.length > 0 ? i.outputPaths : i.outputPath ? [i.outputPath] : []) : []);
+                setDownloadProgress({ current: 0, total: completedPaths.length, active: true });
                 let count = 0;
-                for (const item of completed) {
+                for (const outputPath of completedPaths) {
                   try {
                     const link = document.createElement('a');
-                    link.href = toFileUrl(item.outputPath!);
-                    link.download = item.name;
+                    link.href = toFileUrl(outputPath);
+                    link.download = fileNameFromPath(outputPath);
                     document.body.appendChild(link);
                     link.click();
                     document.body.removeChild(link);
@@ -927,21 +947,15 @@ export const AIBatch: React.FC = () => {
                     <div className="queue-thumb"
                       onMouseMove={(e) => {
                         // Use higher-res (640px) thumbnail for hover preview
-                        const hoverSrc = item.status === 'completed' && item.thumbUrl
-                          ? item.thumbUrl
-                          : item.hoverThumbUrl || item.sourceThumbUrl || null;
+                        const hoverSrc = item.hoverThumbUrl || item.sourceThumbUrl || null;
                         setHoverPreviewImg(hoverSrc);
                         setHoverPreviewPos({ x: e.clientX, y: e.clientY });
                       }}
                       onMouseEnter={() => setHoverPreviewVisible(true)}
                       onMouseLeave={() => setHoverPreviewVisible(false)}
                       onClick={() => openPreview(item)}
-                      title={item.outputPath || item.name}>
-                      {item.status === 'completed' && item.thumbUrl ? (
-                        <img src={item.thumbUrl} alt="result" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                      ) : item.status === 'completed' && item.sourceThumbUrl ? (
-                        <img src={item.sourceThumbUrl} alt="source" style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.7 }} />
-                      ) : item.sourceThumbUrl ? (
+                      title={item.path}>
+                      {item.sourceThumbUrl ? (
                         <img src={item.sourceThumbUrl} alt="source" style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: item.status === 'processing' ? 0.5 : item.status === 'error' ? 0.4 : 1 }} />
                       ) : item.status === 'processing' ? (
                         <span className="icon-spin" style={{ fontSize: 14 }}>⏳</span>
@@ -1003,15 +1017,18 @@ export const AIBatch: React.FC = () => {
 
                     {/* Actions */}
                     <div className="flex gap-2 shrink-0">
-                      {item.status === 'completed' && item.outputPath && (
+                      {item.status === 'completed' && (item.outputPaths?.length || item.outputPath) && (
                         <button onClick={async () => {
+                          const outputPaths = item.outputPaths && item.outputPaths.length > 0 ? item.outputPaths : item.outputPath ? [item.outputPath] : [];
                           try {
-                            const link = document.createElement('a');
-                            link.href = toFileUrl(item.outputPath!);
-                            link.download = item.name;
-                            document.body.appendChild(link);
-                            link.click();
-                            document.body.removeChild(link);
+                            for (const outputPath of outputPaths) {
+                              const link = document.createElement('a');
+                              link.href = toFileUrl(outputPath);
+                              link.download = fileNameFromPath(outputPath);
+                              document.body.appendChild(link);
+                              link.click();
+                              document.body.removeChild(link);
+                            }
                           } catch { /* no-op */ }
                         }} className="btn btn-sm" title="下载">⬇</button>
                       )}
