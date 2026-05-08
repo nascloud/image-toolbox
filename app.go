@@ -4,6 +4,8 @@ import (
 	"context"
 
 	backendApp "image-toolbox/backend/app"
+
+	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 // App is the top-level application struct used by Wails.
@@ -25,4 +27,7 @@ func NewApp() *App {
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 	a.App.SetContext(ctx)
+	runtime.OnFileDrop(ctx, func(x, y int, paths []string) {
+		runtime.EventsEmit(ctx, "app:file-drop", x, y, paths)
+	})
 }

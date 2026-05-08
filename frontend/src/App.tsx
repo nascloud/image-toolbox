@@ -1,14 +1,22 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Layout, TabDef } from './components/Layout';
 import { ConvertResize } from './pages/ConvertResize';
 import { Slice } from './pages/Slice';
 import { Watermark } from './pages/Watermark';
 import { AIBatch } from './pages/AIBatch';
 import { Settings } from './pages/Settings';
+import { OnFileDrop, OnFileDropOff } from '../wailsjs/runtime/runtime';
 import './App.css';
 
 function App() {
   const [activeTab, setActiveTab] = useState('convert-resize');
+
+  useEffect(() => {
+    OnFileDrop(() => undefined, false);
+    return () => {
+      OnFileDropOff();
+    };
+  }, []);
 
   const tabs: TabDef[] = [
     { id: 'convert-resize', label: '转换', component: <ConvertResize /> },

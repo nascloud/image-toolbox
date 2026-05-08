@@ -1,5 +1,6 @@
 // AI Batch page — full-featured image generation client for Volcano Engine Seedream API
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { EventsOn } from '../../wailsjs/runtime/runtime';
 
 // ── Types ──
 interface ImageItem {
@@ -13,6 +14,7 @@ interface ImageItem {
   results?: { url?: string; b64_json?: string; size?: string }[];
   thumbUrl?: string;
   thumbUrls?: string[];
+  resultHoverUrls?: string[];
   sourceThumbUrl?: string;
   hoverThumbUrl?: string;
 }
@@ -48,6 +50,8 @@ const downloadWidthOptions = [
   { value: 'custom', label: '自定义...' },
 ];
 
+const IMAGE_EXTS = ['.jpg', '.jpeg', '.jfif', '.png', '.webp', '.bmp', '.gif', '.tiff'];
+
 // ── Helpers ──
 function toFileUrl(path: string): string {
   // Convert Windows filesystem path to file:// URL for WebView
@@ -56,6 +60,38 @@ function toFileUrl(path: string): string {
 
 function fileNameFromPath(path: string): string {
   return path.split('\\').pop() || path.split('/').pop() || path;
+}
+
+function normalizeDroppedPath(path: string): string {
+  let normalized = path.trim();
+  if (normalized.startsWith('file:///')) {
+    normalized = decodeURIComponent(normalized.replace(/^file:\/\/\//, ''));
+  }
+  return normalized;
+}
+
+function isReadableLocalPath(path: string): boolean {
+  return /^[a-zA-Z]:[\\/]/.test(path) || path.startsWith('\\\\');
+}
+
+function imagePaths(paths: string[]): string[] {
+  return paths
+    .map(normalizeDroppedPath)
+    .filter(p => {
+      if (!isReadableLocalPath(p)) return false;
+      const ext = p.toLowerCase().slice(p.lastIndexOf('.'));
+      return IMAGE_EXTS.includes(ext);
+    });
+}
+
+function pointInElement(x: number, y: number, el: HTMLElement | null): boolean {
+  if (!el) return false;
+  const rect = el.getBoundingClientRect();
+  const candidates = [
+    { x, y },
+    { x: x / window.devicePixelRatio, y: y / window.devicePixelRatio },
+  ];
+  return candidates.some(p => p.x >= rect.left && p.x <= rect.right && p.y >= rect.top && p.y <= rect.bottom);
 }
 
 function savePresets(presets: PromptPreset[]) {
@@ -89,6 +125,29 @@ function getSizeOptions(model: string): string[] {
   if (model.includes('5-0')) return ['1K', '2K', '3K'];
   if (model.includes('3-0-t2i')) return ['2K', '3K'];
   return ['1K', '2K', '3K', '4K'];
+}
+
+function hoverPreviewStyle(pos: { x: number; y: number }): React.CSSProperties {
+  const gap = 16;
+  const padding = 12;
+  const maxNatural = 640;
+  const rightSpace = window.innerWidth - pos.x - gap - padding;
+  const leftSpace = pos.x - gap - padding;
+  const bottomSpace = window.innerHeight - pos.y - gap - padding;
+  const topSpace = pos.y - gap - padding;
+  const showRight = rightSpace >= leftSpace;
+  const showBottom = bottomSpace >= topSpace;
+  const maxWidth = Math.max(120, Math.min(maxNatural, showRight ? rightSpace : leftSpace));
+  const maxHeight = Math.max(120, Math.min(maxNatural, showBottom ? bottomSpace : topSpace));
+
+  return {
+    left: showRight ? pos.x + gap : 'auto',
+    right: showRight ? 'auto' : window.innerWidth - pos.x + gap,
+    top: showBottom ? pos.y + gap : 'auto',
+    bottom: showBottom ? 'auto' : window.innerHeight - pos.y + gap,
+    maxWidth,
+    maxHeight,
+  };
 }
 
 // ── Component ──
@@ -137,6 +196,8 @@ export const AIBatch: React.FC = () => {
   const [hoverPreviewImg, setHoverPreviewImg] = useState<string | null>(null);
   const [hoverPreviewPos, setHoverPreviewPos] = useState({ x: 0, y: 0 });
   const [hoverPreviewVisible, setHoverPreviewVisible] = useState(false);
+  const [queueDragOver, setQueueDragOver] = useState(false);
+  const [referenceDragOver, setReferenceDragOver] = useState(false);
   // Preview modal: full-res base64 data URLs (loaded on demand)
   const [previewDataUrl, setPreviewDataUrl] = useState<string | null>(null);
   const [compareSourceUrl, setCompareSourceUrl] = useState<string | null>(null);
@@ -144,6 +205,8 @@ export const AIBatch: React.FC = () => {
   const [previewLoading, setPreviewLoading] = useState(false);
   const refInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const queueDropRef = useRef<HTMLDivElement>(null);
+  const referenceDropRef = useRef<HTMLDivElement>(null);
   const nextId = useRef(0);
   const cancelRef = useRef(false);
   const toastTimer = useRef<ReturnType<typeof setTimeout>>();
@@ -235,7 +298,7 @@ export const AIBatch: React.FC = () => {
 
 
   // ── Queue Management ──
-  const addFiles = (paths: string[]) => {
+  const addFiles = useCallback((paths: string[]) => {
     // Deduplicate: skip paths already in the queue
     setQueue(prev => {
       const existingPaths = new Set(prev.map(i => i.path));
@@ -269,7 +332,7 @@ export const AIBatch: React.FC = () => {
 
       return [...prev, ...items];
     });
-  };
+  }, []);
 
   const handleSelectFiles = async () => {
     try {
@@ -289,7 +352,7 @@ export const AIBatch: React.FC = () => {
   };
 
   const retryItem = (id: number) => {
-    setQueue(prev => prev.map(i => i.id === id ? { ...i, status: 'pending' as const, error: undefined, results: undefined, outputPath: undefined, outputPaths: undefined, thumbUrl: undefined, thumbUrls: undefined } : i));
+    setQueue(prev => prev.map(i => i.id === id ? { ...i, status: 'pending' as const, error: undefined, results: undefined, outputPath: undefined, outputPaths: undefined, thumbUrl: undefined, thumbUrls: undefined, resultHoverUrls: undefined } : i));
   };
 
   const removeItem = (id: number) => {
@@ -299,27 +362,65 @@ export const AIBatch: React.FC = () => {
   const clearQueue = () => { setQueue([]); };
 
   // ── Reference Images ──
+  const addReferenceImages = useCallback((paths: string[]) => {
+    const filtered = imagePaths(paths);
+    if (filtered.length === 0) return;
+    setReferenceImages(prev => [...prev, ...filtered].slice(0, 12));
+    filtered.forEach(async (imgPath) => {
+      try {
+        const dataUrl = await (window as any).go.main.App.ReadImageThumbnail(imgPath, 80);
+        if (dataUrl && dataUrl.startsWith('data:')) {
+          setRefThumbUrls(prev => ({ ...prev, [imgPath]: dataUrl }));
+        }
+      } catch { /* no-op */ }
+    });
+  }, []);
+
   const handleReferenceUpload = async () => {
     try {
       const result = await (window as any).go.main.App.SelectFiles();
       if (result) {
-        const updated = [...referenceImages, ...result].slice(0, 12);
-        setReferenceImages(updated);
-        // Load thumbnails for new reference images
-        for (const imgPath of result) {
-          if (refThumbUrls[imgPath]) continue;
-          try {
-            const dataUrl = await (window as any).go.main.App.ReadImageThumbnail(imgPath, 80);
-            if (dataUrl && dataUrl.startsWith('data:')) {
-              setRefThumbUrls(prev => ({ ...prev, [imgPath]: dataUrl }));
-            }
-          } catch { /* no-op */ }
-        }
+        addReferenceImages(result);
       }
     } catch { /* no-op */ }
   };
 
   const removeReference = (index: number) => setReferenceImages(prev => prev.filter((_, i) => i !== index));
+
+  useEffect(() => {
+    const off = EventsOn('app:file-drop', (x: number, y: number, paths: string[]) => {
+      const filtered = imagePaths(paths);
+      if (filtered.length === 0) {
+        setQueueDragOver(false);
+        setReferenceDragOver(false);
+        return;
+      }
+      if (pointInElement(x, y, referenceDropRef.current)) {
+        addReferenceImages(filtered);
+      } else if (pointInElement(x, y, queueDropRef.current)) {
+        addFiles(filtered);
+      }
+      setQueueDragOver(false);
+      setReferenceDragOver(false);
+    });
+
+    return () => {
+      off();
+    };
+  }, [addFiles, addReferenceImages]);
+
+  const handleNativeDrop = useCallback((e: React.DragEvent, target: 'queue' | 'reference') => {
+    e.preventDefault();
+    e.stopPropagation();
+    const paths = imagePaths(Array.from(e.dataTransfer.files).map(f => (f as any).path || f.name));
+    if (target === 'reference') {
+      addReferenceImages(paths);
+      setReferenceDragOver(false);
+    } else {
+      addFiles(paths);
+      setQueueDragOver(false);
+    }
+  }, [addFiles, addReferenceImages]);
 
   // ── Main Processing ──
   const handleRun = async () => {
@@ -414,14 +515,22 @@ export const AIBatch: React.FC = () => {
           const thumbUrls = await Promise.all(outputPaths.map(async (outPath: string) => {
             try {
               const dataUrl = await (window as any).go.main.App.ReadImageThumbnail(outPath, 80);
-              return dataUrl && dataUrl.startsWith('data:') ? dataUrl : toFileUrl(outPath);
+              return dataUrl && dataUrl.startsWith('data:') ? dataUrl : '';
             } catch {
-              return toFileUrl(outPath);
+              return '';
+            }
+          }));
+          const resultHoverUrls = await Promise.all(outputPaths.map(async (outPath: string) => {
+            try {
+              const dataUrl = await (window as any).go.main.App.ReadImageThumbnail(outPath, 640);
+              return dataUrl && dataUrl.startsWith('data:') ? dataUrl : '';
+            } catch {
+              return '';
             }
           }));
           setQueue(prev => prev.map(i => {
             if (i.path !== item.path) return i;
-            return { ...i, thumbUrl: thumbUrls[0], thumbUrls };
+            return { ...i, thumbUrl: thumbUrls[0], thumbUrls, resultHoverUrls };
           }));
         }));
 
@@ -447,7 +556,7 @@ export const AIBatch: React.FC = () => {
   const retryAll = () => {
     if (processing) return;
     setQueue(prev => prev.map(i =>
-      i.status === 'error' ? { ...i, status: 'pending' as const, error: undefined, results: undefined, outputPath: undefined, outputPaths: undefined, thumbUrl: undefined, thumbUrls: undefined } : i
+      i.status === 'error' ? { ...i, status: 'pending' as const, error: undefined, results: undefined, outputPath: undefined, outputPaths: undefined, thumbUrl: undefined, thumbUrls: undefined, resultHoverUrls: undefined } : i
     ));
   };
 
@@ -804,11 +913,38 @@ export const AIBatch: React.FC = () => {
               <button onClick={handleReferenceUpload} className="btn btn-sm">+ 上传参考图</button>
             </div>
             {referenceImages.length === 0 ? (
-              <div onClick={handleReferenceUpload} className="drop-zone" style={{ padding: '16px 0' }}>
-                <div style={{ fontSize: 22, marginBottom: 2 }}>+</div>拖拽或点击上传参考图
+              <div
+                ref={referenceDropRef}
+                onClick={handleReferenceUpload}
+                onDragOver={(e) => { e.preventDefault(); setReferenceDragOver(true); }}
+                onDragLeave={() => setReferenceDragOver(false)}
+                onDrop={(e) => handleNativeDrop(e, 'reference')}
+                className="drop-zone"
+                style={{
+                  padding: '16px 0',
+                  ['--wails-drop-target' as any]: 'drop',
+                  borderColor: referenceDragOver ? 'var(--color-accent-hover)' : undefined,
+                  background: referenceDragOver ? 'var(--color-accent-glow)' : undefined,
+                }}
+              >
+                <div style={{ fontSize: 22, marginBottom: 2 }}>+</div>{referenceDragOver ? '释放以添加参考图' : '拖拽或点击上传参考图'}
               </div>
             ) : (
-              <div className="flex gap-3" style={{ overflowX: 'auto', paddingBottom: 4 }}>
+              <div
+                ref={referenceDropRef}
+                className="flex gap-3"
+                onDragOver={(e) => { e.preventDefault(); setReferenceDragOver(true); }}
+                onDragLeave={() => setReferenceDragOver(false)}
+                onDrop={(e) => handleNativeDrop(e, 'reference')}
+                style={{
+                  overflowX: 'auto',
+                  paddingBottom: 4,
+                  ['--wails-drop-target' as any]: 'drop',
+                  outline: referenceDragOver ? '2px dashed var(--color-accent)' : undefined,
+                  outlineOffset: 4,
+                  borderRadius: 8,
+                }}
+              >
                 {referenceImages.map((img, i) => (
                   <div key={i} style={{ position: 'relative', flexShrink: 0 }}>
                     <div style={{ width: 48, height: 48, borderRadius: 8, border: '1px solid var(--color-accent)', background: 'var(--color-bg-surface)', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -826,7 +962,9 @@ export const AIBatch: React.FC = () => {
                 ))}
                 {referenceImages.length < 12 && (
                   <div onClick={handleReferenceUpload}
-                    style={{ width: 48, height: 48, borderRadius: 8, border: '2px dashed var(--color-accent)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--color-text-muted)', fontSize: 18, flexShrink: 0 }}>+</div>
+                    onDragOver={(e) => { e.preventDefault(); setReferenceDragOver(true); }}
+                    onDrop={(e) => handleNativeDrop(e, 'reference')}
+                    style={{ width: 48, height: 48, borderRadius: 8, border: '2px dashed var(--color-accent)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--color-text-muted)', fontSize: 18, flexShrink: 0, ['--wails-drop-target' as any]: 'drop' }}>+</div>
                 )}
               </div>
             )}
@@ -913,22 +1051,33 @@ export const AIBatch: React.FC = () => {
 
           {/* Hover Preview */}
           {hoverPreviewVisible && hoverPreviewImg && (() => {
-            const isRightHalf = hoverPreviewPos.x > window.innerWidth / 2;
-            const isBottomHalf = hoverPreviewPos.y > window.innerHeight / 2;
+            const style = hoverPreviewStyle(hoverPreviewPos);
             return (
-              <div className="hover-preview" style={{ 
-                left: isRightHalf ? 'auto' : hoverPreviewPos.x + 15,
-                right: isRightHalf ? window.innerWidth - hoverPreviewPos.x + 15 : 'auto',
-                top: isBottomHalf ? 'auto' : hoverPreviewPos.y + 15,
-                bottom: isBottomHalf ? window.innerHeight - hoverPreviewPos.y + 15 : 'auto'
-              }}>
-                <img src={hoverPreviewImg} alt="preview" />
+              <div className="hover-preview" style={style}>
+                <img src={hoverPreviewImg} alt="preview" style={{ maxWidth: style.maxWidth, maxHeight: style.maxHeight }} />
               </div>
             );
           })()}
 
           {/* Image Queue */}
-          <div className="card" style={{ ...s.card, flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden' }}>
+          <div
+            ref={queueDropRef}
+            className="card"
+            onDragOver={(e) => { e.preventDefault(); setQueueDragOver(true); }}
+            onDragLeave={() => setQueueDragOver(false)}
+            onDrop={(e) => handleNativeDrop(e, 'queue')}
+            style={{
+              ...s.card,
+              flex: 1,
+              display: 'flex',
+              flexDirection: 'column',
+              minHeight: 0,
+              overflow: 'hidden',
+              outline: queueDragOver ? '2px dashed var(--color-accent)' : undefined,
+              outlineOffset: -4,
+              ['--wails-drop-target' as any]: 'drop',
+            }}
+          >
             <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0 10px', fontSize: 12, color: 'var(--color-text-muted)', borderBottom: '1px solid var(--color-border-subtle)', marginBottom: 8 }}>
               <span>图片队列</span>
               <span>{completedCount}/{queue.length} 完成</span>
@@ -936,9 +1085,21 @@ export const AIBatch: React.FC = () => {
 
             <div style={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
               {queue.length === 0 ? (
-                <div onClick={handleSelectFiles} className="drop-zone" style={{ padding: '40px 0' }}>
+                <div
+                  onClick={handleSelectFiles}
+                  onDragOver={(e) => { e.preventDefault(); setQueueDragOver(true); }}
+                  onDragLeave={() => setQueueDragOver(false)}
+                  onDrop={(e) => handleNativeDrop(e, 'queue')}
+                  className="drop-zone"
+                  style={{
+                    padding: '40px 0',
+                    ['--wails-drop-target' as any]: 'drop',
+                    borderColor: queueDragOver ? 'var(--color-accent-hover)' : undefined,
+                    background: queueDragOver ? 'var(--color-accent-glow)' : undefined,
+                  }}
+                >
                   <div className="empty-state-icon">+</div>
-                  拖拽或点击添加图片到队列<br />
+                  {queueDragOver ? '释放以添加图片到队列' : '拖拽或点击添加图片到队列'}<br />
                   <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>支持 JPG/PNG/WebP/BMP/TIFF/GIF</span>
                 </div>
               ) : (
@@ -978,28 +1139,39 @@ export const AIBatch: React.FC = () => {
                     {/* AI result thumbnails — inline on the same row */}
                     {item.status === 'completed' && item.outputPaths && item.outputPaths.length > 0 && (
                       <div className="queue-results">
-                        {item.outputPaths.slice(0, 5).map((outPath, idx) => (
+                        {item.outputPaths.slice(0, 4).map((outPath, idx) => (
                           <button
                             key={outPath}
                             className="queue-result-thumb"
                             onClick={() => openPreview(item, outPath)}
                             title={fileNameFromPath(outPath)}
                             onMouseMove={(e) => {
-                              setHoverPreviewImg(toFileUrl(outPath));
+                              setHoverPreviewImg(item.resultHoverUrls?.[idx] || item.thumbUrls?.[idx] || null);
                               setHoverPreviewPos({ x: e.clientX, y: e.clientY });
                             }}
                             onMouseEnter={() => setHoverPreviewVisible(true)}
                             onMouseLeave={() => setHoverPreviewVisible(false)}
                           >
                             {item.thumbUrls?.[idx] ? (
-                              <img src={item.thumbUrls[idx]} alt={`AI result ${idx + 1}`} />
+                              <>
+                                <img
+                                  src={item.thumbUrls[idx]}
+                                  alt={`AI result ${idx + 1}`}
+                                  onError={(e) => {
+                                    e.currentTarget.style.display = 'none';
+                                    const fallback = e.currentTarget.nextElementSibling as HTMLElement | null;
+                                    if (fallback) fallback.style.display = 'inline';
+                                  }}
+                                />
+                                <span style={{ display: 'none' }}>{idx + 1}</span>
+                              </>
                             ) : (
                               <span>{idx + 1}</span>
                             )}
                           </button>
                         ))}
-                        {item.outputPaths.length > 5 && (
-                          <span className="queue-result-more">+{item.outputPaths.length - 5}</span>
+                        {item.outputPaths.length > 4 && (
+                          <span className="queue-result-more">+{item.outputPaths.length - 4}</span>
                         )}
                       </div>
                     )}

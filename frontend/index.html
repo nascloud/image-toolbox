@@ -7,6 +7,42 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600;9..40,700&family=Nunito:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <script>
+        (function () {
+            function isFileDrop(event) {
+                var types = event.dataTransfer && event.dataTransfer.types;
+                return !!types && Array.prototype.indexOf.call(types, 'Files') !== -1;
+            }
+
+            function droppedFiles(event) {
+                if (event.dataTransfer && event.dataTransfer.items) {
+                    return Array.prototype.map.call(event.dataTransfer.items, function (item) {
+                        return item.kind === 'file' ? item.getAsFile() : null;
+                    }).filter(Boolean);
+                }
+                return event.dataTransfer && event.dataTransfer.files
+                    ? Array.prototype.slice.call(event.dataTransfer.files)
+                    : [];
+            }
+
+            window.addEventListener('dragover', function (event) {
+                if (!isFileDrop(event)) return;
+                event.preventDefault();
+                event.stopPropagation();
+                event.dataTransfer.dropEffect = 'copy';
+            }, true);
+
+            window.addEventListener('drop', function (event) {
+                if (!isFileDrop(event)) return;
+                event.preventDefault();
+                event.stopPropagation();
+
+                if (window.runtime && window.runtime.ResolveFilePaths) {
+                    window.runtime.ResolveFilePaths(event.x, event.y, droppedFiles(event));
+                }
+            }, true);
+        })();
+    </script>
 </head>
 <body>
 <div id="root"></div>
