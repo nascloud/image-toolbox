@@ -43,16 +43,20 @@ func RunSliceBatch(ctx context.Context, req model.SliceRequest, progressCh chan<
 		outBase := strings.TrimSuffix(filepath.Base(basePath), ".png")
 
 		for i, slice := range slices {
-			outPath := filepath.Join(outDir, fmt.Sprintf("%s_slice_%d.png", outBase, i+1))
+			outPath := sliceOutputPath(outDir, outBase, i+1)
 			if err := savePNG(slice, outPath); err != nil {
 				return "", fmt.Errorf("save slice %d: %w", i, err)
 			}
 		}
-		return filepath.Join(outDir, fmt.Sprintf("%s_slice_1.png", outBase)), nil
+		return sliceOutputPath(outDir, outBase, 1), nil
 	}
 
 	results := RunConcurrent(ctx, req.SourcePaths, jobFn, 4, progressCh)
 	return aggregateResults(results)
+}
+
+func sliceOutputPath(outDir, outBase string, index int) string {
+	return filepath.Join(outDir, fmt.Sprintf("%s_S%03d.png", outBase, index))
 }
 
 func savePNG(img image.Image, path string) error {
