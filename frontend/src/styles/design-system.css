@@ -1065,11 +1065,13 @@ input[type="range"]::-moz-range-thumb {
   z-index: var(--z-overlay);
   pointer-events: none;
   box-shadow: var(--shadow-lg);
+  overflow: hidden;
+  border-radius: var(--radius-lg);
 }
 
 .hover-preview img {
   max-width: 640px;
   max-height: 640px;
-  border-radius: var(--radius-lg);
   object-fit: contain;
+  display: block;
 }
