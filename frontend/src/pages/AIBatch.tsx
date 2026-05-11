@@ -387,7 +387,7 @@ export const AIBatch: React.FC = () => {
     // Reset item to processing immediately
     setQueue(prev => prev.map(i =>
       i.id === id ? { ...i, status: 'processing' as const, error: undefined,
-        outputPath: undefined, outputPaths: undefined,
+        results: undefined, outputPath: undefined, outputPaths: undefined,
         thumbUrl: undefined, thumbUrls: undefined, resultHoverUrls: undefined } : i
     ));
     setProcessing(true);
@@ -408,13 +408,13 @@ export const AIBatch: React.FC = () => {
       const r = result.results[0];
       setQueue(prev => prev.map(i => {
         if (i.id !== id) return i;
-        if (r.success) {
-          const outputPaths = Array.isArray(r.outputPaths) && r.outputPaths.length > 0
-            ? r.outputPaths
-            : r.outputPath ? [r.outputPath] : [];
+        const outputPaths = Array.isArray(r.outputPaths) && r.outputPaths.length > 0
+          ? r.outputPaths
+          : r.outputPath ? [r.outputPath] : [];
+        if (r.success && outputPaths.length > 0) {
           return { ...i, status: 'completed' as const, outputPath: outputPaths[0], outputPaths };
         }
-        return { ...i, status: 'error' as const, error: r.error || '处理失败' };
+        return { ...i, status: 'error' as const, error: r.success ? '未返回输出文件路径' : (r.error || '处理失败') };
       }));
 
       // Load thumbnails on success
@@ -636,7 +636,7 @@ export const AIBatch: React.FC = () => {
     setQueue(prev => prev.map(i =>
       (i.status === 'error' || i.status === 'completed')
         ? { ...i, status: 'processing' as const, error: undefined,
-          outputPath: undefined, outputPaths: undefined,
+          results: undefined, outputPath: undefined, outputPaths: undefined,
           thumbUrl: undefined, thumbUrls: undefined, resultHoverUrls: undefined }
         : i
     ));
@@ -665,6 +665,7 @@ export const AIBatch: React.FC = () => {
 
       let failedCount = 0;
       setQueue(prev => prev.map(i => {
+        if (i.status !== 'processing') return i;
         const r = resultByPath.get(i.path);
         if (r) {
           const outputPaths = Array.isArray(r.outputPaths) && r.outputPaths.length > 0
@@ -1132,8 +1133,6 @@ export const AIBatch: React.FC = () => {
             <button onClick={clearQueue} className="btn btn-sm btn-ghost">清空</button>
             <button onClick={handleSelectFiles} className="btn btn-sm btn-primary">+ 添加图片</button>
             <button onClick={handleSelectFolder} className="btn btn-sm btn-ghost">添加文件夹</button>
-
-            {/* "全部重试" moved to queue header */}
 
             {completedCount > 0 && (
               <button onClick={async () => {
