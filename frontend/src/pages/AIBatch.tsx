@@ -1133,9 +1133,7 @@ export const AIBatch: React.FC = () => {
             <button onClick={handleSelectFiles} className="btn btn-sm btn-primary">+ 添加图片</button>
             <button onClick={handleSelectFolder} className="btn btn-sm btn-ghost">添加文件夹</button>
 
-            {queue.filter(i => i.status === 'error').length > 0 && (
-              <button onClick={retryAll} className="btn btn-sm" style={{ border: '1px solid var(--color-warning)', color: 'var(--color-warning)', background: 'transparent' }}>全部重试</button>
-            )}
+            {/* "全部重试" moved to queue header */}
 
             {completedCount > 0 && (
               <button onClick={async () => {
@@ -1235,9 +1233,21 @@ export const AIBatch: React.FC = () => {
               ['--wails-drop-target' as any]: 'drop',
             }}
           >
-            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0 10px', fontSize: 12, color: 'var(--color-text-muted)', borderBottom: '1px solid var(--color-border-subtle)', marginBottom: 8 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0 10px', fontSize: 12, color: 'var(--color-text-muted)', borderBottom: '1px solid var(--color-border-subtle)', marginBottom: 8 }}>
               <span>图片队列</span>
-              <span>{completedCount}/{queue.length} 完成</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                {queue.filter(i => i.status === 'error' || i.status === 'completed').length > 0 && (
+                  <button
+                    onClick={retryAll}
+                    disabled={processing}
+                    className="btn btn-sm"
+                    style={{ border: '1px solid var(--color-warning)', color: 'var(--color-warning)', background: 'transparent', fontSize: 11, padding: '2px 10px' }}
+                  >
+                    全部重试
+                  </button>
+                )}
+                <span>{completedCount}/{queue.length} 完成</span>
+              </div>
             </div>
 
             <div style={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
@@ -1361,7 +1371,16 @@ export const AIBatch: React.FC = () => {
                           } catch { /* no-op */ }
                         }} className="btn btn-sm" title="下载">⬇</button>
                       )}
-                      {item.status === 'error' && <button onClick={() => retryItem(item.id)} className="btn btn-sm btn-ghost" style={{ border: '1px solid var(--color-warning)', color: 'var(--color-warning)' }}>重试</button>}
+                      {(item.status === 'error' || item.status === 'completed') && (
+                        <button
+                          onClick={() => retryItem(item.id)}
+                          className="btn btn-sm btn-ghost"
+                          style={{ border: '1px solid var(--color-warning)', color: 'var(--color-warning)' }}
+                          disabled={processing}
+                        >
+                          重试
+                        </button>
+                      )}
                       <button onClick={() => removeItem(item.id)} className="btn-icon">×</button>
                     </div>
                   </div>
