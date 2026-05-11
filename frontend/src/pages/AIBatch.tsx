@@ -379,8 +379,73 @@ export const AIBatch: React.FC = () => {
     } catch { /* no-op */ }
   };
 
-  const retryItem = (id: number) => {
-    setQueue(prev => prev.map(i => i.id === id ? { ...i, status: 'pending' as const, error: undefined, results: undefined, outputPath: undefined, outputPaths: undefined, thumbUrl: undefined, thumbUrls: undefined, resultHoverUrls: undefined } : i));
+  const retryItem = async (id: number) => {
+    if (processing) return;
+    const item = queue.find(i => i.id === id);
+    if (!item) return;
+
+    // Reset item to processing immediately
+    setQueue(prev => prev.map(i =>
+      i.id === id ? { ...i, status: 'processing' as const, error: undefined,
+        outputPath: undefined, outputPaths: undefined,
+        thumbUrl: undefined, thumbUrls: undefined, resultHoverUrls: undefined } : i
+    ));
+    setProcessing(true);
+
+    try {
+      const result = await (window as any).go.main.App.RunAIImageBatch(
+        buildBatchRequest([item.path])
+      );
+
+      if (!result || !result.results || result.results.length === 0) {
+        setQueue(prev => prev.map(i =>
+          i.id === id ? { ...i, status: 'error' as const, error: result?.error || '处理失败' } : i
+        ));
+        setProcessing(false);
+        return;
+      }
+
+      const r = result.results[0];
+      setQueue(prev => prev.map(i => {
+        if (i.id !== id) return i;
+        if (r.success) {
+          const outputPaths = Array.isArray(r.outputPaths) && r.outputPaths.length > 0
+            ? r.outputPaths
+            : r.outputPath ? [r.outputPath] : [];
+          return { ...i, status: 'completed' as const, outputPath: outputPaths[0], outputPaths };
+        }
+        return { ...i, status: 'error' as const, error: r.error || '处理失败' };
+      }));
+
+      // Load thumbnails on success
+      if (r.success) {
+        const outputPaths = Array.isArray(r.outputPaths) && r.outputPaths.length > 0
+          ? r.outputPaths
+          : r.outputPath ? [r.outputPath] : [];
+        if (outputPaths.length > 0) {
+          const thumbUrls = await Promise.all(outputPaths.map(async (outPath: string) => {
+            try {
+              const dataUrl = await (window as any).go.main.App.ReadImageThumbnail(outPath, 80);
+              return dataUrl && dataUrl.startsWith('data:') ? dataUrl : '';
+            } catch { return ''; }
+          }));
+          const resultHoverUrls = await Promise.all(outputPaths.map(async (outPath: string) => {
+            try {
+              const dataUrl = await (window as any).go.main.App.ReadImageThumbnail(outPath, 640);
+              return dataUrl && dataUrl.startsWith('data:') ? dataUrl : '';
+            } catch { return ''; }
+          }));
+          setQueue(prev => prev.map(i =>
+            i.id === id ? { ...i, thumbUrl: thumbUrls[0], thumbUrls, resultHoverUrls } : i
+          ));
+        }
+      }
+    } catch (err: any) {
+      setQueue(prev => prev.map(i =>
+        i.id === id ? { ...i, status: 'error' as const, error: err.message } : i
+      ));
+    }
+    setProcessing(false);
   };
 
   const removeItem = (id: number) => {
