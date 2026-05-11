@@ -625,11 +625,96 @@ export const AIBatch: React.FC = () => {
     cancelRef.current = false;
   };
 
-  const retryAll = () => {
+  const retryAll = async () => {
     if (processing) return;
+    const toRetry = queue.filter(i => i.status === 'error' || i.status === 'completed');
+    if (toRetry.length === 0) return;
+
+    setProcessing(true);
+
+    // Mark all toRetry items as processing
     setQueue(prev => prev.map(i =>
-      i.status === 'error' ? { ...i, status: 'pending' as const, error: undefined, results: undefined, outputPath: undefined, outputPaths: undefined, thumbUrl: undefined, thumbUrls: undefined, resultHoverUrls: undefined } : i
+      (i.status === 'error' || i.status === 'completed')
+        ? { ...i, status: 'processing' as const, error: undefined,
+          outputPath: undefined, outputPaths: undefined,
+          thumbUrl: undefined, thumbUrls: undefined, resultHoverUrls: undefined }
+        : i
     ));
+
+    try {
+      const result = await (window as any).go.main.App.RunAIImageBatch(
+        buildBatchRequest(toRetry.map(i => i.path))
+      );
+
+      if (!result || !result.results) {
+        if (!result) showToast('处理失败：无返回结果', 'error');
+        setQueue(prev => prev.map(i =>
+          (i.status === 'processing')
+            ? { ...i, status: 'error' as const, error: result?.error || '处理失败' }
+            : i
+        ));
+        setProcessing(false);
+        return;
+      }
+
+      // Map results back to queue items by source path
+      const resultByPath = new Map<string, any>();
+      for (const r of result.results) {
+        if (r.sourcePath) resultByPath.set(r.sourcePath, r);
+      }
+
+      let failedCount = 0;
+      setQueue(prev => prev.map(i => {
+        const r = resultByPath.get(i.path);
+        if (r) {
+          const outputPaths = Array.isArray(r.outputPaths) && r.outputPaths.length > 0
+            ? r.outputPaths
+            : r.outputPath ? [r.outputPath] : [];
+          if (r.success && outputPaths.length > 0) {
+            return { ...i, status: 'completed' as const, outputPath: outputPaths[0], outputPaths };
+          } else {
+            failedCount++;
+            return { ...i, status: 'error' as const, error: r.error || '处理失败' };
+          }
+        }
+        return { ...i, status: 'error' as const, error: '未返回处理结果' };
+      }));
+
+      // Load thumbnails for all completed items
+      const completedResults = result.results.filter((r: any) => r.success);
+      await Promise.all(completedResults.map(async (r: any) => {
+        const outputPaths = Array.isArray(r.outputPaths) && r.outputPaths.length > 0
+          ? r.outputPaths
+          : r.outputPath ? [r.outputPath] : [];
+        if (outputPaths.length === 0) return;
+        const thumbUrls = await Promise.all(outputPaths.map(async (outPath: string) => {
+          try {
+            const dataUrl = await (window as any).go.main.App.ReadImageThumbnail(outPath, 80);
+            return dataUrl && dataUrl.startsWith('data:') ? dataUrl : '';
+          } catch { return ''; }
+        }));
+        const resultHoverUrls = await Promise.all(outputPaths.map(async (outPath: string) => {
+          try {
+            const dataUrl = await (window as any).go.main.App.ReadImageThumbnail(outPath, 640);
+            return dataUrl && dataUrl.startsWith('data:') ? dataUrl : '';
+          } catch { return ''; }
+        }));
+        setQueue(prev => prev.map(i => {
+          if (i.path !== r.sourcePath) return i;
+          return { ...i, thumbUrl: thumbUrls[0], thumbUrls, resultHoverUrls };
+        }));
+      }));
+
+      if (failedCount > 0) showToast(`${failedCount} 张处理失败`, 'error');
+    } catch (err: any) {
+      showToast(`处理出错: ${err.message}`, 'error');
+      setQueue(prev => prev.map(i =>
+        (i.status === 'processing')
+          ? { ...i, status: 'error' as const, error: err.message }
+          : i
+      ));
+    }
+    setProcessing(false);
   };
 
   // ── Preview ──
