@@ -211,6 +211,34 @@ export const AIBatch: React.FC = () => {
   const cancelRef = useRef(false);
   const toastTimer = useRef<ReturnType<typeof setTimeout>>();
 
+  // Build RunAIImageBatch request from current panel parameters for given source paths
+  function buildBatchRequest(paths: string[]) {
+    const outputDir = aiOutputDir || (paths[0]?.substring(0, paths[0].lastIndexOf('\\')) ?? '');
+    const downloadW = downloadWidth === 'custom'
+      ? (parseInt(customWidth) || 0)
+      : downloadWidth === 'original' ? 0 : parseInt(downloadWidth);
+    const maxGeneratedImages = Math.max(1, 15 - (1 + referenceImages.length));
+    return {
+      sourcePaths: paths,
+      outputDir,
+      prompt,
+      model,
+      size,
+      seed: isGuidanceSupported && seed >= 0 ? seed : -1,
+      outputFormat: isOutputFormatSupported ? outputFormat : 'jpeg',
+      watermark,
+      guidanceScale: isGuidanceSupported ? guidanceScale : 0,
+      responseFormat,
+      sequentialImageGeneration: isSequentialSupported ? sequentialMode : 'disabled',
+      maxImages: Math.min(maxImages, maxGeneratedImages),
+      optimizePromptMode: isFastPromptOptimizeSupported ? optimizePromptMode : 'standard',
+      webSearch: isWebSearchSupported && webSearch,
+      concurrent: Math.min(concurrent, paths.length),
+      referenceImages,
+      downloadWidth: isNaN(downloadW) ? 0 : downloadW,
+    };
+  }
+
   // Clean up toast timer on unmount
   useEffect(() => {
     return () => {
@@ -444,30 +472,9 @@ export const AIBatch: React.FC = () => {
     try {
       if (cancelRef.current) { setProcessing(false); return; }
 
-      const outputDir = aiOutputDir || pendingItems[0].path.substring(0, pendingItems[0].path.lastIndexOf('\\'));
-      const downloadW = downloadWidth === 'custom'
-        ? (parseInt(customWidth) || 0)
-        : downloadWidth === 'original' ? 0 : parseInt(downloadWidth);
-      const maxGeneratedImages = Math.max(1, 15 - (1 + referenceImages.length));
-      const result = await (window as any).go.main.App.RunAIImageBatch({
-        sourcePaths: pendingItems.map(i => i.path),
-        outputDir,
-        prompt,
-        model,
-        size,
-        seed: isGuidanceSupported && seed >= 0 ? seed : -1,
-        outputFormat: isOutputFormatSupported ? outputFormat : 'jpeg',
-        watermark,
-        guidanceScale: isGuidanceSupported ? guidanceScale : 0,
-        responseFormat,
-        sequentialImageGeneration: isSequentialSupported ? sequentialMode : 'disabled',
-        maxImages: Math.min(maxImages, maxGeneratedImages),
-        optimizePromptMode: isFastPromptOptimizeSupported ? optimizePromptMode : 'standard',
-        webSearch: isWebSearchSupported && webSearch,
-        concurrent: Math.min(concurrent, pendingItems.length),
-        referenceImages,
-        downloadWidth: isNaN(downloadW) ? 0 : downloadW,
-      });
+      const result = await (window as any).go.main.App.RunAIImageBatch(
+        buildBatchRequest(pendingItems.map(i => i.path))
+      );
 
       if (cancelRef.current || !result) {
         if (!result) showToast('处理失败：无返回结果', 'error');
