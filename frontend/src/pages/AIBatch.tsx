@@ -628,7 +628,7 @@ export const AIBatch: React.FC = () => {
   const retryAll = async () => {
     if (processing) return;
     const toRetry = queue.filter(i => i.status === 'error' || i.status === 'completed');
-    if (toRetry.length === 0) return;
+    if (toRetry.length === 0) { showToast('没有需要重试的图片', 'warning'); return; }
 
     setProcessing(true);
 
