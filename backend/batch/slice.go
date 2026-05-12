@@ -33,15 +33,15 @@ func RunSliceBatch(ctx context.Context, req model.SliceRequest, progressCh chan<
 		}
 
 		var slices []image.Image
-	switch req.SliceMode {
-	case "height":
-		if req.SliceHeight <= 0 {
-			return "", fmt.Errorf("slice height must be positive")
+		switch req.SliceMode {
+		case "height":
+			if req.SliceHeight <= 0 {
+				return "", fmt.Errorf("slice height must be positive")
+			}
+			slices = backendImage.SliceImageByHeight(img, req.SliceHeight, req.Contrast, req.Saturation)
+		default:
+			slices = backendImage.SliceImage(img, req.SliceCount, req.Contrast, req.Saturation)
 		}
-		slices = backendImage.SliceImageByHeight(img, req.SliceHeight, req.Contrast, req.Saturation)
-	default:
-		slices = backendImage.SliceImage(img, req.SliceCount, req.Contrast, req.Saturation)
-	}
 		if len(slices) == 0 {
 			return "", fmt.Errorf("slice returned 0 slices")
 		}

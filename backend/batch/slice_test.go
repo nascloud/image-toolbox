@@ -64,7 +64,7 @@ func TestRunSliceBatchByHeight(t *testing.T) {
 		t.Fatalf("expected success 1, got result: %+v", result)
 	}
 
-	// A test image is 100x100, so 100px height -> 1 slice
+	// Test image is 10x10; sliceHeight=100 exceeds image height → 1 slice of 10px
 	expected := filepath.Join(outDir, "photo_S001.png")
 	if _, err := os.Stat(expected); err != nil {
 		t.Fatalf("expected slice output %s to exist: %v", expected, err)
