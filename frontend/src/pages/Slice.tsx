@@ -10,7 +10,7 @@ export const Slice: React.FC = () => {
   const [contrast, setContrast] = useState(1.0);
   const [saturation, setSaturation] = useState(1.0);
   const [sliceMode, setSliceMode] = useState<'count' | 'height'>('count');
-  const [sliceHeight, setSliceHeight] = useState(100);
+  const [sliceHeight, setSliceHeight] = useState(1200);
   const [saveModeConfig, setSaveModeConfig] = useState<SaveModeConfig>({ mode: 'subdir', prefixName: 'output', subdirName: 'output', outputDir: '' });
   const { state, startBatch, cancelBatch, openOutputDir } = useBatch();
 
