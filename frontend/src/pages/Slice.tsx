@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ImageList } from '../components/ImageList';
 import { BatchProgress } from '../components/BatchProgress';
 import { useBatch } from '../hooks/useBatch';
@@ -13,6 +13,20 @@ export const Slice: React.FC = () => {
   const [sliceHeight, setSliceHeight] = useState(1200);
   const [saveModeConfig, setSaveModeConfig] = useState<SaveModeConfig>({ mode: 'subdir', prefixName: 'output', subdirName: 'output', outputDir: '' });
   const { state, startBatch, cancelBatch, openOutputDir } = useBatch();
+
+  // Auto-recommend slice height based on the first image dimensions.
+  // For 宝贝详情图 (h/w ≤ 2), recommend height ≈ width × 1.5.
+  useEffect(() => {
+    if (sliceMode !== 'height' || files.length === 0) return;
+    (async () => {
+      try {
+        const info = await (window as any).go.main.App.GetImageInfo(files[0]);
+        if (info?.width && info?.height && info.height / info.width <= 2) {
+          setSliceHeight(Math.max(1, Math.round(info.width * 1.5)));
+        }
+      } catch { /* ignore */ }
+    })();
+  }, [sliceMode, files[0]]);
 
   const handleSelectFiles = async () => {
     try {
