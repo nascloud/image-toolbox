@@ -734,6 +734,11 @@ export const AIBatch: React.FC = () => {
 
     if (outputPath) {
       await loadCompareImages(item, outputPath);
+      // Also load source image for single-mode fallback
+      try {
+        const dataUrl = await (window as any).go.main.App.ReadImageAsBase64(item.path);
+        if (dataUrl) setPreviewDataUrl(dataUrl);
+      } catch { /* no-op */ }
     } else {
       try {
         const dataUrl = await (window as any).go.main.App.ReadImageAsBase64(item.path);
@@ -767,6 +772,15 @@ export const AIBatch: React.FC = () => {
     setPreviewDataUrl(null);
     setCompareSourceUrl(null);
     setCompareOutputUrl(null);
+  };
+
+  // Load source image for single-mode preview fallback
+  const loadPreviewSource = async () => {
+    if (!selectedPreview) return;
+    try {
+      const dataUrl = await (window as any).go.main.App.ReadImageAsBase64(selectedPreview.path);
+      if (dataUrl) setPreviewDataUrl(dataUrl);
+    } catch { /* no-op */ }
   };
 
   // ── Styles ──
@@ -820,7 +834,11 @@ export const AIBatch: React.FC = () => {
               <button onClick={() => {
                 const next = !compareMode;
                 setCompareMode(next);
-                if (next && !compareSourceUrl) loadCompareImages(selectedPreview);
+                if (next && !compareSourceUrl) {
+                  loadCompareImages(selectedPreview);
+                } else if (!next && !previewDataUrl && selectedPreview) {
+                  loadPreviewSource();
+                }
               }} className="btn btn-sm" style={{ background: compareMode ? 'var(--color-accent)' : 'var(--color-bg-elevated)' }}>
                 {compareMode ? '单图' : '对比'}
               </button>
