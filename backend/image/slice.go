@@ -49,6 +49,42 @@ func SliceImage(src image.Image, sliceCount int, contrast, saturation float64) [
 	return slices
 }
 
+// SliceImageByHeight divides an image into fixed-height horizontal strips.
+// The last strip may be shorter if the image height is not evenly divisible.
+func SliceImageByHeight(src image.Image, sliceHeight int, contrast, saturation float64) []image.Image {
+	img := src
+	if contrast != 1.0 {
+		img = adjustContrast(img, contrast)
+	}
+	if saturation != 1.0 {
+		img = applySaturation(img, saturation)
+	}
+
+	bounds := img.Bounds()
+	width := bounds.Dx()
+	height := bounds.Dy()
+
+	if sliceHeight <= 0 {
+		return nil
+	}
+
+	var slices []image.Image
+	for y := 0; y < height; y += sliceHeight {
+		h := sliceHeight
+		if y+h > height {
+			h = height - y
+		}
+		slice := image.NewRGBA(image.Rect(0, 0, width, h))
+		for sy := 0; sy < h; sy++ {
+			for sx := 0; sx < width; sx++ {
+				slice.Set(sx, sy, img.At(sx, y+sy))
+			}
+		}
+		slices = append(slices, slice)
+	}
+	return slices
+}
+
 // calcSliceHeights generates random slice heights that sum to imageHeight.
 func calcSliceHeights(imageHeight, sliceCount, minHeight int) []int {
 	avgHeight := float64(imageHeight) / float64(sliceCount)
