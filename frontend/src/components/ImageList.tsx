@@ -115,7 +115,7 @@ export const ImageList: React.FC<ImageListProps> = ({ files, onRemove, onClear, 
       style={{
         borderRadius: 'var(--radius-2xl)',
         ['--wails-drop-target' as any]: 'drop',
-        border: '2px dashed var(--color-border-default)',
+        border: '2px dashed',
         borderColor: dragOver ? 'var(--color-accent)' : 'var(--color-border-default)',
         background: dragOver ? 'var(--color-accent-glow)' : undefined,
         transition: 'border-color 150ms ease, background 150ms ease',
