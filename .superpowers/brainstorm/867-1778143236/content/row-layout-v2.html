@@ -1,0 +1,93 @@
+<h2>AI Batch 结果布局 v2</h2>
+<p class="subtitle">缩略图 40×40（与原图一致），文件名最小宽度 + 截断</p>
+
+<div class="section">
+  <h3>单行布局</h3>
+  <div style="background: #1a2f2410; border-radius: 12px; padding: 16px; border: 2px solid #40916c;">
+    <div style="display:flex; align-items:center; gap:10px; padding:8px 4px;">
+      <!-- Source thumb: 40x40 -->
+      <div style="width:40px; height:40px; background:#d8f3dc; border-radius:6px; display:flex; align-items:center; justify-content:center; font-size:16px; flex-shrink:0;">🖼</div>
+
+      <!-- Filename: min-width + truncate -->
+      <div style="font-size:13px; color:#2d6a4f; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:120px; flex-shrink:0;">IMG_2024_photo_vacation_sunset_beach.jpg</div>
+
+      <!-- Spacer -->
+      <div style="flex:1; min-width:20px;"></div>
+
+      <!-- AI Results: 40x40 each, max 5 + N -->
+      <div style="display:flex; align-items:center; gap:5px;">
+        <div style="width:40px; height:40px; border:2px solid #40916c; border-radius:6px; overflow:hidden; cursor:pointer; background:linear-gradient(135deg,#40916c,#52b788);"></div>
+        <div style="width:40px; height:40px; border:2px solid #40916c; border-radius:6px; overflow:hidden; cursor:pointer; background:linear-gradient(135deg,#40916c,#74c69d);"></div>
+        <div style="width:40px; height:40px; border:2px solid #40916c; border-radius:6px; overflow:hidden; cursor:pointer; background:linear-gradient(135deg,#40916c,#95d5b2);"></div>
+        <div style="width:40px; height:40px; border:2px solid #40916c; border-radius:6px; overflow:hidden; cursor:pointer; background:linear-gradient(135deg,#52b788,#b7e4c7);"></div>
+        <div style="width:40px; height:40px; border:2px solid #40916c; border-radius:6px; overflow:hidden; cursor:pointer; background:linear-gradient(135deg,#74c69d,#d8f3dc);"></div>
+        <div style="min-width:40px; height:40px; display:inline-flex; align-items:center; justify-content:center; background:#f6faf8; border-radius:6px; border:1px solid #d8f3dc; font-size:13px; color:#40916c; font-weight:600;">+3</div>
+      </div>
+
+      <!-- Status badge -->
+      <span style="padding:2px 10px; background:#d8f3dc; border-radius:4px; font-size:11px; color:#2d6a4f; white-space:nowrap; flex-shrink:0;">✓ 完成</span>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>完整的列表效果</h3>
+  <div style="background: #1a2f2410; border-radius: 12px; padding: 12px; border: 1px solid #e2eae5;">
+    <!-- Row 1: 2 results -->
+    <div style="display:flex; align-items:center; gap:10px; padding:8px 4px; border-bottom:1px solid #e2eae5;">
+      <div style="width:40px; height:40px; background:#d8f3dc; border-radius:6px; display:flex; align-items:center; justify-content:center; font-size:16px; flex-shrink:0;">🖼</div>
+      <span style="font-size:13px; color:#2d6a4f; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:120px; flex-shrink:0;">vacation_beach.jpg</span>
+      <div style="flex:1; min-width:20px;"></div>
+      <div style="display:flex; gap:4px;">
+        <div style="width:40px; height:40px; border-radius:6px; background:linear-gradient(135deg,#40916c,#52b788); cursor:pointer;"></div>
+        <div style="width:40px; height:40px; border-radius:6px; background:linear-gradient(135deg,#40916c,#74c69d); cursor:pointer;"></div>
+      </div>
+      <span style="font-size:10px; padding:1px 6px; background:#d8f3dc; border-radius:3px; color:#2d6a4f; flex-shrink:0;">✓ 完成</span>
+    </div>
+
+    <!-- Row 2: 8 results (show 5 + +3) -->
+    <div style="display:flex; align-items:center; gap:10px; padding:8px 4px; border-bottom:1px solid #e2eae5;">
+      <div style="width:40px; height:40px; background:#d8f3dc; border-radius:6px; display:flex; align-items:center; justify-content:center; font-size:16px; flex-shrink:0;">🖼</div>
+      <span style="font-size:13px; color:#2d6a4f; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:120px; flex-shrink:0;">product_shot_front.png</span>
+      <div style="flex:1; min-width:20px;"></div>
+      <div style="display:flex; gap:4px;">
+        <div style="width:40px; height:40px; border-radius:6px; background:linear-gradient(135deg,#40916c,#52b788); cursor:pointer;"></div>
+        <div style="width:40px; height:40px; border-radius:6px; background:linear-gradient(135deg,#40916c,#74c69d); cursor:pointer;"></div>
+        <div style="width:40px; height:40px; border-radius:6px; background:linear-gradient(135deg,#40916c,#95d5b2); cursor:pointer;"></div>
+        <div style="width:40px; height:40px; border-radius:6px; background:linear-gradient(135deg,#52b788,#b7e4c7); cursor:pointer;"></div>
+        <div style="width:40px; height:40px; border-radius:6px; background:linear-gradient(135deg,#74c69d,#d8f3dc); cursor:pointer;"></div>
+        <div style="min-width:40px; height:40px; display:inline-flex; align-items:center; justify-content:center; background:#f6faf8; border-radius:6px; border:1px solid #d8f3dc; font-size:12px; color:#40916c; font-weight:600;">+3</div>
+      </div>
+      <span style="font-size:10px; padding:1px 6px; background:#d8f3dc; border-radius:3px; color:#2d6a4f; flex-shrink:0;">✓ 完成</span>
+    </div>
+
+    <!-- Row 3: processing state (no results yet) -->
+    <div style="display:flex; align-items:center; gap:10px; padding:8px 4px;">
+      <div style="width:40px; height:40px; background:#d8f3dc; border-radius:6px; display:flex; align-items:center; justify-content:center; font-size:16px; flex-shrink:0; opacity:0.5;">🖼</div>
+      <span style="font-size:13px; color:#2d6a4f; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:120px; flex-shrink:0;">document_scan.png</span>
+      <div style="flex:1; min-width:20px;"></div>
+      <!-- No results yet -->
+      <span style="font-size:10px; padding:1px 6px; background:#e9c46a15; border-radius:3px; color:#457b9d; border:1px solid #457b9d; flex-shrink:0; display:flex; align-items:center; gap:4px;">
+        <span style="width:6px; height:6px; border-radius:50%; background:#457b9d; animation:pulse 1.5s ease-in-out infinite;"></span> 处理中
+      </span>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>Hover 预览行为</h3>
+  <div style="display:flex; gap:12px;">
+    <div style="flex:1; background:#1a2f2410; border-radius:12px; padding:16px; border:1px solid #e2eae5;">
+      <h4>原图缩略图</h4>
+      <p style="font-size:12px; color:#2d6a4f;">鼠标悬停 → 显示 640px 大图预览（现有功能，保持不变）</p>
+    </div>
+    <div style="flex:1; background:#1a2f2410; border-radius:12px; padding:16px; border:2px solid #40916c;">
+      <h4>AI 结果缩略图 ✅ 新功能</h4>
+      <p style="font-size:12px; color:#2d6a4f;">鼠标悬停 → 显示对应的 AI 生成大图预览（复用现有 hover-preview 机制）</p>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <p class="subtitle">这样是否符合你的预期？如果没问题，我将进入技术方案选型阶段。</p>
+</div>

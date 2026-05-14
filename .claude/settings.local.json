@@ -20,8 +20,25 @@
       "Bash(wails version *)",
       "Bash(wails init *)",
       "Bash(wails build *)",
-      "Bash(git diff-tree *)"
+      "Bash(git diff-tree *)",
+      "Bash(npx tsc *)",
+      "Bash(go test *)",
+      "Bash(git push *)",
+      "Bash(go env *)",
+      "Bash(ls \"$\\(go env GOMODCACHE\\)/golang.org/x/image@v0.12.0/font/\")",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(go build *)",
+      "PowerShell(Get-Content -Path \"F:\\\\Python\\\\imagetool\\\\backend\\\\batch\\\\slice.go\" -Encoding UTF8 | Select-Object -First 50 | ForEach-Object -Begin { $i = 0 } -Process { $i++; $tabs = [regex]::Matches\\($_, \"`t\"\\).Count; Write-Host \"$i\\($tabs\\): $_\" })",
+      "Bash(gofmt -w backend/batch/slice.go)",
+      "Bash(gofmt -d backend/batch/slice.go)",
+      "PowerShell(Get-Content \"F:\\\\Python\\\\imagetool\\\\frontend\\\\wailsjs\\\\go\\\\models.ts\" -Encoding UTF8 | Select-Object -Index \\(139..164\\))",
+      "PowerShell(Get-Content \"F:\\\\Python\\\\imagetool\\\\frontend\\\\wailsjs\\\\go\\\\models.ts\" -Encoding UTF8 | Select-Object -Index 159, 160, 161 | ForEach-Object { $_ -replace \"`t\", \"<TAB>\" -replace \" \", \"·\" })",
+      "PowerShell(Get-Content \"F:\\\\Python\\\\imagetool\\\\frontend\\\\wailsjs\\\\go\\\\models.ts\" | Select-Object -Index \\(145,146,147,148\\))",
+      "Bash(npm run *)",
+      "Bash(npm test *)",
+      "Bash(git branch *)",
+      "Bash(gh pr *)"
     ],
-	"bypassPermissions": true
+    "bypassPermissions": true
   }
 }

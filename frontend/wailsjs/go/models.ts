@@ -140,7 +140,9 @@ export namespace model {
 	export class SliceRequest {
 	    sourcePaths: string[];
 	    outputDir: string;
+	    sliceMode: string;
 	    sliceCount: number;
+	    sliceHeight: number;
 	    contrast: number;
 	    saturation: number;
 	    saveMode?: string;
@@ -155,7 +157,9 @@ export namespace model {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.sourcePaths = source["sourcePaths"];
 	        this.outputDir = source["outputDir"];
+	        this.sliceMode = source["sliceMode"];
 	        this.sliceCount = source["sliceCount"];
+	        this.sliceHeight = source["sliceHeight"];
 	        this.contrast = source["contrast"];
 	        this.saturation = source["saturation"];
 	        this.saveMode = source["saveMode"];
