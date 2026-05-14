@@ -115,9 +115,11 @@ export const ImageList: React.FC<ImageListProps> = ({ files, onRemove, onClear, 
       style={{
         borderRadius: 'var(--radius-2xl)',
         ['--wails-drop-target' as any]: 'drop',
-        outline: dragOver ? '2px dashed var(--color-accent)' : undefined,
-        outlineOffset: 2,
-        transition: 'outline 150ms ease',
+        border: '2px dashed var(--color-border-default)',
+        borderColor: dragOver ? 'var(--color-accent)' : 'var(--color-border-default)',
+        background: dragOver ? 'var(--color-accent-glow)' : undefined,
+        transition: 'border-color 150ms ease, background 150ms ease',
+        padding: 'var(--space-5)',
         flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0,
       }}
     >
