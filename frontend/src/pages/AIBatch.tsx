@@ -369,7 +369,9 @@ export const AIBatch: React.FC = () => {
     try {
       const result = await (window as any).go.main.App.SelectFiles();
       if (result) {
-        setLooseFilePaths(prev => [...prev, ...result.filter((p: string) => !prev.includes(p))]);
+        const sourceFiles = new Set(folderSources.flatMap(s => s.scannedFiles));
+        const filtered = result.filter((p: string) => !sourceFiles.has(p));
+        setLooseFilePaths(prev => [...prev, ...filtered.filter((p: string) => !prev.includes(p))]);
         addFiles(result);
       }
     } catch { /* no-op */ }
@@ -463,8 +465,6 @@ export const AIBatch: React.FC = () => {
   const removeItem = (id: number) => {
     setQueue(prev => prev.filter(i => i.id !== id));
   };
-
-  const clearQueue = () => { setQueue([]); setFolderSources([]); setLooseFilePaths([]); };
 
   // ── Reference Images ──
   const addReferenceImages = useCallback((paths: string[]) => {
@@ -1180,9 +1180,11 @@ export const AIBatch: React.FC = () => {
                   const oldPaths = new Set(src.scannedFiles);
                   setQueue(q => q.filter(item => !oldPaths.has(item.path)));
                   addFiles(scanned);
-                  setFolderSources(prev => prev.map(s => s.path === path ? { ...s, recursive, scannedFiles: scanned } : s));
+                  setFolderSources(prev => prev.map(s => s.path === path ? { ...s, recursive, scannedFiles: scanned, error: undefined } : s));
                 }
-              } catch { /* no-op */ }
+              } catch (e) {
+                setFolderSources(prev => prev.map(s => s.path === path ? { ...s, error: `扫描失败: ${(e as any)?.message || '未知错误'}` } : s));
+              }
             }}
             onClear={() => { setFolderSources([]); setLooseFilePaths([]); setQueue([]); }}
           />

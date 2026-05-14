@@ -4,6 +4,7 @@ export interface FolderSource {
   path: string;
   recursive: boolean;
   scannedFiles: string[];
+  error?: string;
 }
 
 interface FolderSourceListProps {
@@ -58,6 +59,11 @@ export const FolderSourceList: React.FC<FolderSourceListProps> = ({
                     仅当前目录
                   </label>
                 </div>
+                {src.error && (
+                  <div className="text-xs text-danger mt-2" style={{ color: 'var(--color-danger)' }}>
+                    ⚠ {src.error}
+                  </div>
+                )}
               </div>
             ))}
             {looseFiles.length > 0 && (

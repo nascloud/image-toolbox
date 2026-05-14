@@ -100,9 +100,11 @@ export const Slice: React.FC = () => {
                   try {
                     const scanned = await (window as any).go.main.App.ScanDirectory(path, recursive);
                     if (scanned) {
-                      setSources(prev => prev.map(s => s.path === path ? { ...s, recursive, scannedFiles: scanned } : s));
+                      setSources(prev => prev.map(s => s.path === path ? { ...s, recursive, scannedFiles: scanned, error: undefined } : s));
                     }
-                  } catch { /* no-op */ }
+                  } catch (e) {
+                    setSources(prev => prev.map(s => s.path === path ? { ...s, error: `扫描失败: ${(e as any)?.message || '未知错误'}` } : s));
+                  }
                 }}
                 onClear={() => { setSources([]); setLooseFiles([]); }}
               />
