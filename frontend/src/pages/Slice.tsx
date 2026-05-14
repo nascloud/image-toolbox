@@ -107,9 +107,8 @@ export const Slice: React.FC = () => {
                 onClear={() => { setSources([]); setLooseFiles([]); }}
               />
               <div className="mt-4" style={{ flex: 1, minHeight: 0 }}>
-                <ImageList files={allFiles} onRemove={i => setLooseFiles(prev => {
-                  const sourceTotal = sources.reduce((sum, s) => sum + s.scannedFiles.length, 0);
-                  const looseIdx = i - sourceTotal;
+    <ImageList files={allFiles} onRemove={i => setLooseFiles(prev => {
+      const looseIdx = i - sources.flatMap(s => s.scannedFiles).length;
                   if (looseIdx >= 0 && looseIdx < prev.length) {
                     return prev.filter((_, j) => j !== looseIdx);
                   }
