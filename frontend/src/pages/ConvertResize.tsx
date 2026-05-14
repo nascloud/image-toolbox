@@ -3,22 +3,24 @@ import { ImageList } from '../components/ImageList';
 import { BatchProgress } from '../components/BatchProgress';
 import { useBatch } from '../hooks/useBatch';
 import { SaveModeSelector, SaveModeConfig } from '../components/SaveModeSelector';
+import { FolderSourceList, FolderSource } from '../components/FolderSourceList';
 
 export const ConvertResize: React.FC = () => {
-  const [files, setFiles] = useState<string[]>([]);
+  const [sources, setSources] = useState<FolderSource[]>([]);
+  const [looseFiles, setLooseFiles] = useState<string[]>([]);
   const [convertTo, setConvertTo] = useState('');
   const [resizeMode, setResizeMode] = useState('');
   const [resizeValue, setResizeValue] = useState(100);
   const [resizeWidth, setResizeWidth] = useState(1440);
   const [resizeHeight, setResizeHeight] = useState(600);
   const [saveModeConfig, setSaveModeConfig] = useState<SaveModeConfig>({ mode: 'subdir', prefixName: 'output', subdirName: 'output', outputDir: '' });
-  const [recursive, setRecursive] = useState(false);
   const { state, startBatch, cancelBatch, openOutputDir } = useBatch();
+  const allFiles = [...sources.flatMap(s => s.scannedFiles), ...looseFiles];
 
   const handleSelectFiles = async () => {
     try {
       const result = await (window as any).go.main.App.SelectFiles();
-      if (result) setFiles(prev => [...prev, ...result]);
+      if (result) setLooseFiles(prev => [...prev, ...result]);
     } catch { /* no-op */ }
   };
 
@@ -26,8 +28,13 @@ export const ConvertResize: React.FC = () => {
     try {
       const dir = await (window as any).go.main.App.SelectDirectory();
       if (dir) {
-        const scanned = await (window as any).go.main.App.ScanDirectory(dir, recursive);
-        if (scanned) setFiles(prev => [...prev, ...scanned]);
+        const scanned = await (window as any).go.main.App.ScanDirectory(dir, false);
+        if (scanned) {
+          setSources(prev => {
+            if (prev.some(s => s.path === dir)) return prev;
+            return [...prev, { path: dir, recursive: false, scannedFiles: scanned }];
+          });
+        }
       }
     } catch { /* no-op */ }
   };
@@ -41,9 +48,9 @@ export const ConvertResize: React.FC = () => {
 
   const handleRun = async () => {
     const req: any = {
-      sourcePaths: files,
+      sourcePaths: allFiles,
       outputDir: saveModeConfig.mode === 'custom'
-        ? (saveModeConfig.outputDir || (files.length > 0 ? files[0].substring(0, files[0].lastIndexOf('\\')) : ''))
+        ? (saveModeConfig.outputDir || (allFiles.length > 0 ? allFiles[0].substring(0, allFiles[0].lastIndexOf('\\')) : ''))
         : '',
       saveMode: saveModeConfig.mode,
       prefixName: saveModeConfig.prefixName,
@@ -79,12 +86,33 @@ export const ConvertResize: React.FC = () => {
         {/* ── LEFT COLUMN: files ── */}
         <div style={{ width: '35%', flexShrink: 0, display: 'flex', flexDirection: 'column' }}>
           <div className="card" style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-            <div className="flex gap-3" style={{ flexWrap: 'wrap' }}>
-              <button onClick={handleSelectFiles} className="btn btn-sm btn-primary">选择文件</button>
-              <button onClick={handleSelectFolder} className="btn btn-sm btn-ghost">选择文件夹</button>
-            </div>
-            <div className="mt-4" style={{ flex: 1, minHeight: 0 }}>
-              <ImageList files={files} onRemove={i => setFiles(files.filter((_, j) => j !== i))} onClear={() => setFiles([])} onDrop={paths => setFiles(prev => [...prev, ...paths])} onAddClick={handleSelectFiles} />
+            <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+              <FolderSourceList
+                sources={sources}
+                looseFiles={looseFiles}
+                onAddFiles={handleSelectFiles}
+                onAddFolder={handleSelectFolder}
+                onRemoveSource={(i) => setSources(prev => prev.filter((_, j) => j !== i))}
+                onRescan={async (i, recursive) => {
+                  const src = sources[i];
+                  try {
+                    const scanned = await (window as any).go.main.App.ScanDirectory(src.path, recursive);
+                    if (scanned) {
+                      setSources(prev => prev.map((s, j) => j === i ? { ...s, recursive, scannedFiles: scanned } : s));
+                    }
+                  } catch { /* no-op */ }
+                }}
+                onClear={() => { setSources([]); setLooseFiles([]); }}
+              />
+              <div className="mt-4" style={{ flex: 1, minHeight: 0 }}>
+                <ImageList files={allFiles} onRemove={i => setLooseFiles(prev => {
+                  const looseIdx = i - sources.flatMap(s => s.scannedFiles).length;
+                  if (looseIdx >= 0 && looseIdx < prev.length) {
+                    return prev.filter((_, j) => j !== looseIdx);
+                  }
+                  return prev;
+                })} onClear={() => { setSources([]); setLooseFiles([]); }} onDrop={paths => setLooseFiles(prev => [...prev, ...paths])} onAddClick={handleSelectFiles} />
+              </div>
             </div>
           </div>
         </div>
@@ -151,12 +179,7 @@ export const ConvertResize: React.FC = () => {
                 )}
               </div>
 
-              <div className="flex gap-8">
-                <label className="checkbox-label">
-                  <input type="checkbox" checked={recursive} onChange={e => setRecursive(e.target.checked)} />
-                  递归子目录
-                </label>
-              </div>
+
             </div>
           </div>
 
@@ -167,7 +190,7 @@ export const ConvertResize: React.FC = () => {
                 取消处理
               </button>
             ) : (
-              <button onClick={handleRun} disabled={files.length === 0} className="btn btn-primary btn-lg btn-full">
+              <button onClick={handleRun} disabled={allFiles.length === 0} className="btn btn-primary btn-lg btn-full">
                 开始处理
               </button>
             )}
