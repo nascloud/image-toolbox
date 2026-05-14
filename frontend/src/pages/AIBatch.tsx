@@ -1180,14 +1180,20 @@ export const AIBatch: React.FC = () => {
               try {
                 const scanned: string[] = await (window as any).go.main.App.ScanDirectory(path, recursive);
                 if (scanned) {
-                  // Remove old files from queue, add new ones
                   const oldPaths = new Set(src.scannedFiles);
-                  setQueue(q => [...q.filter(item => !oldPaths.has(item.path)), ...scanned.filter(p => !q.some(item => item.path === p)).map(p => ({
-                    id: nextId.current++,
-                    name: p.split('\\').pop() || p.split('/').pop() || p,
-                    path: p,
-                    status: 'pending' as const,
-                  }))]);
+                  setQueue(q => {
+                    const withoutOld = q.filter(item => !oldPaths.has(item.path));
+                    const existing = new Set(withoutOld.map(i => i.path));
+                    const newItems: ImageItem[] = scanned
+                      .filter(p => !existing.has(p))
+                      .map(p => ({
+                        id: nextId.current++,
+                        name: p.split('\\').pop() || p.split('/').pop() || p,
+                        path: p,
+                        status: 'pending' as const,
+                      }));
+                    return [...withoutOld, ...newItems];
+                  });
                   setFolderSources(prev => prev.map(s => s.path === path ? { ...s, recursive, scannedFiles: scanned } : s));
                 }
               } catch { /* no-op */ }
