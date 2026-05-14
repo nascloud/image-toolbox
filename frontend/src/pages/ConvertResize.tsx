@@ -20,7 +20,7 @@ export const ConvertResize: React.FC = () => {
   const handleSelectFiles = async () => {
     try {
       const result = await (window as any).go.main.App.SelectFiles();
-      if (result) setLooseFiles(prev => [...prev, ...result]);
+      if (result) setLooseFiles(prev => [...prev, ...result.filter((p: string) => !prev.includes(p))]);
     } catch { /* no-op */ }
   };
 
@@ -111,7 +111,7 @@ export const ConvertResize: React.FC = () => {
                     return prev.filter((_, j) => j !== looseIdx);
                   }
                   return prev;
-                })} onClear={() => { setSources([]); setLooseFiles([]); }} onDrop={paths => setLooseFiles(prev => [...prev, ...paths])} onAddClick={handleSelectFiles} />
+                })} onClear={() => { setSources([]); setLooseFiles([]); }} onDrop={paths => setLooseFiles(prev => [...prev, ...paths.filter(p => !prev.includes(p))])} onAddClick={handleSelectFiles} />
               </div>
             </div>
           </div>
