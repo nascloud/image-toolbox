@@ -1,11 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { ImageList } from '../components/ImageList';
+import { FolderSourceList, FolderSource } from '../components/FolderSourceList';
 import { useBatch } from '../hooks/useBatch';
 import { BatchProgress } from '../components/BatchProgress';
 import { SaveModeSelector, SaveModeConfig } from '../components/SaveModeSelector';
 
 export const Watermark: React.FC = () => {
-  const [files, setFiles] = useState<string[]>([]);
+  const [sources, setSources] = useState<FolderSource[]>([]);
+  const [looseFiles, setLooseFiles] = useState<string[]>([]);
+  const allFiles = [...sources.flatMap(s => s.scannedFiles), ...looseFiles];
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [mode, setMode] = useState<'image' | 'text'>('image');
   const [watermarkImage, setWatermarkImage] = useState('');
@@ -28,22 +31,22 @@ export const Watermark: React.FC = () => {
 
   // Fetch image info when selected file changes
   useEffect(() => {
-    if (files.length === 0) {
+    if (allFiles.length === 0) {
       setImageInfo(null);
       return;
     }
-    const idx = selectedIndex >= files.length ? 0 : selectedIndex;
-    (window as any).go.main.App.GetImageInfo(files[idx])
+    const idx = selectedIndex >= allFiles.length ? 0 : selectedIndex;
+    (window as any).go.main.App.GetImageInfo(allFiles[idx])
       .then((info: any) => setImageInfo(info))
       .catch(() => setImageInfo(null));
-  }, [files, selectedIndex]);
+  }, [sources, looseFiles, selectedIndex]);
 
   useEffect(() => {
-    if (files.length === 0) {
+    if (allFiles.length === 0) {
       setPreviewDataUrl(null);
       return;
     }
-    const idx = selectedIndex >= files.length ? 0 : selectedIndex;
+    const idx = selectedIndex >= allFiles.length ? 0 : selectedIndex;
     if (idx !== selectedIndex) {
       setSelectedIndex(idx);
     }
@@ -52,7 +55,7 @@ export const Watermark: React.FC = () => {
     const timeout = setTimeout(async () => {
       setPreviewLoading(true);
       try {
-        const sourcePath = files[idx];
+        const sourcePath = allFiles[idx];
         const dataUrl = await (window as any).go.main.App.PreviewWatermark({
           sourcePath,
           watermarkImage: mode === 'image' ? watermarkImage : '',
@@ -76,12 +79,12 @@ export const Watermark: React.FC = () => {
       isCancelled = true;
       clearTimeout(timeout);
     };
-  }, [files, selectedIndex, mode, watermarkImage, watermarkText, opacity, position, fontSize, fontColor]);
+  }, [sources, looseFiles, selectedIndex, mode, watermarkImage, watermarkText, opacity, position, fontSize, fontColor]);
 
   const handleSelectFiles = async () => {
     try {
       const result = await (window as any).go.main.App.SelectFiles();
-      if (result) setFiles(prev => [...prev, ...result]);
+      if (result) setLooseFiles(prev => [...prev, ...result.filter((p: string) => !prev.includes(p))]);
     } catch { /* no-op */ }
   };
 
@@ -90,7 +93,12 @@ export const Watermark: React.FC = () => {
       const dir = await (window as any).go.main.App.SelectDirectory();
       if (dir) {
         const scanned = await (window as any).go.main.App.ScanDirectory(dir, true);
-        if (scanned) setFiles(prev => [...prev, ...scanned]);
+        if (scanned) {
+          setSources(prev => {
+            if (prev.some(s => s.path === dir)) return prev;
+            return [...prev, { path: dir, recursive: true, scannedFiles: scanned }];
+          });
+        }
         if (!saveModeConfig.outputDir) setSaveModeConfig(prev => ({ ...prev, outputDir: dir }));
       }
     } catch { /* no-op */ }
@@ -115,9 +123,9 @@ export const Watermark: React.FC = () => {
       setMode('text');
     }
     await startBatch('WatermarkImages', {
-      sourcePaths: files,
+      sourcePaths: allFiles,
       outputDir: saveModeConfig.mode === 'custom'
-        ? (saveModeConfig.outputDir || (files.length > 0 ? files[0].substring(0, files[0].lastIndexOf('\\')) : ''))
+        ? (saveModeConfig.outputDir || (allFiles.length > 0 ? allFiles[0].substring(0, allFiles[0].lastIndexOf('\\')) : ''))
         : '',
       saveMode: saveModeConfig.mode,
       prefixName: saveModeConfig.prefixName,
@@ -141,13 +149,34 @@ export const Watermark: React.FC = () => {
         {/* ── LEFT COLUMN: files ── */}
         <div style={{ flex: '0 0 22%', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
           <div className="card" style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-            <div className="flex gap-3" style={{ flexWrap: 'wrap' }}>
-              <button onClick={handleSelectFiles} className="btn btn-sm btn-primary">选择文件</button>
-              <button onClick={handleSelectFolder} className="btn btn-sm btn-ghost">选择文件夹</button>
-            </div>
-            <div className="mt-4" style={{ flex: 1, minHeight: 0 }}>
-              <ImageList files={files} onRemove={i => setFiles(files.filter((_, j) => j !== i))}
-                onClear={() => setFiles([])} onDrop={paths => setFiles(prev => [...prev, ...paths])} onAddClick={handleSelectFiles} onPreview={setSelectedIndex} selectedIndex={selectedIndex} />
+            <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+              <FolderSourceList
+                sources={sources}
+                looseFiles={looseFiles}
+                onAddFiles={handleSelectFiles}
+                onAddFolder={handleSelectFolder}
+                onRemoveSource={(i) => setSources(prev => prev.filter((_, j) => j !== i))}
+                onRescan={async (i, recursive) => {
+                  const src = sources[i];
+                  try {
+                    const scanned = await (window as any).go.main.App.ScanDirectory(src.path, recursive);
+                    if (scanned) {
+                      setSources(prev => prev.map((s, j) => j === i ? { ...s, recursive, scannedFiles: scanned } : s));
+                    }
+                  } catch { /* no-op */ }
+                }}
+                onClear={() => { setSources([]); setLooseFiles([]); }}
+              />
+              <div className="mt-4" style={{ flex: 1, minHeight: 0 }}>
+                <ImageList files={allFiles} onRemove={i => setLooseFiles(prev => {
+                  const looseIdx = i - sources.flatMap(s => s.scannedFiles).length;
+                  if (looseIdx >= 0 && looseIdx < prev.length) {
+                    return prev.filter((_, j) => j !== looseIdx);
+                  }
+                  return prev;
+                })}
+                  onClear={() => { setSources([]); setLooseFiles([]); }} onDrop={paths => setLooseFiles(prev => [...prev, ...paths.filter((p: string) => !prev.includes(p))])} onAddClick={handleSelectFiles} onPreview={setSelectedIndex} selectedIndex={selectedIndex} />
+              </div>
             </div>
           </div>
         </div>
@@ -318,7 +347,7 @@ export const Watermark: React.FC = () => {
                 取消处理
               </button>
             ) : (
-              <button onClick={handleRun} disabled={files.length === 0} className="btn btn-primary btn-lg btn-full">
+              <button onClick={handleRun} disabled={allFiles.length === 0} className="btn btn-primary btn-lg btn-full">
                 开始添加水印
               </button>
             )}
