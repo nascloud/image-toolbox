@@ -1,7 +1,7 @@
 // AI Batch page — full-featured image generation client for Volcano Engine Seedream API
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { EventsOn } from '../../wailsjs/runtime/runtime';
-import { FolderSourceList, FolderSource } from '../components/FolderSourceList';
+import { GroupedFileList, FolderEntry } from '../components/GroupedFileList';
 
 // ── Types ──
 interface ImageItem {
@@ -177,7 +177,8 @@ export const AIBatch: React.FC = () => {
   const [referenceImages, setReferenceImages] = useState<string[]>([]);
   const [refThumbUrls, setRefThumbUrls] = useState<Record<string, string>>({});
   const [queue, setQueue] = useState<ImageItem[]>([]);
-  const [folderSources, setFolderSources] = useState<FolderSource[]>([]);
+  const [folders, setFolders] = useState<FolderEntry[]>([]);
+  const [recursive, setRecursive] = useState(false);
   const [looseFilePaths, setLooseFilePaths] = useState<string[]>([]);
   const [processing, setProcessing] = useState(false);
   const [cancelRequested, setCancelRequested] = useState(false);
@@ -369,9 +370,9 @@ export const AIBatch: React.FC = () => {
     try {
       const result = await (window as any).go.main.App.SelectFiles();
       if (result) {
-        const sourceFiles = new Set(folderSources.flatMap(s => s.scannedFiles));
-        const filtered = result.filter((p: string) => !sourceFiles.has(p));
-        setLooseFilePaths(prev => [...prev, ...filtered.filter((p: string) => !prev.includes(p))]);
+        const sourceFiles = new Set(folders.flatMap(f => f.scannedFiles));
+        const filtered = result.filter((p: string) => !sourceFiles.has(p) && !looseFilePaths.includes(p));
+        setLooseFilePaths(prev => [...prev, ...filtered]);
         addFiles(result);
       }
     } catch { /* no-op */ }
@@ -381,16 +382,30 @@ export const AIBatch: React.FC = () => {
     try {
       const dir = await (window as any).go.main.App.SelectDirectory();
       if (dir) {
-        const scanned = await (window as any).go.main.App.ScanDirectory(dir, false);
+        const scanned = await (window as any).go.main.App.ScanDirectory(dir, recursive);
         if (scanned) {
-          setFolderSources(prev => {
-            if (prev.some(s => s.path === dir)) return prev;
-            return [...prev, { path: dir, recursive: false, scannedFiles: scanned }];
+          setFolders(prev => {
+            if (prev.some(f => f.path === dir)) return prev;
+            return [...prev, { path: dir, scannedFiles: scanned }];
           });
           addFiles(scanned);
         }
       }
     } catch { /* no-op */ }
+  };
+
+  const handleRecursiveChange = async (v: boolean) => {
+    setRecursive(v);
+    const updated = await Promise.all(folders.map(f =>
+      (window as any).go.main.App.ScanDirectory(f.path, v)
+        .then((scanned: string[]) => {
+          const oldPaths = new Set(f.scannedFiles);
+          setQueue(q => q.filter(item => !oldPaths.has(item.path)));
+          addFiles(scanned || []);
+          return { path: f.path, scannedFiles: scanned || [] };
+        })
+    ));
+    setFolders(updated);
   };
 
   const retryItem = async (id: number) => {
@@ -1085,6 +1100,14 @@ export const AIBatch: React.FC = () => {
                   <span className="text-xs text-secondary" style={{ width: 24 }}>{concurrent}</span>
                 </div>
               </div>
+
+              {/* --- Recursive --- */}
+              <div className="param-row">
+                <span className="param-label">目录扫描</span>
+                <label className="checkbox-label" style={{ fontSize: 12 }}>
+                  <input type="checkbox" checked={recursive} onChange={e => handleRecursiveChange(e.target.checked)} /> 递归子目录
+                </label>
+              </div>
             </div>
           </div>
         </div>
@@ -1158,35 +1181,25 @@ export const AIBatch: React.FC = () => {
             )}
           </div>
 
-          <FolderSourceList
-            sources={folderSources}
+          <GroupedFileList
+            folders={folders}
             looseFiles={looseFilePaths}
             onAddFiles={handleSelectFiles}
             onAddFolder={handleSelectFolder}
-            onRemoveSource={(i) => {
-              const src = folderSources[i];
-              if (!src) return;
-              const paths = new Set(src.scannedFiles);
+            onRemoveFolder={(i) => {
+              const f = folders[i];
+              if (!f) return;
+              const paths = new Set(f.scannedFiles);
               setQueue(q => q.filter(item => !paths.has(item.path)));
-              setFolderSources(prev => prev.filter((_, j) => j !== i));
+              setFolders(prev => prev.filter((_, j) => j !== i));
             }}
-            onRescan={async (i, recursive) => {
-              const src = folderSources[i];
-              if (!src) return;
-              const path = src.path;
-              try {
-                const scanned: string[] = await (window as any).go.main.App.ScanDirectory(path, recursive);
-                if (scanned) {
-                  const oldPaths = new Set(src.scannedFiles);
-                  setQueue(q => q.filter(item => !oldPaths.has(item.path)));
-                  addFiles(scanned);
-                  setFolderSources(prev => prev.map(s => s.path === path ? { ...s, recursive, scannedFiles: scanned, error: undefined } : s));
-                }
-              } catch (e) {
-                setFolderSources(prev => prev.map(s => s.path === path ? { ...s, error: `扫描失败: ${(e as any)?.message || '未知错误'}` } : s));
-              }
+            onRemoveFile={(i) => {
+              const path = looseFilePaths[i];
+              if (!path) return;
+              setQueue(q => q.filter(item => item.path !== path));
+              setLooseFilePaths(prev => prev.filter((_, j) => j !== i));
             }}
-            onClear={() => { setFolderSources([]); setLooseFilePaths([]); setQueue([]); }}
+            onClear={() => { setFolders([]); setLooseFilePaths([]); setQueue([]); }}
           />
 
           {/* Batch Actions Bar */}

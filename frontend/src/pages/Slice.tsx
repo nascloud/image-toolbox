@@ -1,14 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { ImageList } from '../components/ImageList';
+import { GroupedFileList, FolderEntry } from '../components/GroupedFileList';
 import { BatchProgress } from '../components/BatchProgress';
 import { useBatch } from '../hooks/useBatch';
 import { SaveModeSelector, SaveModeConfig } from '../components/SaveModeSelector';
-import { FolderSourceList, FolderSource } from '../components/FolderSourceList';
 
 export const Slice: React.FC = () => {
-  const [sources, setSources] = useState<FolderSource[]>([]);
+  const [folders, setFolders] = useState<FolderEntry[]>([]);
   const [looseFiles, setLooseFiles] = useState<string[]>([]);
-  const allFiles = [...sources.flatMap(s => s.scannedFiles), ...looseFiles];
+  const [recursive, setRecursive] = useState(false);
   const [sliceCount, setSliceCount] = useState(25);
   const [contrast, setContrast] = useState(1.0);
   const [saturation, setSaturation] = useState(1.0);
@@ -16,6 +15,7 @@ export const Slice: React.FC = () => {
   const [sliceHeight, setSliceHeight] = useState(1200);
   const [saveModeConfig, setSaveModeConfig] = useState<SaveModeConfig>({ mode: 'subdir', prefixName: 'output', subdirName: 'output', outputDir: '' });
   const { state, startBatch, cancelBatch, openOutputDir } = useBatch();
+  const allFiles = [...folders.flatMap(f => f.scannedFiles), ...looseFiles];
 
   // Auto-recommend slice height = width × 1.5, so each slice satisfies
   // Taobao's 宝贝详情图 restriction (h/w ≤ 2).
@@ -42,16 +42,25 @@ export const Slice: React.FC = () => {
     try {
       const dir = await (window as any).go.main.App.SelectDirectory();
       if (dir) {
-        const scanned = await (window as any).go.main.App.ScanDirectory(dir, false);
+        const scanned = await (window as any).go.main.App.ScanDirectory(dir, recursive);
         if (scanned) {
-          setSources(prev => {
-            if (prev.some(s => s.path === dir)) return prev;
-            return [...prev, { path: dir, recursive: false, scannedFiles: scanned }];
+          setFolders(prev => {
+            if (prev.some(f => f.path === dir)) return prev;
+            return [...prev, { path: dir, scannedFiles: scanned }];
           });
         }
         if (!saveModeConfig.outputDir) setSaveModeConfig(prev => ({ ...prev, outputDir: dir }));
       }
     } catch { /* no-op */ }
+  };
+
+  const handleRecursiveChange = async (v: boolean) => {
+    setRecursive(v);
+    const updated = await Promise.all(folders.map(f =>
+      (window as any).go.main.App.ScanDirectory(f.path, v)
+        .then((scanned: string[]) => ({ path: f.path, scannedFiles: scanned || [] }))
+    ));
+    setFolders(updated);
   };
 
   const handleSelectOutputDir = async () => {
@@ -85,40 +94,15 @@ export const Slice: React.FC = () => {
       <div className="flex gap-8" style={{ alignItems: 'stretch' }}>
         {/* ── LEFT COLUMN: files ── */}
         <div style={{ width: '35%', flexShrink: 0, display: 'flex', flexDirection: 'column' }}>
-          <div className="card" style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-            <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-              <FolderSourceList
-                sources={sources}
-                looseFiles={looseFiles}
-                onAddFiles={handleSelectFiles}
-                onAddFolder={handleSelectFolder}
-                onRemoveSource={(i) => setSources(prev => prev.filter((_, j) => j !== i))}
-                onRescan={async (i, recursive) => {
-                  const src = sources[i];
-                  if (!src) return;
-                  const path = src.path;
-                  try {
-                    const scanned = await (window as any).go.main.App.ScanDirectory(path, recursive);
-                    if (scanned) {
-                      setSources(prev => prev.map(s => s.path === path ? { ...s, recursive, scannedFiles: scanned, error: undefined } : s));
-                    }
-                  } catch (e) {
-                    setSources(prev => prev.map(s => s.path === path ? { ...s, error: `扫描失败: ${(e as any)?.message || '未知错误'}` } : s));
-                  }
-                }}
-                onClear={() => { setSources([]); setLooseFiles([]); }}
-              />
-              <div className="mt-4" style={{ flex: 1, minHeight: 0 }}>
-    <ImageList files={allFiles} onRemove={i => setLooseFiles(prev => {
-      const looseIdx = i - sources.flatMap(s => s.scannedFiles).length;
-                  if (looseIdx >= 0 && looseIdx < prev.length) {
-                    return prev.filter((_, j) => j !== looseIdx);
-                  }
-                  return prev;
-                })} onClear={() => { setSources([]); setLooseFiles([]); }} onDrop={paths => setLooseFiles(prev => [...prev, ...paths.filter((p: string) => !prev.includes(p))])} onAddClick={handleSelectFiles} />
-              </div>
-            </div>
-          </div>
+          <GroupedFileList
+            folders={folders}
+            looseFiles={looseFiles}
+            onAddFiles={handleSelectFiles}
+            onAddFolder={handleSelectFolder}
+            onRemoveFolder={(i) => setFolders(prev => prev.filter((_, j) => j !== i))}
+            onRemoveFile={(i) => setLooseFiles(prev => prev.filter((_, j) => j !== i))}
+            onClear={() => { setFolders([]); setLooseFiles([]); }}
+          />
         </div>
 
         {/* ── RIGHT COLUMN: config + action ── */}
@@ -172,6 +156,14 @@ export const Slice: React.FC = () => {
                   onChange={e => setSaturation(Number(e.target.value) / 100)}
                   style={{ width: 200 }} />
                 <span className="text-sm text-muted" style={{ minWidth: 32 }}>{saturation.toFixed(1)}</span>
+              </div>
+
+              <div className="form-row">
+                <label className="checkbox-label">
+                  <input type="checkbox" checked={recursive} onChange={e => handleRecursiveChange(e.target.checked)} />
+                  递归子目录
+                </label>
+                {folders.length > 0 && <span className="text-xs text-muted ml-4">更改后将重新扫描所有文件夹</span>}
               </div>
             </div>
           </div>
