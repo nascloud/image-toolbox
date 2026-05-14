@@ -178,7 +178,7 @@ export const AIBatch: React.FC = () => {
   const [refThumbUrls, setRefThumbUrls] = useState<Record<string, string>>({});
   const [queue, setQueue] = useState<ImageItem[]>([]);
   const [folders, setFolders] = useState<FolderEntry[]>([]);
-  const [recursive, setRecursive] = useState(false);
+  const [recursive, setRecursive] = useState(true);
   const [looseFilePaths, setLooseFilePaths] = useState<string[]>([]);
   const [processing, setProcessing] = useState(false);
   const [cancelRequested, setCancelRequested] = useState(false);

@@ -7,7 +7,7 @@ import { SaveModeSelector, SaveModeConfig } from '../components/SaveModeSelector
 export const Slice: React.FC = () => {
   const [folders, setFolders] = useState<FolderEntry[]>([]);
   const [looseFiles, setLooseFiles] = useState<string[]>([]);
-  const [recursive, setRecursive] = useState(false);
+  const [recursive, setRecursive] = useState(true);
   const [sliceCount, setSliceCount] = useState(25);
   const [contrast, setContrast] = useState(1.0);
   const [saturation, setSaturation] = useState(1.0);

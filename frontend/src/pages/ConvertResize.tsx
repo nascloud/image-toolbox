@@ -7,7 +7,7 @@ import { SaveModeSelector, SaveModeConfig } from '../components/SaveModeSelector
 export const ConvertResize: React.FC = () => {
   const [folders, setFolders] = useState<FolderEntry[]>([]);
   const [looseFiles, setLooseFiles] = useState<string[]>([]);
-  const [recursive, setRecursive] = useState(false);
+  const [recursive, setRecursive] = useState(true);
   const [convertTo, setConvertTo] = useState('');
   const [resizeMode, setResizeMode] = useState('');
   const [resizeValue, setResizeValue] = useState(100);
