@@ -95,10 +95,12 @@ export const ConvertResize: React.FC = () => {
                 onRemoveSource={(i) => setSources(prev => prev.filter((_, j) => j !== i))}
                 onRescan={async (i, recursive) => {
                   const src = sources[i];
+                  if (!src) return;
+                  const path = src.path;
                   try {
-                    const scanned = await (window as any).go.main.App.ScanDirectory(src.path, recursive);
+                    const scanned = await (window as any).go.main.App.ScanDirectory(path, recursive);
                     if (scanned) {
-                      setSources(prev => prev.map((s, j) => j === i ? { ...s, recursive, scannedFiles: scanned } : s));
+                      setSources(prev => prev.map(s => s.path === path ? { ...s, recursive, scannedFiles: scanned } : s));
                     }
                   } catch { /* no-op */ }
                 }}
