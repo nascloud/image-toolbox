@@ -1,6 +1,7 @@
 // AI Batch page — full-featured image generation client for Volcano Engine Seedream API
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { EventsOn } from '../../wailsjs/runtime/runtime';
+import { FolderSourceList, FolderSource } from '../components/FolderSourceList';
 
 // ── Types ──
 interface ImageItem {
@@ -176,6 +177,8 @@ export const AIBatch: React.FC = () => {
   const [referenceImages, setReferenceImages] = useState<string[]>([]);
   const [refThumbUrls, setRefThumbUrls] = useState<Record<string, string>>({});
   const [queue, setQueue] = useState<ImageItem[]>([]);
+  const [folderSources, setFolderSources] = useState<FolderSource[]>([]);
+  const [looseFilePaths, setLooseFilePaths] = useState<string[]>([]);
   const [processing, setProcessing] = useState(false);
   const [cancelRequested, setCancelRequested] = useState(false);
   const [presets, setPresets] = useState<PromptPreset[]>(loadPresets);
@@ -365,7 +368,13 @@ export const AIBatch: React.FC = () => {
   const handleSelectFiles = async () => {
     try {
       const result = await (window as any).go.main.App.SelectFiles();
-      if (result) addFiles(result);
+      if (result) {
+        setLooseFilePaths(prev => {
+          const filtered = result.filter((p: string) => !prev.includes(p));
+          addFiles(filtered);
+          return [...prev, ...filtered];
+        });
+      }
     } catch { /* no-op */ }
   };
 
@@ -374,7 +383,13 @@ export const AIBatch: React.FC = () => {
       const dir = await (window as any).go.main.App.SelectDirectory();
       if (dir) {
         const scanned = await (window as any).go.main.App.ScanDirectory(dir, false);
-        if (scanned) addFiles(scanned);
+        if (scanned) {
+          setFolderSources(prev => {
+            if (prev.some(s => s.path === dir)) return prev;
+            addFiles(scanned);
+            return [...prev, { path: dir, recursive: false, scannedFiles: scanned }];
+          });
+        }
       }
     } catch { /* no-op */ }
   };
@@ -452,7 +467,7 @@ export const AIBatch: React.FC = () => {
     setQueue(prev => prev.filter(i => i.id !== id));
   };
 
-  const clearQueue = () => { setQueue([]); };
+  const clearQueue = () => { setQueue([]); setFolderSources([]); setLooseFilePaths([]); };
 
   // ── Reference Images ──
   const addReferenceImages = useCallback((paths: string[]) => {
@@ -1146,11 +1161,42 @@ export const AIBatch: React.FC = () => {
             )}
           </div>
 
+          <FolderSourceList
+            sources={folderSources}
+            looseFiles={looseFilePaths}
+            onAddFiles={handleSelectFiles}
+            onAddFolder={handleSelectFolder}
+            onRemoveSource={(i) => setFolderSources(prev => {
+              const src = prev[i];
+              if (!src) return prev;
+              const paths = new Set(src.scannedFiles);
+              setQueue(q => q.filter(item => !paths.has(item.path)));
+              return prev.filter((_, j) => j !== i);
+            })}
+            onRescan={async (i, recursive) => {
+              const src = folderSources[i];
+              if (!src) return;
+              const path = src.path;
+              try {
+                const scanned: string[] = await (window as any).go.main.App.ScanDirectory(path, recursive);
+                if (scanned) {
+                  // Remove old files from queue, add new ones
+                  const oldPaths = new Set(src.scannedFiles);
+                  setQueue(q => [...q.filter(item => !oldPaths.has(item.path)), ...scanned.filter(p => !q.some(item => item.path === p)).map(p => ({
+                    id: nextId.current++,
+                    name: p.split('\\').pop() || p.split('/').pop() || p,
+                    path: p,
+                    status: 'pending' as const,
+                  }))]);
+                  setFolderSources(prev => prev.map(s => s.path === path ? { ...s, recursive, scannedFiles: scanned } : s));
+                }
+              } catch { /* no-op */ }
+            }}
+            onClear={() => { setFolderSources([]); setLooseFilePaths([]); setQueue([]); }}
+          />
+
           {/* Batch Actions Bar */}
           <div className="flex items-center gap-3" style={{ flexShrink: 0, flexWrap: 'wrap' }}>
-            <button onClick={clearQueue} className="btn btn-sm btn-ghost">清空</button>
-            <button onClick={handleSelectFiles} className="btn btn-sm btn-primary">+ 添加图片</button>
-            <button onClick={handleSelectFolder} className="btn btn-sm btn-ghost">添加文件夹</button>
 
             {completedCount > 0 && (
               <button onClick={async () => {
