@@ -369,11 +369,8 @@ export const AIBatch: React.FC = () => {
     try {
       const result = await (window as any).go.main.App.SelectFiles();
       if (result) {
-        setLooseFilePaths(prev => {
-          const filtered = result.filter((p: string) => !prev.includes(p));
-          addFiles(filtered);
-          return [...prev, ...filtered];
-        });
+        setLooseFilePaths(prev => [...prev, ...result.filter((p: string) => !prev.includes(p))]);
+        addFiles(result);
       }
     } catch { /* no-op */ }
   };
@@ -386,9 +383,9 @@ export const AIBatch: React.FC = () => {
         if (scanned) {
           setFolderSources(prev => {
             if (prev.some(s => s.path === dir)) return prev;
-            addFiles(scanned);
             return [...prev, { path: dir, recursive: false, scannedFiles: scanned }];
           });
+          addFiles(scanned);
         }
       }
     } catch { /* no-op */ }
@@ -1166,13 +1163,13 @@ export const AIBatch: React.FC = () => {
             looseFiles={looseFilePaths}
             onAddFiles={handleSelectFiles}
             onAddFolder={handleSelectFolder}
-            onRemoveSource={(i) => setFolderSources(prev => {
-              const src = prev[i];
-              if (!src) return prev;
+            onRemoveSource={(i) => {
+              const src = folderSources[i];
+              if (!src) return;
               const paths = new Set(src.scannedFiles);
               setQueue(q => q.filter(item => !paths.has(item.path)));
-              return prev.filter((_, j) => j !== i);
-            })}
+              setFolderSources(prev => prev.filter((_, j) => j !== i));
+            }}
             onRescan={async (i, recursive) => {
               const src = folderSources[i];
               if (!src) return;
@@ -1181,19 +1178,8 @@ export const AIBatch: React.FC = () => {
                 const scanned: string[] = await (window as any).go.main.App.ScanDirectory(path, recursive);
                 if (scanned) {
                   const oldPaths = new Set(src.scannedFiles);
-                  setQueue(q => {
-                    const withoutOld = q.filter(item => !oldPaths.has(item.path));
-                    const existing = new Set(withoutOld.map(i => i.path));
-                    const newItems: ImageItem[] = scanned
-                      .filter(p => !existing.has(p))
-                      .map(p => ({
-                        id: nextId.current++,
-                        name: p.split('\\').pop() || p.split('/').pop() || p,
-                        path: p,
-                        status: 'pending' as const,
-                      }));
-                    return [...withoutOld, ...newItems];
-                  });
+                  setQueue(q => q.filter(item => !oldPaths.has(item.path)));
+                  addFiles(scanned);
                   setFolderSources(prev => prev.map(s => s.path === path ? { ...s, recursive, scannedFiles: scanned } : s));
                 }
               } catch { /* no-op */ }
