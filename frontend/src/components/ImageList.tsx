@@ -91,7 +91,6 @@ export const ImageList: React.FC<ImageListProps> = ({ files, onRemove, onClear, 
         ref={dropRef}
         className="empty-state"
         style={{
-          cursor: 'pointer',
           ['--wails-drop-target' as any]: 'drop',
           borderColor: dragOver ? 'var(--color-accent)' : undefined,
           background: dragOver ? 'var(--color-accent-glow)' : undefined,
