@@ -3,9 +3,12 @@ import { ImageList } from '../components/ImageList';
 import { BatchProgress } from '../components/BatchProgress';
 import { useBatch } from '../hooks/useBatch';
 import { SaveModeSelector, SaveModeConfig } from '../components/SaveModeSelector';
+import { FolderSourceList, FolderSource } from '../components/FolderSourceList';
 
 export const Slice: React.FC = () => {
-  const [files, setFiles] = useState<string[]>([]);
+  const [sources, setSources] = useState<FolderSource[]>([]);
+  const [looseFiles, setLooseFiles] = useState<string[]>([]);
+  const allFiles = [...sources.flatMap(s => s.scannedFiles), ...looseFiles];
   const [sliceCount, setSliceCount] = useState(25);
   const [contrast, setContrast] = useState(1.0);
   const [saturation, setSaturation] = useState(1.0);
@@ -17,21 +20,21 @@ export const Slice: React.FC = () => {
   // Auto-recommend slice height = width × 1.5, so each slice satisfies
   // Taobao's 宝贝详情图 restriction (h/w ≤ 2).
   useEffect(() => {
-    if (sliceMode !== 'height' || files.length === 0) return;
+    if (sliceMode !== 'height' || allFiles.length === 0) return;
     (async () => {
       try {
-        const info = await (window as any).go.main.App.GetImageInfo(files[0]);
+        const info = await (window as any).go.main.App.GetImageInfo(allFiles[0]);
         if (info?.width) {
           setSliceHeight(Math.max(1, Math.round(info.width * 1.5)));
         }
       } catch { /* ignore */ }
     })();
-  }, [sliceMode, files[0]]);
+  }, [sliceMode, allFiles[0]]);
 
   const handleSelectFiles = async () => {
     try {
       const result = await (window as any).go.main.App.SelectFiles();
-      if (result) setFiles(prev => [...prev, ...result]);
+      if (result) setLooseFiles(prev => [...prev, ...result.filter((p: string) => !prev.includes(p))]);
     } catch { /* no-op */ }
   };
 
@@ -40,7 +43,12 @@ export const Slice: React.FC = () => {
       const dir = await (window as any).go.main.App.SelectDirectory();
       if (dir) {
         const scanned = await (window as any).go.main.App.ScanDirectory(dir, false);
-        if (scanned) setFiles(prev => [...prev, ...scanned]);
+        if (scanned) {
+          setSources(prev => {
+            if (prev.some(s => s.path === dir)) return prev;
+            return [...prev, { path: dir, recursive: false, scannedFiles: scanned }];
+          });
+        }
         if (!saveModeConfig.outputDir) setSaveModeConfig(prev => ({ ...prev, outputDir: dir }));
       }
     } catch { /* no-op */ }
@@ -55,9 +63,9 @@ export const Slice: React.FC = () => {
 
   const handleRun = async () => {
     await startBatch('SliceImages', {
-      sourcePaths: files,
+      sourcePaths: allFiles,
       outputDir: saveModeConfig.mode === 'custom'
-        ? (saveModeConfig.outputDir || (files.length > 0 ? files[0].substring(0, files[0].lastIndexOf('\\')) : ''))
+        ? (saveModeConfig.outputDir || (allFiles.length > 0 ? allFiles[0].substring(0, allFiles[0].lastIndexOf('\\')) : ''))
         : '',
       saveMode: saveModeConfig.mode,
       prefixName: saveModeConfig.prefixName,
@@ -78,13 +86,36 @@ export const Slice: React.FC = () => {
         {/* ── LEFT COLUMN: files ── */}
         <div style={{ width: '35%', flexShrink: 0, display: 'flex', flexDirection: 'column' }}>
           <div className="card" style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-            <div className="flex gap-3" style={{ flexWrap: 'wrap' }}>
-              <button onClick={handleSelectFiles} className="btn btn-sm btn-primary">选择文件</button>
-              <button onClick={handleSelectFolder} className="btn btn-sm btn-ghost">选择文件夹</button>
-            </div>
-            <div className="mt-4" style={{ flex: 1, minHeight: 0 }}>
-              <ImageList files={files} onRemove={i => setFiles(files.filter((_, j) => j !== i))}
-                onClear={() => setFiles([])} onDrop={paths => setFiles(prev => [...prev, ...paths])} onAddClick={handleSelectFiles} />
+            <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+              <FolderSourceList
+                sources={sources}
+                looseFiles={looseFiles}
+                onAddFiles={handleSelectFiles}
+                onAddFolder={handleSelectFolder}
+                onRemoveSource={(i) => setSources(prev => prev.filter((_, j) => j !== i))}
+                onRescan={async (i, recursive) => {
+                  const src = sources[i];
+                  if (!src) return;
+                  const path = src.path;
+                  try {
+                    const scanned = await (window as any).go.main.App.ScanDirectory(path, recursive);
+                    if (scanned) {
+                      setSources(prev => prev.map(s => s.path === path ? { ...s, recursive, scannedFiles: scanned } : s));
+                    }
+                  } catch { /* no-op */ }
+                }}
+                onClear={() => { setSources([]); setLooseFiles([]); }}
+              />
+              <div className="mt-4" style={{ flex: 1, minHeight: 0 }}>
+                <ImageList files={allFiles} onRemove={i => setLooseFiles(prev => {
+                  const sourceTotal = sources.reduce((sum, s) => sum + s.scannedFiles.length, 0);
+                  const looseIdx = i - sourceTotal;
+                  if (looseIdx >= 0 && looseIdx < prev.length) {
+                    return prev.filter((_, j) => j !== looseIdx);
+                  }
+                  return prev;
+                })} onClear={() => { setSources([]); setLooseFiles([]); }} onDrop={paths => setLooseFiles(prev => [...prev, ...paths.filter((p: string) => !prev.includes(p))])} onAddClick={handleSelectFiles} />
+              </div>
             </div>
           </div>
         </div>
@@ -151,7 +182,7 @@ export const Slice: React.FC = () => {
                 取消处理
               </button>
             ) : (
-              <button onClick={handleRun} disabled={files.length === 0} className="btn btn-primary btn-lg btn-full">
+              <button onClick={handleRun} disabled={allFiles.length === 0} className="btn btn-primary btn-lg btn-full">
                 开始切片
               </button>
             )}
