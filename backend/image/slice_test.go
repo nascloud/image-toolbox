@@ -56,3 +56,54 @@ func TestSliceWidthPreserved(t *testing.T) {
 		}
 	}
 }
+
+func TestSliceByHeight_Even(t *testing.T) {
+	img := createTestImageForSlice(t, 200, 300)
+	slices := SliceImageByHeight(img, 100, 1.0, 1.0)
+	if len(slices) != 3 {
+		t.Fatalf("expected 3 slices, got %d", len(slices))
+	}
+	for i, s := range slices {
+		if s.Bounds().Dy() != 100 {
+			t.Errorf("slice %d height = %d, want 100", i, s.Bounds().Dy())
+		}
+	}
+}
+
+func TestSliceByHeight_Remainder(t *testing.T) {
+	img := createTestImageForSlice(t, 200, 250)
+	slices := SliceImageByHeight(img, 100, 1.0, 1.0)
+	if len(slices) != 3 {
+		t.Fatalf("expected 3 slices, got %d", len(slices))
+	}
+	if slices[0].Bounds().Dy() != 100 {
+		t.Errorf("slice 0 height = %d, want 100", slices[0].Bounds().Dy())
+	}
+	if slices[1].Bounds().Dy() != 100 {
+		t.Errorf("slice 1 height = %d, want 100", slices[1].Bounds().Dy())
+	}
+	if slices[2].Bounds().Dy() != 50 {
+		t.Errorf("slice 2 height = %d, want 50", slices[2].Bounds().Dy())
+	}
+}
+
+func TestSliceByHeight_WidthPreserved(t *testing.T) {
+	img := createTestImageForSlice(t, 200, 300)
+	slices := SliceImageByHeight(img, 100, 1.0, 1.0)
+	for i, s := range slices {
+		if s.Bounds().Dx() != 200 {
+			t.Errorf("slice %d width = %d, want 200", i, s.Bounds().Dx())
+		}
+	}
+}
+
+func TestSliceByHeight_SingleSlice(t *testing.T) {
+	img := createTestImageForSlice(t, 200, 50)
+	slices := SliceImageByHeight(img, 100, 1.0, 1.0)
+	if len(slices) != 1 {
+		t.Fatalf("expected 1 slice, got %d", len(slices))
+	}
+	if slices[0].Bounds().Dy() != 50 {
+		t.Errorf("slice height = %d, want 50", slices[0].Bounds().Dy())
+	}
+}

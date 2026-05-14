@@ -100,11 +100,22 @@ func AddImageWatermark(base, watermark image.Image, opacity float64, position st
 func adjustOpacity(src image.Image, opacity float64) *image.RGBA {
 	bounds := src.Bounds()
 	dst := image.NewRGBA(bounds)
+	if opacity <= 0 {
+		draw.Draw(dst, bounds, image.Transparent, image.Point{}, draw.Src)
+		return dst
+	}
 	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
 		for x := bounds.Min.X; x < bounds.Max.X; x++ {
 			r, g, b, a := src.At(x, y).RGBA()
-			na := uint32(float64(a>>8) * opacity)
-			dst.Set(x, y, color.RGBA{uint8(r >> 8), uint8(g >> 8), uint8(b >> 8), uint8(na)})
+			// Scale all channels by opacity to maintain correct premultiplied alpha.
+			// Go's draw.Over uses Porter-Duff: result = src + dst * (1 - src_alpha).
+			// If we only scale A without scaling RGB, an invalid premultiplied color
+			// (non-zero RGB with A=0) leaks the watermark into dark destination pixels.
+			nr := uint32(float64(r) * opacity)
+			ng := uint32(float64(g) * opacity)
+			nb := uint32(float64(b) * opacity)
+			na := uint32(float64(a) * opacity)
+			dst.Set(x, y, color.RGBA64{R: uint16(nr), G: uint16(ng), B: uint16(nb), A: uint16(na)})
 		}
 	}
 	return dst
@@ -116,8 +127,18 @@ func AddTextWatermark(base image.Image, text string, opacity float64, position s
 	dst := image.NewRGBA(bounds)
 	draw.Draw(dst, bounds, base, image.Point{}, draw.Src)
 
+	if opacity <= 0 || text == "" {
+		return dst
+	}
+
+	// Scale font color channels by opacity to maintain correct premultiplied alpha.
+	// See adjustOpacity for explanation of why this matters.
 	c := parseHexColor(fontColor)
-	c.A = uint8(opacity * 255)
+	scale := uint8(max(0, min(255, int(opacity*255))))
+	c.R = uint8(uint32(c.R) * uint32(scale) / 255)
+	c.G = uint8(uint32(c.G) * uint32(scale) / 255)
+	c.B = uint8(uint32(c.B) * uint32(scale) / 255)
+	c.A = scale
 
 	fSize := fontSize
 	if fSize <= 0 {

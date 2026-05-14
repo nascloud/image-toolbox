@@ -9,7 +9,7 @@ export const ConvertResize: React.FC = () => {
   const [convertTo, setConvertTo] = useState('');
   const [resizeMode, setResizeMode] = useState('');
   const [resizeValue, setResizeValue] = useState(100);
-  const [resizeWidth, setResizeWidth] = useState(800);
+  const [resizeWidth, setResizeWidth] = useState(1440);
   const [resizeHeight, setResizeHeight] = useState(600);
   const [saveModeConfig, setSaveModeConfig] = useState<SaveModeConfig>({ mode: 'subdir', prefixName: 'output', subdirName: 'output', outputDir: '' });
   const [recursive, setRecursive] = useState(false);

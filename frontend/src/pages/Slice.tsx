@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ImageList } from '../components/ImageList';
 import { BatchProgress } from '../components/BatchProgress';
 import { useBatch } from '../hooks/useBatch';
@@ -9,8 +9,24 @@ export const Slice: React.FC = () => {
   const [sliceCount, setSliceCount] = useState(25);
   const [contrast, setContrast] = useState(1.0);
   const [saturation, setSaturation] = useState(1.0);
+  const [sliceMode, setSliceMode] = useState<'count' | 'height'>('count');
+  const [sliceHeight, setSliceHeight] = useState(1200);
   const [saveModeConfig, setSaveModeConfig] = useState<SaveModeConfig>({ mode: 'subdir', prefixName: 'output', subdirName: 'output', outputDir: '' });
   const { state, startBatch, cancelBatch, openOutputDir } = useBatch();
+
+  // Auto-recommend slice height = width × 1.5, so each slice satisfies
+  // Taobao's 宝贝详情图 restriction (h/w ≤ 2).
+  useEffect(() => {
+    if (sliceMode !== 'height' || files.length === 0) return;
+    (async () => {
+      try {
+        const info = await (window as any).go.main.App.GetImageInfo(files[0]);
+        if (info?.width) {
+          setSliceHeight(Math.max(1, Math.round(info.width * 1.5)));
+        }
+      } catch { /* ignore */ }
+    })();
+  }, [sliceMode, files[0]]);
 
   const handleSelectFiles = async () => {
     try {
@@ -46,7 +62,9 @@ export const Slice: React.FC = () => {
       saveMode: saveModeConfig.mode,
       prefixName: saveModeConfig.prefixName,
       subdirName: saveModeConfig.subdirName,
+      sliceMode,
       sliceCount,
+      sliceHeight: sliceMode === 'height' ? sliceHeight : 0,
       contrast,
       saturation,
     });
@@ -87,11 +105,28 @@ export const Slice: React.FC = () => {
 
             <div className="flex-col gap-6" style={{ display: 'flex' }}>
               <div className="form-row">
-                <label className="form-label">切片数量</label>
-                <input type="number" value={sliceCount}
-                  onChange={e => setSliceCount(Math.max(1, Number(e.target.value)))}
-                  className="input" style={{ width: 100 }} min={1} max={1000} />
+                <label className="form-label">切片方式</label>
+                <select value={sliceMode} onChange={e => setSliceMode(e.target.value as 'count' | 'height')} className="select" style={{ width: 160 }}>
+                  <option value="count">按数量切片</option>
+                  <option value="height">按高度切片</option>
+                </select>
               </div>
+              {sliceMode === 'count' ? (
+                <div className="form-row">
+                  <label className="form-label">切片数量</label>
+                  <input type="number" value={sliceCount}
+                    onChange={e => setSliceCount(Math.max(1, Number(e.target.value)))}
+                    className="input" style={{ width: 100 }} min={1} max={1000} />
+                </div>
+              ) : (
+                <div className="form-row">
+                  <label className="form-label">切片高度</label>
+                  <input type="number" value={sliceHeight}
+                    onChange={e => setSliceHeight(Math.max(1, Number(e.target.value)))}
+                    className="input" style={{ width: 100 }} min={1} />
+                  <span className="text-sm text-muted">px</span>
+                </div>
+              )}
               <div className="form-row">
                 <label className="form-label">对比度</label>
                 <input type="range" min="10" max="200" value={contrast * 100}
