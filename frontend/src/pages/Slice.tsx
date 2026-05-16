@@ -102,6 +102,7 @@ export const Slice: React.FC = () => {
             onRemoveFolder={(i) => setFolders(prev => prev.filter((_, j) => j !== i))}
             onRemoveFile={(i) => setLooseFiles(prev => prev.filter((_, j) => j !== i))}
             onClear={() => { setFolders([]); setLooseFiles([]); }}
+            onDropFiles={(paths) => setLooseFiles(prev => [...prev, ...paths.filter(p => !prev.includes(p))])}
           />
         </div>
 

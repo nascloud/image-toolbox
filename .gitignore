@@ -27,6 +27,9 @@ frontend/yarn-debug.log*
 frontend/yarn-error.log*
 frontend/.pnpm-debug.log*
 
+# Brainstorming visual mockups
+.superpowers/
+
 # IDE / Editors
 .vscode/
 .idea/

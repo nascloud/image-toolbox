@@ -1,7 +1,7 @@
 // AI Batch page — full-featured image generation client for Volcano Engine Seedream API
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { EventsOn } from '../../wailsjs/runtime/runtime';
-import { GroupedFileList, FolderEntry } from '../components/GroupedFileList';
+import { FolderEntry } from '../components/GroupedFileList';
 
 // ── Types ──
 interface ImageItem {
@@ -1181,53 +1181,9 @@ export const AIBatch: React.FC = () => {
             )}
           </div>
 
-          <GroupedFileList
-            folders={folders}
-            looseFiles={looseFilePaths}
-            onAddFiles={handleSelectFiles}
-            onAddFolder={handleSelectFolder}
-            onRemoveFolder={(i) => {
-              const f = folders[i];
-              if (!f) return;
-              const paths = new Set(f.scannedFiles);
-              setQueue(q => q.filter(item => !paths.has(item.path)));
-              setFolders(prev => prev.filter((_, j) => j !== i));
-            }}
-            onRemoveFile={(i) => {
-              const path = looseFilePaths[i];
-              if (!path) return;
-              setQueue(q => q.filter(item => item.path !== path));
-              setLooseFilePaths(prev => prev.filter((_, j) => j !== i));
-            }}
-            onClear={() => { setFolders([]); setLooseFilePaths([]); setQueue([]); }}
-          />
 
           {/* Batch Actions Bar */}
           <div className="flex items-center gap-3" style={{ flexShrink: 0, flexWrap: 'wrap' }}>
-
-            {completedCount > 0 && (
-              <button onClick={async () => {
-                const completedPaths = queue.flatMap(i => i.status === 'completed' ? (i.outputPaths && i.outputPaths.length > 0 ? i.outputPaths : i.outputPath ? [i.outputPath] : []) : []);
-                setDownloadProgress({ current: 0, total: completedPaths.length, active: true });
-                let count = 0;
-                for (const outputPath of completedPaths) {
-                  try {
-                    const link = document.createElement('a');
-                    link.href = toFileUrl(outputPath);
-                    link.download = fileNameFromPath(outputPath);
-                    document.body.appendChild(link);
-                    link.click();
-                    document.body.removeChild(link);
-                    count++;
-                  } catch { /* skip */ }
-                  setDownloadProgress(p => ({ ...p, current: count }));
-                }
-                setDownloadProgress(p => ({ ...p, active: false }));
-                showToast('下载完成', 'success');
-              }} className="btn btn-sm" style={{ background: '#065f46' }}>
-                全部下载
-              </button>
-            )}
 
             {/* Model & Download Width */}
             <div className="flex items-center gap-4 ml-auto">
@@ -1306,6 +1262,28 @@ export const AIBatch: React.FC = () => {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0 10px', fontSize: 12, color: 'var(--color-text-muted)', borderBottom: '1px solid var(--color-border-subtle)', marginBottom: 8 }}>
               <span>图片队列</span>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                {completedCount > 0 && (
+                  <button
+                    onClick={async () => {
+                      const completedPaths = queue.flatMap(i => i.status === 'completed' ? (i.outputPaths && i.outputPaths.length > 0 ? i.outputPaths : i.outputPath ? [i.outputPath] : []) : []);
+                      if (completedPaths.length === 0) return;
+                      const destDir = await (window as any).go.main.App.SelectDirectory();
+                      if (!destDir) return;
+                      setDownloadProgress({ current: 0, total: completedPaths.length, active: true });
+                      try {
+                        const count = await (window as any).go.main.App.SaveFilesToDir(completedPaths, destDir);
+                        showToast(`${count}/${completedPaths.length} 已保存到 ${destDir}`, 'success');
+                      } catch (err: any) {
+                        showToast(`保存失败: ${err.message}`, 'error');
+                      }
+                      setDownloadProgress(p => ({ ...p, active: false }));
+                    }}
+                    className="btn btn-sm"
+                    style={{ border: '1px solid var(--color-accent)', color: 'var(--color-accent)', background: 'transparent', fontSize: 11, padding: '2px 10px' }}
+                  >
+                    全部保存
+                  </button>
+                )}
                 {queue.filter(i => i.status === 'error' || i.status === 'completed').length > 0 && (
                   <button
                     onClick={retryAll}
@@ -1429,17 +1407,16 @@ export const AIBatch: React.FC = () => {
                       {item.status === 'completed' && (item.outputPaths?.length || item.outputPath) && (
                         <button onClick={async () => {
                           const outputPaths = item.outputPaths && item.outputPaths.length > 0 ? item.outputPaths : item.outputPath ? [item.outputPath] : [];
+                          if (outputPaths.length === 0) return;
+                          const destDir = await (window as any).go.main.App.SelectDirectory();
+                          if (!destDir) return;
                           try {
-                            for (const outputPath of outputPaths) {
-                              const link = document.createElement('a');
-                              link.href = toFileUrl(outputPath);
-                              link.download = fileNameFromPath(outputPath);
-                              document.body.appendChild(link);
-                              link.click();
-                              document.body.removeChild(link);
-                            }
-                          } catch { /* no-op */ }
-                        }} className="btn btn-sm" title="下载">⬇</button>
+                            const count = await (window as any).go.main.App.SaveFilesToDir(outputPaths, destDir);
+                            showToast(`已保存 ${count}/${outputPaths.length} 张`, 'success');
+                          } catch (err: any) {
+                            showToast(`保存失败: ${err.message}`, 'error');
+                          }
+                        }} className="btn btn-sm" title="保存到...">💾</button>
                       )}
                       {(item.status === 'error' || item.status === 'completed') && (
                         <button

@@ -1,4 +1,7 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
+import { EventsOn } from '../../wailsjs/runtime/runtime';
+
+const IMAGE_EXTS = ['.jpg', '.jpeg', '.jfif', '.png', '.webp', '.bmp', '.gif', '.tiff'];
 
 export interface FolderEntry {
   path: string;
@@ -15,6 +18,7 @@ interface GroupedFileListProps {
   onClear: () => void;
   onPreview?: (path: string) => void;
   selectedPath?: string;
+  onDropFiles?: (paths: string[]) => void;
 }
 
 interface TreeNode {
@@ -77,14 +81,14 @@ const FileTreeView: React.FC<FileTreeViewProps> = ({ nodes, depth, expanded, onT
           const isExpanded = expanded.has(key);
           return (
             <li key={key} style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-              <div
-                onClick={() => onToggle(key)}
-                style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '3px 6px', cursor: 'pointer', borderRadius: 'var(--radius-sm)', marginLeft: depth * 16 }}
-              >
-                <span style={{ fontSize: 11, width: 12, textAlign: 'center', flexShrink: 0 }}>{isExpanded ? '▼' : '▶'}</span>
-                <span style={{ fontSize: 13 }}>📂</span>
-                <span className="text-sm" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{node.name}</span>
-                <span className="text-xs text-muted">({node.fileCount} 张)</span>
+                <div
+                  onClick={() => onToggle(key)}
+                  style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '3px 6px', cursor: 'pointer', borderRadius: 'var(--radius-sm)', marginLeft: depth * 16 }}
+                >
+                  <span style={{ fontSize: 11, width: 12, textAlign: 'center', flexShrink: 0 }}>{isExpanded ? '▼' : '▶'}</span>
+                  <span style={{ fontSize: 13, flexShrink: 0 }}>📂</span>
+                  <span className="text-sm" style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{node.name}</span>
+                  <span className="text-xs text-muted" style={{ flexShrink: 0 }}>({node.fileCount} 张)</span>
               </div>
               {isExpanded && (
                 <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
@@ -101,7 +105,7 @@ const FileTreeView: React.FC<FileTreeViewProps> = ({ nodes, depth, expanded, onT
             marginLeft: depth * 16 + 16,
           }}>
             <span className="text-xs text-muted" style={{ width: 12, flexShrink: 0, textAlign: 'center' }}>└─</span>
-            <span className="text-sm text-secondary" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }} title={node.path}>
+            <span className="text-sm text-secondary" style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={node.path}>
               {node.name}
             </span>
           </li>
@@ -111,11 +115,57 @@ const FileTreeView: React.FC<FileTreeViewProps> = ({ nodes, depth, expanded, onT
   );
 };
 
+function normalizeDroppedPath(path: string): string {
+  let normalized = path.trim();
+  if (normalized.startsWith('file:///')) {
+    normalized = decodeURIComponent(normalized.replace(/^file:\/\/\//, ''));
+  }
+  return normalized;
+}
+
+function isReadableLocalPath(path: string): boolean {
+  return /^[a-zA-Z]:[\\/]/.test(path) || path.startsWith('\\\\');
+}
+
+function imagePaths(paths: string[]): string[] {
+  return paths
+    .map(normalizeDroppedPath)
+    .filter(p => {
+      if (!isReadableLocalPath(p)) return false;
+      const ext = p.toLowerCase().slice(p.lastIndexOf('.'));
+      return IMAGE_EXTS.includes(ext);
+    });
+}
+
+function pointInElement(x: number, y: number, el: HTMLElement | null): boolean {
+  if (!el) return false;
+  const rect = el.getBoundingClientRect();
+  const candidates = [
+    { x, y },
+    { x: x / window.devicePixelRatio, y: y / window.devicePixelRatio },
+  ];
+  return candidates.some(p => p.x >= rect.left && p.x <= rect.right && p.y >= rect.top && p.y <= rect.bottom);
+}
+
 export const GroupedFileList: React.FC<GroupedFileListProps> = ({
-  folders, looseFiles, onAddFolder, onAddFiles, onRemoveFolder, onRemoveFile, onClear, onPreview, selectedPath,
+  folders, looseFiles, onAddFolder, onAddFiles, onRemoveFolder, onRemoveFile, onClear, onPreview, selectedPath, onDropFiles,
 }) => {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [dragOver, setDragOver] = useState(false);
+  const dropRef = useRef<HTMLDivElement>(null);
   const total = folders.reduce((s, f) => s + f.scannedFiles.length, 0) + looseFiles.length;
+
+  useEffect(() => {
+    const off = EventsOn('app:file-drop', (x: number, y: number, paths: string[]) => {
+      if (!pointInElement(x, y, dropRef.current)) return;
+      const filtered = imagePaths(paths);
+      if (filtered.length > 0) onDropFiles?.(filtered);
+      setDragOver(false);
+    });
+    return () => {
+      off();
+    };
+  }, [onDropFiles]);
 
   const toggleExpand = useCallback((key: string) => {
     setExpanded(prev => {
@@ -127,7 +177,24 @@ export const GroupedFileList: React.FC<GroupedFileListProps> = ({
   }, []);
 
   return (
-    <div className="card" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+    <div
+      ref={dropRef}
+      className="card"
+      style={{
+        flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0,
+        ['--wails-drop-target' as any]: 'drop',
+        outline: dragOver ? '2px dashed var(--color-accent)' : undefined,
+        outlineOffset: -4,
+      }}
+      onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+      onDragLeave={() => setDragOver(false)}
+      onDrop={(e) => {
+        e.preventDefault();
+        setDragOver(false);
+        const paths = imagePaths(Array.from(e.dataTransfer.files).map(f => (f as any).path || f.name));
+        if (paths.length > 0) onDropFiles?.(paths);
+      }}
+    >
       <div className="flex gap-3" style={{ flexWrap: 'wrap', padding: 'var(--space-4) var(--space-4) 0' }}>
         <button onClick={onAddFiles} className="btn btn-sm btn-primary">选择文件</button>
         <button onClick={onAddFolder} className="btn btn-sm btn-ghost">选择文件夹</button>
@@ -146,12 +213,12 @@ export const GroupedFileList: React.FC<GroupedFileListProps> = ({
               return (
                 <li key={`f-${fi}`} style={{ marginBottom: 'var(--space-3)' }}>
                   <div className="flex items-center justify-between" style={{ padding: '4px 0' }}>
-                    <div className="flex items-center gap-2" style={{ minWidth: 0, flex: 1 }}>
-                      <span style={{ fontSize: 14 }}>📁</span>
-                      <span className="text-sm" style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={folder.path}>
-                        {folder.path}
-                      </span>
-                      <span className="text-xs text-muted">({folder.scannedFiles.length} 张)</span>
+                  <div className="flex items-center gap-2" style={{ minWidth: 0, flex: 1 }}>
+                    <span style={{ fontSize: 14, flexShrink: 0 }}>📁</span>
+                    <span className="text-sm" style={{ fontWeight: 500, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={folder.path}>
+                      {folder.path}
+                    </span>
+                    <span className="text-xs text-muted" style={{ flexShrink: 0 }}>({folder.scannedFiles.length} 张)</span>
                     </div>
                     <button onClick={() => onRemoveFolder(fi)} className="btn-icon" title="移除文件夹" style={{ fontSize: 16, flexShrink: 0 }}>×</button>
                   </div>
@@ -172,7 +239,7 @@ export const GroupedFileList: React.FC<GroupedFileListProps> = ({
                   {looseFiles.map((fp, j) => (
                     <li key={j} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '3px 6px' }}>
                       <span className="text-xs text-muted" style={{ width: 12, flexShrink: 0, textAlign: 'center' }}>└─</span>
-                      <span className="text-sm text-secondary" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }} onClick={() => onPreview?.(fp)} title={fp}>
+                      <span className="text-sm text-secondary" style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} onClick={() => onPreview?.(fp)} title={fp}>
                         {fp}
                       </span>
                       <button onClick={() => onRemoveFile(j)} className="btn-icon" title="移除" style={{ fontSize: 14, flexShrink: 0 }}>×</button>

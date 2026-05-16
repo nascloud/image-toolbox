@@ -27,6 +27,8 @@ export function SaveAiOutputDir(arg1:string):Promise<void>;
 
 export function SaveApiKey(arg1:string):Promise<void>;
 
+export function SaveFilesToDir(arg1:Array<string>,arg2:string):Promise<number>;
+
 export function ScanDirectory(arg1:string,arg2:boolean):Promise<Array<string>>;
 
 export function SelectDirectory():Promise<string>;

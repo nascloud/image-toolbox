@@ -170,6 +170,7 @@ export const Watermark: React.FC = () => {
             onClear={() => { setFolders([]); setLooseFiles([]); }}
             onPreview={setSelectedPath}
             selectedPath={selectedPath || undefined}
+            onDropFiles={(paths) => setLooseFiles(prev => [...prev, ...paths.filter(p => !prev.includes(p))])}
           />
         </div>
 

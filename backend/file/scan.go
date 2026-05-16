@@ -24,7 +24,7 @@ func IsImageFile(ext string) bool {
 
 // ScanImageFiles walks dir and returns all image file paths.
 func ScanImageFiles(dir string, recursive bool) ([]string, error) {
-	var files []string
+	files := make([]string, 0)
 
 	walkFn := func(path string, info os.FileInfo, err error) error {
 		if err != nil {

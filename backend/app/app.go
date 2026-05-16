@@ -34,6 +34,7 @@ type App struct {
 
 // NewApp creates a new API App instance.
 func NewApp() *App {
+	file.CleanupOldAITempDirs()
 	return &App{}
 }
 
@@ -397,6 +398,8 @@ func (a *App) PreviewWatermark(req model.WatermarkPreviewRequest) (string, error
 }
 
 // RunAIImageBatch processes images through AI generation.
+// Images are written to a temporary cache directory. Use SaveFilesToDir
+// to persist them to a permanent location.
 func (a *App) RunAIImageBatch(req model.AIBatchRequest) (model.BatchResult, error) {
 	if len(req.SourcePaths) == 0 && req.OutputDir != "" {
 		paths, err := file.ScanImageFiles(req.OutputDir, false)
@@ -405,6 +408,12 @@ func (a *App) RunAIImageBatch(req model.AIBatchRequest) (model.BatchResult, erro
 		}
 		req.SourcePaths = paths
 	}
+
+	tmpDir, err := file.AITempDir()
+	if err != nil {
+		return model.BatchResult{}, fmt.Errorf("create temp dir: %w", err)
+	}
+	req.OutputDir = tmpDir
 
 	ctx := a.newBatchContext()
 	progressCh := make(chan model.ProgressUpdate, 100)
@@ -436,6 +445,21 @@ func (a *App) GetApiKey() (string, error) {
 func (a *App) SaveAiOutputDir(dir string) error {
 	configPath := filepath.Join(getConfigDir(), "config.json")
 	return config.SaveAiOutputDir(configPath, dir)
+}
+
+// SaveFilesToDir copies a list of source files to the given destination directory.
+func (a *App) SaveFilesToDir(sourcePaths []string, destDir string) (int, error) {
+	var count int
+	for _, src := range sourcePaths {
+		if _, err := file.CopyFile(src, destDir); err != nil {
+			continue
+		}
+		count++
+	}
+	if count == 0 {
+		return 0, fmt.Errorf("no files were copied")
+	}
+	return count, nil
 }
 
 // GetAiOutputDir retrieves the stored AI output directory.

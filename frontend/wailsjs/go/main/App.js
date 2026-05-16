@@ -50,6 +50,10 @@ export function SaveApiKey(arg1) {
   return window['go']['main']['App']['SaveApiKey'](arg1);
 }
 
+export function SaveFilesToDir(arg1, arg2) {
+  return window['go']['main']['App']['SaveFilesToDir'](arg1, arg2);
+}
+
 export function ScanDirectory(arg1, arg2) {
   return window['go']['main']['App']['ScanDirectory'](arg1, arg2);
 }
