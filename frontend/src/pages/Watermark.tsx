@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { GroupedFileList, FolderEntry } from '../components/GroupedFileList';
 import { useBatch } from '../hooks/useBatch';
-import { BatchProgress } from '../components/BatchProgress';
 import { SaveModeSelector, SaveModeConfig } from '../components/SaveModeSelector';
+import { useProgressContext } from '../hooks/useProgress';
 
 export const Watermark: React.FC = () => {
   const [folders, setFolders] = useState<FolderEntry[]>([]);
@@ -22,6 +22,7 @@ export const Watermark: React.FC = () => {
   const [outputWidth, setOutputWidth] = useState(false);
   const [outputTarget, setOutputTarget] = useState(1440);
   const { state, startBatch, cancelBatch, openOutputDir } = useBatch();
+  const { setIdleText } = useProgressContext();
 
   const [previewDataUrl, setPreviewDataUrl] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
@@ -29,6 +30,11 @@ export const Watermark: React.FC = () => {
   const [imageInfo, setImageInfo] = useState<any>(null);
 
   const allFiles = [...folders.flatMap(f => f.scannedFiles), ...looseFiles];
+
+  useEffect(() => {
+    const count = allFiles.length;
+    setIdleText(count > 0 ? `${count} 张图片 · 就绪` : '0 张图片 · 就绪');
+  }, [allFiles, setIdleText]);
 
   // Auto-select first file when allFiles changes
   useEffect(() => {
@@ -352,7 +358,6 @@ export const Watermark: React.FC = () => {
             )}
           </div>
 
-          <BatchProgress progress={state.progress} />
           {state.result && (
             <div className="result-summary">
               处理完成: {state.result.success || 0} 成功, {state.result.failed || 0} 失败

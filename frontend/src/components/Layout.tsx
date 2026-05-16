@@ -1,4 +1,5 @@
 import React, { useRef, useEffect, useState } from 'react';
+import { StatusBar } from './StatusBar';
 
 export interface TabDef {
   id: string;
@@ -49,6 +50,7 @@ export const Layout: React.FC<LayoutProps> = ({ tabs, activeTab, onTabChange }) 
       >
         {activeContent}
       </main>
+      <StatusBar />
     </div>
   );
 };

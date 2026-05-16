@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useProgressContext } from '../hooks/useProgress';
 
 const defaultModels = [
   { id: 'doubao-seedream-5-0-260128', name: 'Seedream 5.0' },
@@ -31,6 +32,11 @@ function loadModelList(): { id: string; name: string }[] {
   const [isAddingModel, setIsAddingModel] = useState(false);
   const [newModelId, setNewModelId] = useState('');
   const [newModelName, setNewModelName] = useState('');
+
+  const { setIdleText } = useProgressContext();
+  useEffect(() => {
+    setIdleText('设置');
+  }, [setIdleText]);
 
   useEffect(() => {
     (async () => {

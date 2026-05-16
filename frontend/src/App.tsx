@@ -5,6 +5,7 @@ import { Slice } from './pages/Slice';
 import { Watermark } from './pages/Watermark';
 import { AIBatch } from './pages/AIBatch';
 import { Settings } from './pages/Settings';
+import { ProgressProvider } from './hooks/useProgress';
 import { OnFileDrop, OnFileDropOff } from '../wailsjs/runtime/runtime';
 import './App.css';
 
@@ -27,7 +28,9 @@ function App() {
   ];
 
   return (
-    <Layout tabs={tabs} activeTab={activeTab} onTabChange={setActiveTab} />
+    <ProgressProvider>
+      <Layout tabs={tabs} activeTab={activeTab} onTabChange={setActiveTab} />
+    </ProgressProvider>
   );
 }
 

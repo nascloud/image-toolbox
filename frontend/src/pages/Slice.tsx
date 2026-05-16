@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { GroupedFileList, FolderEntry } from '../components/GroupedFileList';
-import { BatchProgress } from '../components/BatchProgress';
 import { useBatch } from '../hooks/useBatch';
+import { useProgressContext } from '../hooks/useProgress';
 import { SaveModeSelector, SaveModeConfig } from '../components/SaveModeSelector';
 
 export const Slice: React.FC = () => {
@@ -15,7 +15,13 @@ export const Slice: React.FC = () => {
   const [sliceHeight, setSliceHeight] = useState(1200);
   const [saveModeConfig, setSaveModeConfig] = useState<SaveModeConfig>({ mode: 'subdir', prefixName: 'output', subdirName: 'output', outputDir: '' });
   const { state, startBatch, cancelBatch, openOutputDir } = useBatch();
+  const { setIdleText } = useProgressContext();
   const allFiles = [...folders.flatMap(f => f.scannedFiles), ...looseFiles];
+
+  useEffect(() => {
+    const count = allFiles.length;
+    setIdleText(count > 0 ? `${count} 张图片 · 就绪` : '0 张图片 · 就绪');
+  }, [allFiles, setIdleText]);
 
   // Auto-recommend slice height = width × 1.5, so each slice satisfies
   // Taobao's 宝贝详情图 restriction (h/w ≤ 2).
@@ -182,7 +188,6 @@ export const Slice: React.FC = () => {
             )}
           </div>
 
-          <BatchProgress progress={state.progress} />
           {state.result && (
             <div className="result-summary">
               处理完成: {state.result.success || 0} 成功, {state.result.failed || 0} 失败

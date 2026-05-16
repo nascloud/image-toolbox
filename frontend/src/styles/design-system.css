@@ -1075,3 +1075,74 @@ input[type="range"]::-moz-range-thumb {
   object-fit: contain;
   display: block;
 }
+
+/* ═══════════════════════════════════════════════
+   Component Classes: StatusBar
+   ═══════════════════════════════════════════════ */
+
+.status-bar {
+  height: 40px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  padding: 0 var(--space-10);
+  background: var(--color-bg-surface);
+  border-top: 1px solid var(--color-border-subtle);
+  gap: var(--space-6);
+  overflow: hidden;
+  z-index: var(--z-sticky);
+}
+
+.status-bar-idle {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
+.status-bar-active {
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+}
+
+.status-bar-progress-text {
+  white-space: nowrap;
+  flex-shrink: 0;
+  min-width: 80px;
+  font-variant-numeric: tabular-nums;
+}
+
+.status-bar-track {
+  flex: 1;
+  height: 4px;
+  background: var(--color-border-default);
+  border-radius: 2px;
+  overflow: hidden;
+  min-width: 60px;
+}
+
+.status-bar-fill {
+  height: 100%;
+  background: var(--color-accent);
+  border-radius: 2px;
+  transition: width 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.status-bar-current {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-shrink: 1;
+  min-width: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+}
+
+.status-bar-done {
+  justify-content: center;
+  font-size: var(--text-sm);
+  color: var(--color-success);
+  font-weight: var(--weight-medium);
+  animation: fadeIn var(--transition-base);
+}
+
+
+

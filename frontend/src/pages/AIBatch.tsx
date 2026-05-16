@@ -2,6 +2,7 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { EventsOn } from '../../wailsjs/runtime/runtime';
 import { FolderEntry } from '../components/GroupedFileList';
+import { useProgressContext } from '../hooks/useProgress';
 
 // ── Types ──
 interface ImageItem {
@@ -197,6 +198,7 @@ export const AIBatch: React.FC = () => {
   const [leftZoom, setLeftZoom] = useState(1);
   const [rightZoom, setRightZoom] = useState(1);
   const [downloadProgress, setDownloadProgress] = useState<{ current: number; total: number; active: boolean }>({ current: 0, total: 0, active: false });
+  const { updateProgress } = useProgressContext();
   const [hoverPreviewImg, setHoverPreviewImg] = useState<string | null>(null);
   const [hoverPreviewPos, setHoverPreviewPos] = useState({ x: 0, y: 0 });
   const [hoverPreviewVisible, setHoverPreviewVisible] = useState(false);
@@ -420,6 +422,13 @@ export const AIBatch: React.FC = () => {
         thumbUrl: undefined, thumbUrls: undefined, resultHoverUrls: undefined } : i
     ));
     setProcessing(true);
+    updateProgress({
+      completed: 0,
+      total: 1,
+      current: item.name,
+      running: true,
+      done: false,
+    });
 
     try {
       const result = await (window as any).go.main.App.RunAIImageBatch(
@@ -430,6 +439,14 @@ export const AIBatch: React.FC = () => {
         setQueue(prev => prev.map(i =>
           i.id === id ? { ...i, status: 'error' as const, error: result?.error || '处理失败' } : i
         ));
+        updateProgress({
+          completed: 0,
+          total: 1,
+          current: '',
+          running: false,
+          done: true,
+          error: result?.error || '处理失败',
+        });
         setProcessing(false);
         return;
       }
@@ -469,10 +486,25 @@ export const AIBatch: React.FC = () => {
           ));
         }
       }
+      updateProgress({
+        completed: 1,
+        total: 1,
+        current: '',
+        running: false,
+        done: true,
+      });
     } catch (err: any) {
       setQueue(prev => prev.map(i =>
         i.id === id ? { ...i, status: 'error' as const, error: err.message } : i
       ));
+      updateProgress({
+        completed: 0,
+        total: 1,
+        current: '',
+        running: false,
+        done: true,
+        error: err.message,
+      });
     }
     setProcessing(false);
   };
@@ -553,6 +585,13 @@ export const AIBatch: React.FC = () => {
     if (processing) return; // re-entry guard
 
     setProcessing(true);
+    updateProgress({
+      completed: 0,
+      total: pendingItems.length,
+      current: '准备中...',
+      running: true,
+      done: false,
+    });
     cancelRef.current = false;
     setCancelRequested(false);
 
@@ -573,6 +612,14 @@ export const AIBatch: React.FC = () => {
         setQueue(prev => prev.map(i =>
           i.status === 'processing' ? { ...i, status: cancelRef.current ? 'cancelled' as const : 'error' as const, error: !result ? '无返回结果' : undefined } : i
         ));
+        updateProgress({
+          completed: 0,
+          total: pendingItems.length,
+          current: '',
+          running: false,
+          done: true,
+          error: !result ? '无返回结果' : '已取消',
+        });
       } else if (result.results && result.results.length > 0) {
         // Map batch results back to queue items by source path
         const resultByPath = new Map<string, any>();
@@ -581,6 +628,17 @@ export const AIBatch: React.FC = () => {
         }
 
         let failedCount = 0;
+    const successCount = pendingItems.filter(item => {
+      const r = resultByPath.get(item.path);
+      return r && r.success;
+    }).length;
+    updateProgress({
+      completed: successCount,
+      total: pendingItems.length,
+      current: '',
+      running: false,
+      done: false,
+    });
         setQueue(prev => prev.map(i => {
           const r = resultByPath.get(i.path);
           if (r) {
@@ -633,18 +691,46 @@ export const AIBatch: React.FC = () => {
           }));
         }));
 
+        const completedCount = pendingItems.filter(item => {
+          const r = resultByPath.get(item.path);
+          return r && r.success;
+        }).length;
+        updateProgress({
+          completed: completedCount,
+          total: pendingItems.length,
+          current: '',
+          running: false,
+          done: true,
+        });
+
         if (failedCount > 0) showToast(`${failedCount} 张处理失败`, 'error');
       } else {
         showToast(result.error || '处理失败', 'error');
         setQueue(prev => prev.map(i =>
           i.status === 'processing' ? { ...i, status: 'error' as const, error: result.error || '未返回处理结果' } : i
         ));
+        updateProgress({
+          completed: 0,
+          total: pendingItems.length,
+          current: '',
+          running: false,
+          done: true,
+          error: result.error || '处理失败',
+        });
       }
     } catch (err: any) {
       showToast(`处理出错: ${err.message}`, 'error');
       setQueue(prev => prev.map(i =>
         i.status === 'processing' ? { ...i, status: 'error' as const, error: err.message } : i
       ));
+      updateProgress({
+        completed: 0,
+        total: pendingItems.length,
+        current: '',
+        running: false,
+        done: true,
+        error: err.message,
+      });
     }
 
     setProcessing(false);
@@ -658,6 +744,13 @@ export const AIBatch: React.FC = () => {
     if (toRetry.length === 0) { showToast('没有需要重试的图片', 'warning'); return; }
 
     setProcessing(true);
+    updateProgress({
+      completed: 0,
+      total: toRetry.length,
+      current: '准备中...',
+      running: true,
+      done: false,
+    });
 
     // Mark all toRetry items as processing
     setQueue(prev => prev.map(i =>
@@ -680,6 +773,14 @@ export const AIBatch: React.FC = () => {
             ? { ...i, status: 'error' as const, error: result?.error || '处理失败' }
             : i
         ));
+        updateProgress({
+          completed: 0,
+          total: toRetry.length,
+          current: '',
+          running: false,
+          done: true,
+          error: result?.error || '处理失败',
+        });
         setProcessing(false);
         return;
       }
@@ -708,6 +809,15 @@ export const AIBatch: React.FC = () => {
         return { ...i, status: 'error' as const, error: '未返回处理结果' };
       }));
 
+      const successCount = result.results.filter((r: any) => r.success).length;
+      updateProgress({
+        completed: successCount,
+        total: toRetry.length,
+        current: '',
+        running: false,
+        done: false,
+      });
+
       // Load thumbnails for all completed items
       const completedResults = result.results.filter((r: any) => r.success);
       await Promise.all(completedResults.map(async (r: any) => {
@@ -733,6 +843,14 @@ export const AIBatch: React.FC = () => {
         }));
       }));
 
+      updateProgress({
+        completed: successCount,
+        total: toRetry.length,
+        current: '',
+        running: false,
+        done: true,
+      });
+
       if (failedCount > 0) showToast(`${failedCount} 张处理失败`, 'error');
     } catch (err: any) {
       showToast(`处理出错: ${err.message}`, 'error');
@@ -741,6 +859,14 @@ export const AIBatch: React.FC = () => {
           ? { ...i, status: 'error' as const, error: err.message }
           : i
       ));
+      updateProgress({
+        completed: 0,
+        total: toRetry.length,
+        current: '',
+        running: false,
+        done: true,
+        error: err.message,
+      });
     }
     setProcessing(false);
   };
@@ -1212,7 +1338,7 @@ export const AIBatch: React.FC = () => {
             <div style={{ flex: 1 }} />
 
             {processing ? (
-              <button onClick={() => { cancelRef.current = true; setCancelRequested(true); try { (window as any).go.main.App.CancelBatch(); } catch { /* no-op */ } }} className="btn btn-danger" style={{ fontWeight: 600, padding: '8px 24px' }}>
+              <button onClick={() => { updateProgress(null); cancelRef.current = true; setCancelRequested(true); try { (window as any).go.main.App.CancelBatch(); } catch { /* no-op */ } }} className="btn btn-danger" style={{ fontWeight: 600, padding: '8px 24px' }}>
                 取消处理
               </button>
             ) : (
@@ -1222,13 +1348,6 @@ export const AIBatch: React.FC = () => {
               </button>
             )}
           </div>
-
-          {/* Download Progress */}
-          {downloadProgress.active && (
-            <div style={{ position: 'fixed', bottom: 20, left: '50%', transform: 'translateX(-50%)', zIndex: 100, background: 'var(--color-bg-elevated)', border: '1px solid var(--color-border-default)', borderRadius: 8, padding: '10px 20px', fontSize: 13, color: 'var(--color-text-secondary)' }}>
-              下载中 {downloadProgress.current} / {downloadProgress.total}
-            </div>
-          )}
 
           {/* Hover Preview */}
           {hoverPreviewVisible && hoverPreviewImg && (() => {
