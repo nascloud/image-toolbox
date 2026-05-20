@@ -200,7 +200,7 @@ export const GroupedFileList: React.FC<GroupedFileListProps> = ({
         <button onClick={onAddFolder} className="btn btn-sm btn-ghost">选择文件夹</button>
         {total > 0 && <button onClick={onClear} className="btn btn-sm btn-ghost" style={{ marginLeft: 'auto' }}>清空</button>}
       </div>
-      <div style={{ flex: 1, overflow: 'auto', minHeight: 0, padding: 'var(--space-3) var(--space-4)' }}>
+      <div className="grouped-file-list-area" style={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
         {total === 0 ? (
           <div className="empty-state" style={{ margin: 0, background: 'none', border: 'none' }} onClick={onAddFiles}>
             <span style={{ fontSize: 18 }}>📁</span>

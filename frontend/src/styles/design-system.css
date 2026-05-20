@@ -1144,5 +1144,12 @@ input[type="range"]::-moz-range-thumb {
   animation: fadeIn var(--transition-base);
 }
 
+/* ── Grouped file list area ── */
+.grouped-file-list-area {
+  border: 2px dashed var(--color-border-default);
+  border-radius: var(--radius-lg);
+  margin-top: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+}
 
 
