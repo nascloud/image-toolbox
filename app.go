@@ -4,30 +4,50 @@ import (
 	"context"
 
 	backendApp "image-toolbox/backend/app"
+	"image-toolbox/backend/shell"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 // App is the top-level application struct used by Wails.
-// It embeds the backend API layer so all its methods are automatically bound.
 type App struct {
 	*backendApp.App
-	ctx context.Context
+	ctx            context.Context
+	pendingIntent  *shell.LaunchIntent
+	OnContextReady func()
 }
 
-// NewApp creates a new App application struct with the embedded backend App.
 func NewApp() *App {
 	return &App{
 		App: backendApp.NewApp(),
 	}
 }
 
-// startup is called when the app starts. The context is saved
-// and passed to the backend App for runtime operations (dialogs, events).
+func (a *App) SetPendingIntent(intent *shell.LaunchIntent) {
+	a.pendingIntent = intent
+}
+
+func (a *App) HandleLaunchIntent(intent shell.LaunchIntent) {
+	if a.ctx == nil {
+		return
+	}
+	runtime.EventsEmit(a.ctx, "app:launch-intent", intent)
+}
+
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 	a.App.SetContext(ctx)
+
 	runtime.OnFileDrop(ctx, func(x, y int, paths []string) {
 		runtime.EventsEmit(ctx, "app:file-drop", x, y, paths)
 	})
+
+	if a.pendingIntent != nil {
+		runtime.EventsEmit(ctx, "app:launch-intent", *a.pendingIntent)
+		a.pendingIntent = nil
+	}
+
+	if a.OnContextReady != nil {
+		a.OnContextReady()
+	}
 }

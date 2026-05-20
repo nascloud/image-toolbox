@@ -2,6 +2,10 @@ package main
 
 import (
 	"embed"
+	"log"
+	"os"
+
+	"image-toolbox/backend/shell"
 
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
@@ -12,11 +16,40 @@ import (
 var assets embed.FS
 
 func main() {
-	// Create an instance of the app structure
+	intent := shell.ParseLaunchIntent(os.Args[1:])
+
+	running, err := shell.IsAnotherInstanceRunning()
+	if err != nil {
+		log.Printf("single-instance check failed: %v", err)
+	}
+	if running && intent != nil {
+		port, readErr := shell.ReadIPCPort()
+		if readErr == nil {
+			if sendErr := shell.SendLaunchIntent(port, *intent); sendErr == nil {
+				log.Println("Forwarded launch intent to running instance, exiting.")
+				return
+			}
+		}
+	}
+
 	app := NewApp()
 
-	// Create application with options
-	err := wails.Run(&options.App{
+	if intent != nil {
+		app.SetPendingIntent(intent)
+	}
+
+	app.OnContextReady = func() {
+		port, err := shell.StartIPCServer(func(intent shell.LaunchIntent) {
+			app.HandleLaunchIntent(intent)
+		})
+		if err != nil {
+			log.Printf("IPC server failed: %v", err)
+			return
+		}
+		shell.WriteIPCPort(port)
+	}
+
+	err = wails.Run(&options.App{
 		Title:  "image-toolbox",
 		Width:  1280,
 		Height: 800,
@@ -36,4 +69,7 @@ func main() {
 	if err != nil {
 		println("Error:", err.Error())
 	}
+
+	shell.ReleaseInstanceMutex()
+	shell.CleanupIPCPort()
 }
