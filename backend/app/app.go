@@ -24,6 +24,7 @@ import (
 	"image-toolbox/backend/file"
 	backendImage "image-toolbox/backend/image"
 	"image-toolbox/backend/model"
+	"image-toolbox/backend/shell"
 )
 
 // App is the thin Wails API layer that exposes methods to the frontend.
@@ -466,6 +467,21 @@ func (a *App) SaveFilesToDir(sourcePaths []string, destDir string) (int, error) 
 func (a *App) GetAiOutputDir() (string, error) {
 	configPath := filepath.Join(getConfigDir(), "config.json")
 	return config.LoadAiOutputDir(configPath)
+}
+
+// InstallContextMenu registers the right-click context menu in Windows registry.
+func (a *App) InstallContextMenu() error {
+	return shell.InstallContextMenu()
+}
+
+// UninstallContextMenu removes the right-click context menu from Windows registry.
+func (a *App) UninstallContextMenu() error {
+	return shell.UninstallContextMenu()
+}
+
+// IsContextMenuInstalled returns whether the context menu is currently registered.
+func (a *App) IsContextMenuInstalled() bool {
+	return shell.IsContextMenuInstalled()
 }
 
 func getConfigDir() string {
