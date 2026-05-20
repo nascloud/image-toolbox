@@ -4,161 +4,166 @@
 
 请你像在真实商业项目中一样编写代码，遵循以下规范。
 
-\---
+---
 
-\## 1. 项目核心目标（必须理解）
+## 1. 项目核心目标（必须理解）
 
 本项目是一个 **本地优先（Local-first）图片处理应用**，主要能力包括：
 
-\### ✅ 本地图片批处理（不依赖 AI）
+### ✅ 本地图片批处理（不依赖 AI）
 
-\- 图片缩放（按比例 / 指定最大边）
+- 图片缩放（按比例 / 指定最大边）
+- 图片格式转换（jpg / png / webp）
+- 图片水印（文字水印 / 图片水印）
+- 图片切片（按数量 / 按像素高度）
+- 批量处理文件夹
 
-\- 图片格式转换（jpg / png / webp）
+### ✅ AI 图片批处理（通过 API）
 
-\- 图片水印（文字水印 / 图片水印）
-
-\- 批量处理文件夹
-
-\- 保留 / 修改 EXIF 信息
-
-\### ✅ AI 图片批处理（通过 API）
-
-\- 文本提示词（Prompt）
-
-\- 可选参考图（Reference Image）
-
-\- 支持对一组图片执行相同 AI 操作
-
-\- 支持可复现参数（尺寸、风格、强度等）
+- 文本提示词（Prompt）
+- 可选参考图（Reference Image）
+- 支持对一组图片执行相同 AI 操作
+- 支持可复现参数（尺寸、模型、种子、风格等）
+- 多模型支持：Seedream 5.0 / 4.5 / 4.0 / 3.0
 
 ⚠️ AI **不是实时交互工具**，而是：
+> **"用户配置一次 → 后端批量执行 → 返回结果"**
 
-\> **“用户配置一次 → 后端批量执行 → 返回结果”**
+---
 
-\---
+## 2. 技术栈（不可变）
 
-\## 2. 技术栈（不可变）
+### 后端
 
-\### 后端
+- Go 1.24.2
+- Wails v2.12.0
+- Windows 为主要平台
+- 所有图片处理与 AI 请求都在后端完成
 
-\- Go 1.22+
+### 前端
 
-\- Wails v2
+- React + TypeScript
+- 只负责参数配置、状态显示、进度反馈
+- 不能直接操作本地图片内容
 
-\- Windows 为主要平台
+---
 
-\- 所有图片处理与 AI 请求都在后端完成
+## 3. 图片处理架构原则（非常重要）
 
-\### 前端
+### ✅ 强制原则
 
-\- React + TypeScript
-
-\- 只负责参数配置、状态显示、进度反馈
-
-\- 不能直接操作本地图片内容
-
-\---
-
-\## 3. 图片处理架构原则（非常重要）
-
-\### ✅ 强制原则
-
-1. **一切图片都以“文件路径”为核心**
+1. **一切图片都以"文件路径"为核心**
 2. **批处理 = 对一组路径执行相同处理 pipeline**
 3. 每一步操作应：
+  - 可组合
+  - 可单独测试
+  - 不依赖 UI 状态
 
-  \- 可组合
+---
 
-  \- 可单独测试
+## 4. 目录职责（严格遵守）
 
-  \- 不依赖 UI 状态
-
-\---
-
-\## 4. 目录职责（严格遵守）
-
-\### 后端目录职责
+### 后端目录职责
 
 ```
-my-image-app/
+image-toolbox/
 ├── main.go
-├── app.go
+├── app.go                     # Wails 入口，嵌入 backend/app
 ├── wails.json
+├── go.mod / go.sum
 │
 ├── backend/
-│   ├── app/                     # ✅ 给前端用的 API（最薄）
+│   ├── app/                   # ✅ 给前端用的 API（最薄）
 │   │   └── app.go
 │   │
-│   ├── image/                   # ✅ 本地图片处理（非 AI）
-│   │   ├── resize.go            # 缩放 / 尺寸限制
-│   │   ├── convert.go           # 格式转换（jpg/png/webp）
-│   │   ├── watermark.go         # 文字/图片水印
-│   │   ├── exif.go              # EXIF 读取 / 保留 / 修改
-│   │   └── pipeline.go          # ✅ 单图处理 pipeline
+│   ├── image/                 # ✅ 本地图片处理（非 AI）
+│   │   ├── resize.go          # 缩放 / 尺寸限制
+│   │   ├── convert.go         # 格式转换（jpg/png/webp）
+│   │   ├── slice.go           # 图片切片（按数量 / 按高度）
+│   │   └── watermark.go       # 文字/图片水印
 │   │
-│   ├── batch/                   # ✅ 批处理调度层（核心）
-│   │   ├── local.go             # 本地图片批处理
-│   │   ├── ai.go                # AI 图片批处理
-│   │   └── runner.go            # 并发 / 错误隔离 / 进度
+│   ├── batch/                 # ✅ 批处理调度层（核心）
+│   │   ├── local.go           # 本地图片批处理（缩放/转换）
+│   │   ├── ai.go              # AI 图片批处理
+│   │   ├── runner.go          # 并发 / 错误隔离 / 进度
+│   │   ├── slice.go           # 切片批处理
+│   │   ├── watermark.go       # 水印批处理
+│   │   └── output_paths.go    # 批处理输出路径规划
 │   │
-│   ├── ai/                      # ✅ AI 图片处理
-│   │   ├── client.go            # AI 图片 API 客户端
-│   │   ├── prompt.go            # Prompt 构建（纯函数）
-│   │   ├── reference.go         # 参考图处理
-│   │   └── image_task.go        # 单图 AI 任务
+│   ├── ai/                    # ✅ AI 图片处理
+│   │   ├── client.go          # AI 图片 API 客户端
+│   │   ├── prompt.go          # Prompt 构建（纯函数）
+│   │   ├── reference.go       # 参考图处理
+│   │   ├── image_task.go      # 单图 AI 任务
+│   │   └── capability.go      # 模型能力定义（各模型支持的参数）
 │   │
-│   ├── file/                    # ✅ 文件系统
-│   │   ├── picker.go            # 文件 / 目录选择
-│   │   ├── scan.go              # 扫描目录生成图片列表
-│   │   ├── output.go            # 输出路径 & 命名
-│   │   └── temp.go              # 临时文件管理
+│   ├── config/                # ✅ 配置管理
+│   │   └── config.go          # API Key / AI 输出目录持久化
 │   │
-│   ├── model/                   # ✅ 所有结构体定义
-│   │   ├── image.go             # ImageJob / ImageResult
-│   │   ├── batch.go             # BatchRequest / BatchResult
-│   │   ├── ai.go                # AIPrompt / AIImageRequest
-│   │   └── progress.go          # 进度状态
+│   ├── file/                  # ✅ 文件系统
+│   │   ├── scan.go            # 扫描目录生成图片列表
+│   │   ├── output.go          # 输出路径 & 命名
+│   │   ├── copy.go            # 文件复制
+│   │   └── temp.go            # 临时文件管理
 │   │
-│   └── util/                    # 通用工具
-│       ├── logger.go
-│       ├── errors.go
-│       ├── concurrency.go
-│       └── validate.go
+│   ├── model/                 # ✅ 所有结构体定义
+│   │   ├── image.go           # ImageJob / ImageResult
+│   │   ├── batch.go           # BatchRequest / BatchResult
+│   │   ├── ai.go              # AIImageRequest / AIImageResult / AIBatchRequest
+│   │   ├── slice.go           # SliceRequest
+│   │   ├── watermark.go       # WatermarkRequest / WatermarkPreviewRequest
+│   │   └── progress.go        # 进度状态
+│   │
+│   └── util/                  # 通用工具（待充实）
+│       └── ...
 │
 ├── frontend/
-│   ├── src/
-│   │   ├── pages/
-│   │   │   ├── LocalBatch.tsx    # 本地图片批处理页面
-│   │   │   ├── AIBatch.tsx       # AI 图片批处理页面
-│   │   │   └── Settings.tsx
-│   │   │
-│   │   ├── components/
-│   │   │   ├── ImageList.tsx
-│   │   │   ├── BatchProgress.tsx
-│   │   │   └── PromptEditor.tsx
-│   │   │
-│   │   ├── hooks/
-│   │   │   └── useBatch.ts
-│   │   │
-│   │   ├── api/                 # Wails autogenerated bindings
-│   │   ├── store/
-│   │   └── utils/
+│   ├── index.html
+│   ├── package.json
+│   ├── vite.config.ts
+│   ├── tsconfig.json
 │   │
-│   └── index.tsx
+│   └── src/
+│       ├── main.tsx            # 入口
+│       ├── App.tsx             # 根组件 + 路由
+│       │
+│       ├── pages/
+│       │   ├── ConvertResize.tsx  # 转换 / 缩放页面
+│       │   ├── Slice.tsx          # 切片页面
+│       │   ├── Watermark.tsx      # 水印页面
+│       │   ├── AIBatch.tsx        # AI 批处理页面
+│       │   └── Settings.tsx       # 设置页面（API Key 等）
+│       │
+│       ├── components/
+│       │   ├── Layout.tsx         # 全局布局 / 侧栏导航
+│       │   ├── ImageList.tsx      # 图片列表（拖拽）
+│       │   ├── GroupedFileList.tsx # 分组文件列表
+│       │   ├── SaveModeSelector.tsx # 保存模式选择器
+│       │   └── StatusBar.tsx      # 全局状态栏
+│       │
+│       ├── hooks/
+│       │   ├── useBatch.ts        # 批处理状态管理
+│       │   └── useProgress.tsx    # 进度管理
+│       │
+│       ├── assets/
+│       ├── styles/
+│       ├── wailsjs/              # Wails 自动生成绑定
+│       └── vite-env.d.ts
 │
-├── prompts/                      # ✅ 给 Codex/AI 的 Prompt
-│   ├── local-image.md
-│   ├── ai-image.md
-│   ├── batch.md
-│   └── bugfix.md
-│
-└── AGENTS.md                     # ✅ 项目级 AI 规则（你刚要的）
+└── docs/
+    ├── api文档/                  # 火山引擎 Ark API 参考
+    │   ├── API文档.md
+    │   ├── 模型能力.md
+    │   └── 自定义图片输出规格.md
+    │
+    └── superpowers/
+        ├── plans/                # 功能实现计划
+        └── specs/                # 功能设计文档
 ```
 
 ❌ 禁止：
 - 混合图片处理与 AI 代码
-- 在 app.go 写任何处理逻辑
+- 在 app.go 或 backend/app/app.go 写任何处理逻辑
 - 单文件承担多种图片操作
 
 ---
@@ -202,6 +207,10 @@ AI 图片处理 **必须支持以下输入**：
 - 独立于 API client
 - 可重复生成（纯函数）
 
+✅ 模型能力：
+- 通过 `capability.go` 定义各模型支持的参数差异
+- 前端请求参数统一，后端按模型自动适配
+
 ❌ 禁止：
 - 前端拼 Prompt
 - 前端拿 API Key
@@ -236,8 +245,10 @@ AI 图片处理 **必须支持以下输入**：
   - `(result, error)`
 
 ✅ 推荐 API 风格：
-- `ProcessImagesBatch(...)`
+- `ProcessLocalBatch(...)`
 - `RunAIImageBatch(...)`
+- `SliceImages(...)`
+- `ApplyWatermark(...)`
 
 ❌ 禁止：
 - map[string]interface{}
@@ -301,5 +312,5 @@ AI 图片处理 **必须支持以下输入**：
 ---
 
 **始终记住：**
-> 这个项目的成功标准不是“使用了多高级技术”，  
-> 而是 **“大量图片可以安全、可控、可重复地被处理”**。
+> 这个项目的成功标准不是"使用了多高级技术"，  
+> 而是 **"大量图片可以安全、可控、可重复地被处理"**。
