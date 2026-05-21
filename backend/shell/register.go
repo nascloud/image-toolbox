@@ -8,16 +8,6 @@ import (
 	"golang.org/x/sys/windows/registry"
 )
 
-var contextMenuVerbs = []struct {
-	Verb string
-	Text string
-}{
-	{Verb: "convert", Text: "转换/缩放"},
-	{Verb: "slice", Text: "切片"},
-	{Verb: "watermark", Text: "水印"},
-	{Verb: "aibatch", Text: "AI 批处理"},
-}
-
 var appExePath string
 
 func init() {
@@ -28,8 +18,8 @@ func init() {
 }
 
 const (
-	regImageFiles = "SystemFileAssociations\\image\\shell\\ImageToolbox"
-	regDirectory  = "Directory\\shell\\ImageToolbox"
+	regImageFiles = "Software\\Classes\\SystemFileAssociations\\image\\shell\\ImageToolbox"
+	regDirectory  = "Software\\Classes\\Directory\\shell\\ImageToolbox"
 )
 
 func InstallContextMenu() error {
@@ -37,45 +27,45 @@ func InstallContextMenu() error {
 		return fmt.Errorf("cannot determine executable path")
 	}
 	_ = UninstallContextMenu()
-	if err := installForKey(regImageFiles); err != nil {
+	// %1 = the selected file path (one invocation per file)
+	if err := installForKey(regImageFiles, "%1"); err != nil {
 		return fmt.Errorf("install image files: %w", err)
 	}
-	if err := installForKey(regDirectory); err != nil {
+	// %V = the folder path
+	if err := installForKey(regDirectory, "%V"); err != nil {
 		return fmt.Errorf("install directory: %w", err)
 	}
 	return nil
 }
 
-func installForKey(parentKey string) error {
+// pathArg specifies the shell expansion variable to embed in the command line.
+// Use "%1" for file associations (one invocation per selected file) and
+// "%V" for directories (passes the folder path).
+func installForKey(parentKey string, pathArg string) error {
 	k, _, err := registry.CreateKey(registry.CURRENT_USER, parentKey, registry.WRITE)
 	if err != nil {
 		return err
 	}
-	k.SetStringValue("", "ImageToolbox")
-	k.SetStringValue("MUIVerb", "ImageToolbox")
+	defer k.Close()
+
+	menuText := "ImageToolbox 转换/缩放"
+	k.SetStringValue("", menuText)
+	k.SetStringValue("MUIVerb", menuText)
 	k.SetStringValue("Icon", appExePath+",0")
-	k.SetStringValue("SubCommands", "")
-	k.Close()
+	// Make sure SubCommands is deleted if it existed previously
+	_ = k.DeleteValue("SubCommands")
 
-	shellKey := parentKey + "\\shell"
-	for _, v := range contextMenuVerbs {
-		verbKey := shellKey + "\\" + v.Verb
-		vk, _, err := registry.CreateKey(registry.CURRENT_USER, verbKey, registry.WRITE)
-		if err != nil {
-			return fmt.Errorf("create verb key %s: %w", v.Verb, err)
-		}
-		vk.SetStringValue("", v.Text)
-		vk.Close()
-
-		cmdKey := verbKey + "\\command"
-		ck, _, err := registry.CreateKey(registry.CURRENT_USER, cmdKey, registry.WRITE)
-		if err != nil {
-			return fmt.Errorf("create command key %s: %w", v.Verb, err)
-		}
-		cmdLine := fmt.Sprintf(`"%s" --page=%s "%%V"`, appExePath, v.Verb)
-		ck.SetStringValue("", cmdLine)
-		ck.Close()
+	// Create command subkey directly under parentKey
+	cmdKey := parentKey + "\\command"
+	ck, _, err := registry.CreateKey(registry.CURRENT_USER, cmdKey, registry.WRITE)
+	if err != nil {
+		return fmt.Errorf("create command key: %w", err)
 	}
+	defer ck.Close()
+
+	cmdLine := fmt.Sprintf(`"%s" --page=convert "%s"`, appExePath, pathArg)
+	ck.SetStringValue("", cmdLine)
+
 	return nil
 }
 

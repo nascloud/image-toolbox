@@ -230,3 +230,22 @@ export namespace model {
 
 }
 
+export namespace shell {
+	
+	export class LaunchIntent {
+	    page: string;
+	    files: string[];
+	
+	    static createFrom(source: any = {}) {
+	        return new LaunchIntent(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.page = source["page"];
+	        this.files = source["files"];
+	    }
+	}
+
+}
+

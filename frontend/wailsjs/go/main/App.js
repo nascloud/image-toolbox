@@ -18,6 +18,22 @@ export function GetImageInfo(arg1) {
   return window['go']['main']['App']['GetImageInfo'](arg1);
 }
 
+export function HandleLaunchIntent(arg1) {
+  return window['go']['main']['App']['HandleLaunchIntent'](arg1);
+}
+
+export function InstallContextMenu() {
+  return window['go']['main']['App']['InstallContextMenu']();
+}
+
+export function IsContextMenuInstalled() {
+  return window['go']['main']['App']['IsContextMenuInstalled']();
+}
+
+export function IsDir(arg1) {
+  return window['go']['main']['App']['IsDir'](arg1);
+}
+
 export function OpenOutputDir(arg1) {
   return window['go']['main']['App']['OpenOutputDir'](arg1);
 }
@@ -74,8 +90,16 @@ export function SetContext(arg1) {
   return window['go']['main']['App']['SetContext'](arg1);
 }
 
+export function SetPendingIntent(arg1) {
+  return window['go']['main']['App']['SetPendingIntent'](arg1);
+}
+
 export function SliceImages(arg1) {
   return window['go']['main']['App']['SliceImages'](arg1);
+}
+
+export function UninstallContextMenu() {
+  return window['go']['main']['App']['UninstallContextMenu']();
 }
 
 export function WatermarkImages(arg1) {

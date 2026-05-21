@@ -32,6 +32,9 @@ function loadModelList(): { id: string; name: string }[] {
   const [isAddingModel, setIsAddingModel] = useState(false);
   const [newModelId, setNewModelId] = useState('');
   const [newModelName, setNewModelName] = useState('');
+  const [contextMenuInstalled, setContextMenuInstalled] = useState(false);
+  const [contextMenuLoading, setContextMenuLoading] = useState(false);
+  const [contextMenuError, setContextMenuError] = useState('');
 
   const { setIdleText } = useProgressContext();
   useEffect(() => {
@@ -41,12 +44,14 @@ function loadModelList(): { id: string; name: string }[] {
   useEffect(() => {
     (async () => {
       try {
-        const [key, dir] = await Promise.all([
+        const [key, dir, cmInstalled] = await Promise.all([
           (window as any).go.main.App.GetApiKey(),
           (window as any).go.main.App.GetAiOutputDir(),
+          (window as any).go.main.App.IsContextMenuInstalled(),
         ]);
         if (key) setApiKey(key);
         if (dir) setAiOutputDir(dir);
+        setContextMenuInstalled(!!cmInstalled);
       } catch { /* no-op */ }
     })();
   }, []);
@@ -144,6 +149,49 @@ function loadModelList(): { id: string; name: string }[] {
             {dirSaved ? '已保存 ✓' : '保存'}
           </button>
         </div>
+      </div>
+
+      {/* 右键菜单 */}
+      <div className="card mb-8">
+        <label className="card-label" style={{ marginBottom: 8, textTransform: 'none', letterSpacing: 0 }}>
+          Windows 右键菜单
+        </label>
+        <p className="text-xs text-muted mb-4">
+          在资源管理器中右键图片文件或文件夹时，显示 ImageToolbox 快捷处理菜单。
+        </p>
+        <div className="flex gap-3 items-center">
+          <span className="text-sm text-secondary flex-1">
+            {contextMenuInstalled ? '✅ 已安装' : '未安装'}
+          </span>
+          <button
+            disabled={contextMenuLoading}
+            className={`btn btn-sm ${contextMenuInstalled ? 'btn-ghost' : 'btn-primary'}`}
+            onClick={async () => {
+              setContextMenuLoading(true);
+              setContextMenuError('');
+              try {
+                if (contextMenuInstalled) {
+                  await (window as any).go.main.App.UninstallContextMenu();
+                  setContextMenuInstalled(false);
+                } else {
+                  await (window as any).go.main.App.InstallContextMenu();
+                  setContextMenuInstalled(true);
+                }
+              } catch (e: any) {
+                setContextMenuError(e?.message || String(e));
+              } finally {
+                setContextMenuLoading(false);
+              }
+            }}
+          >
+            {contextMenuLoading ? '处理中...' : contextMenuInstalled ? '卸载右键菜单' : '安装右键菜单'}
+          </button>
+        </div>
+        {contextMenuError && (
+          <p className="text-xs mt-4" style={{ color: 'var(--color-danger, #e53e3e)' }}>
+            操作失败：{contextMenuError}
+          </p>
+        )}
       </div>
 
       {/* Model List */}

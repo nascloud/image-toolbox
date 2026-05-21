@@ -3,6 +3,7 @@ import { GroupedFileList, FolderEntry } from '../components/GroupedFileList';
 import { useBatch } from '../hooks/useBatch';
 import { useProgressContext } from '../hooks/useProgress';
 import { SaveModeSelector, SaveModeConfig } from '../components/SaveModeSelector';
+import { useIntentContext } from '../hooks/useIntent';
 
 export const ConvertResize: React.FC = () => {
   const [folders, setFolders] = useState<FolderEntry[]>([]);
@@ -16,7 +17,51 @@ export const ConvertResize: React.FC = () => {
   const [saveModeConfig, setSaveModeConfig] = useState<SaveModeConfig>({ mode: 'subdir', prefixName: 'output', subdirName: 'output', outputDir: '' });
   const { state, startBatch, cancelBatch, openOutputDir } = useBatch();
   const { setIdleText } = useProgressContext();
+  const { pending, setPending } = useIntentContext();
+
   const allFiles = [...folders.flatMap(f => f.scannedFiles), ...looseFiles];
+
+  useEffect(() => {
+    const handlePendingIntent = async () => {
+      if (pending && pending.page === 'convert' && pending.files && pending.files.length > 0) {
+        const newLoose: string[] = [];
+        const newFolders: FolderEntry[] = [];
+
+        for (const fileOrDir of pending.files) {
+          try {
+            const isDir = await (window as any).go.main.App.IsDir(fileOrDir);
+            if (isDir) {
+              const scanned = await (window as any).go.main.App.ScanDirectory(fileOrDir, recursive);
+              if (scanned && scanned.length > 0) {
+                newFolders.push({ path: fileOrDir, scannedFiles: scanned });
+              }
+            } else {
+              newLoose.push(fileOrDir);
+            }
+          } catch (e) {
+            console.error('Failed to handle path:', fileOrDir, e);
+          }
+        }
+
+        if (newLoose.length > 0) {
+          setLooseFiles(prev => [...prev, ...newLoose.filter(p => !prev.includes(p))]);
+        }
+        if (newFolders.length > 0) {
+          setFolders(prev => {
+            const next = [...prev];
+            newFolders.forEach(nf => {
+              if (!next.some(f => f.path === nf.path)) {
+                next.push(nf);
+              }
+            });
+            return next;
+          });
+        }
+        setPending(null);
+      }
+    };
+    handlePendingIntent();
+  }, [pending, recursive, setPending]);
 
   useEffect(() => {
     const count = allFiles.length;

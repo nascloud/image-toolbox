@@ -196,6 +196,15 @@ func (a *App) ScanDirectory(dir string, recursive bool) ([]string, error) {
 	return file.ScanImageFiles(dir, recursive)
 }
 
+// IsDir returns whether the given path is a directory.
+func (a *App) IsDir(path string) bool {
+	info, err := os.Stat(path)
+	if err != nil {
+		return false
+	}
+	return info.IsDir()
+}
+
 // ProcessImagesBatch executes a full local batch processing pipeline with progress events.
 func (a *App) ProcessImagesBatch(req model.BatchRequest) (model.BatchResult, error) {
 	if len(req.SourcePaths) == 0 && req.OutputDir != "" {

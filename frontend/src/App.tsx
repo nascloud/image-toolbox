@@ -6,11 +6,13 @@ import { Watermark } from './pages/Watermark';
 import { AIBatch } from './pages/AIBatch';
 import { Settings } from './pages/Settings';
 import { ProgressProvider } from './hooks/useProgress';
-import { OnFileDrop, OnFileDropOff } from '../wailsjs/runtime/runtime';
+import { OnFileDrop, OnFileDropOff, EventsOn } from '../wailsjs/runtime/runtime';
+import { IntentProvider, useIntentContext } from './hooks/useIntent';
 import './App.css';
 
-function App() {
+function MainApp() {
   const [activeTab, setActiveTab] = useState('convert-resize');
+  const { setPending } = useIntentContext();
 
   useEffect(() => {
     OnFileDrop(() => undefined, false);
@@ -18,6 +20,27 @@ function App() {
       OnFileDropOff();
     };
   }, []);
+
+  useEffect(() => {
+    const off = EventsOn('app:launch-intent', (intent: any) => {
+      console.log('Received launch intent:', intent);
+      if (intent) {
+        setPending(intent);
+        if (intent.page === 'convert') {
+          setActiveTab('convert-resize');
+        } else if (intent.page === 'slice') {
+          setActiveTab('slice');
+        } else if (intent.page === 'watermark') {
+          setActiveTab('watermark');
+        } else if (intent.page === 'aibatch') {
+          setActiveTab('ai');
+        }
+      }
+    });
+    return () => {
+      off();
+    };
+  }, [setPending]);
 
   const tabs: TabDef[] = [
     { id: 'convert-resize', label: '转换', component: <ConvertResize /> },
@@ -28,8 +51,16 @@ function App() {
   ];
 
   return (
+    <Layout tabs={tabs} activeTab={activeTab} onTabChange={setActiveTab} />
+  );
+}
+
+function App() {
+  return (
     <ProgressProvider>
-      <Layout tabs={tabs} activeTab={activeTab} onTabChange={setActiveTab} />
+      <IntentProvider>
+        <MainApp />
+      </IntentProvider>
     </ProgressProvider>
   );
 }
