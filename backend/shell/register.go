@@ -52,6 +52,7 @@ func installForKey(parentKey string, pathArg string) error {
 	k.SetStringValue("", menuText)
 	k.SetStringValue("MUIVerb", menuText)
 	k.SetStringValue("Icon", appExePath+",0")
+	k.SetStringValue("MultiSelectModel", "Player")
 	// Make sure SubCommands is deleted if it existed previously
 	_ = k.DeleteValue("SubCommands")
 
