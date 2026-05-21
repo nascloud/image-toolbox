@@ -4,6 +4,8 @@ import { useBatch } from '../hooks/useBatch';
 import { useProgressContext } from '../hooks/useProgress';
 import { SaveModeSelector, SaveModeConfig } from '../components/SaveModeSelector';
 import { useIntentContext } from '../hooks/useIntent';
+import { EventsOn } from '../../wailsjs/runtime/runtime';
+
 
 export const ConvertResize: React.FC = () => {
   const [folders, setFolders] = useState<FolderEntry[]>([]);
@@ -22,45 +24,58 @@ export const ConvertResize: React.FC = () => {
   const allFiles = [...folders.flatMap(f => f.scannedFiles), ...looseFiles];
 
   useEffect(() => {
-    const handlePendingIntent = async () => {
-      if (pending && pending.page === 'convert' && pending.files && pending.files.length > 0) {
-        const newLoose: string[] = [];
-        const newFolders: FolderEntry[] = [];
+    const handleFiles = async (files: string[]) => {
+      const newLoose: string[] = [];
+      const newFolders: FolderEntry[] = [];
 
-        for (const fileOrDir of pending.files) {
-          try {
-            const isDir = await (window as any).go.main.App.IsDir(fileOrDir);
-            if (isDir) {
-              const scanned = await (window as any).go.main.App.ScanDirectory(fileOrDir, recursive);
-              if (scanned && scanned.length > 0) {
-                newFolders.push({ path: fileOrDir, scannedFiles: scanned });
-              }
-            } else {
-              newLoose.push(fileOrDir);
+      for (const fileOrDir of files) {
+        try {
+          const isDir = await (window as any).go.main.App.IsDir(fileOrDir);
+          if (isDir) {
+            const scanned = await (window as any).go.main.App.ScanDirectory(fileOrDir, recursive);
+            if (scanned && scanned.length > 0) {
+              newFolders.push({ path: fileOrDir, scannedFiles: scanned });
             }
-          } catch (e) {
-            console.error('Failed to handle path:', fileOrDir, e);
+          } else {
+            newLoose.push(fileOrDir);
           }
+        } catch (e) {
+          console.error('Failed to handle path:', fileOrDir, e);
         }
+      }
 
-        if (newLoose.length > 0) {
-          setLooseFiles(prev => [...prev, ...newLoose.filter(p => !prev.includes(p))]);
-        }
-        if (newFolders.length > 0) {
-          setFolders(prev => {
-            const next = [...prev];
-            newFolders.forEach(nf => {
-              if (!next.some(f => f.path === nf.path)) {
-                next.push(nf);
-              }
-            });
-            return next;
+      if (newLoose.length > 0) {
+        setLooseFiles(prev => [...prev, ...newLoose.filter(p => !prev.includes(p))]);
+      }
+      if (newFolders.length > 0) {
+        setFolders(prev => {
+          const next = [...prev];
+          newFolders.forEach(nf => {
+            if (!next.some(f => f.path === nf.path)) {
+              next.push(nf);
+            }
           });
-        }
-        setPending(null);
+          return next;
+        });
       }
     };
-    handlePendingIntent();
+
+    // 1. Handle pending intent from first launch
+    if (pending && pending.page === 'convert' && pending.files && pending.files.length > 0) {
+      handleFiles(pending.files);
+      setPending(null);
+    }
+
+    // 2. Listen to real-time events for subsequent launches
+    const off = EventsOn('app:launch-intent', (intent: any) => {
+      if (intent && intent.page === 'convert' && intent.files && intent.files.length > 0) {
+        handleFiles(intent.files);
+      }
+    });
+
+    return () => {
+      off();
+    };
   }, [pending, recursive, setPending]);
 
   useEffect(() => {

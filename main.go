@@ -4,6 +4,7 @@ import (
 	"embed"
 	"log"
 	"os"
+	"time"
 
 	"image-toolbox/backend/shell"
 
@@ -22,13 +23,23 @@ func main() {
 	if err != nil {
 		log.Printf("single-instance check failed: %v", err)
 	}
-	if running && intent != nil {
-		port, readErr := shell.ReadIPCPort()
-		if readErr == nil {
-			if sendErr := shell.SendLaunchIntent(port, *intent); sendErr == nil {
-				log.Println("Forwarded launch intent to running instance, exiting.")
-				return
+	if running {
+		if intent != nil {
+			// Wait for the IPC server of the first instance to become ready (since they might be launched at the exact same time by Windows Explorer)
+			for retry := 0; retry < 150; retry++ {
+				port, readErr := shell.ReadIPCPort()
+				if readErr == nil {
+					if sendErr := shell.SendLaunchIntent(port, *intent); sendErr == nil {
+						log.Println("Forwarded launch intent to running instance, exiting.")
+						return
+					}
+				}
+				time.Sleep(100 * time.Millisecond)
 			}
+			log.Println("Failed to forward launch intent after retries. Starting new instance anyway.")
+		} else {
+			log.Println("Another instance of image-toolbox is already running. Exiting.")
+			return
 		}
 	}
 
