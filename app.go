@@ -34,6 +34,12 @@ func (a *App) HandleLaunchIntent(intent shell.LaunchIntent) {
 	runtime.EventsEmit(a.ctx, "app:launch-intent", intent)
 }
 
+func (a *App) GetPendingIntent() *shell.LaunchIntent {
+	intent := a.pendingIntent
+	a.pendingIntent = nil
+	return intent
+}
+
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 	a.App.SetContext(ctx)
@@ -41,11 +47,6 @@ func (a *App) startup(ctx context.Context) {
 	runtime.OnFileDrop(ctx, func(x, y int, paths []string) {
 		runtime.EventsEmit(ctx, "app:file-drop", x, y, paths)
 	})
-
-	if a.pendingIntent != nil {
-		runtime.EventsEmit(ctx, "app:launch-intent", *a.pendingIntent)
-		a.pendingIntent = nil
-	}
 
 	if a.OnContextReady != nil {
 		a.OnContextReady()

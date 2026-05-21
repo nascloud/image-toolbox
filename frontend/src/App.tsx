@@ -22,8 +22,8 @@ function MainApp() {
   }, []);
 
   useEffect(() => {
-    const off = EventsOn('app:launch-intent', (intent: any) => {
-      console.log('Received launch intent:', intent);
+    const handleIntent = (intent: any) => {
+      console.log('Processing launch intent:', intent);
       if (intent) {
         setPending(intent);
         if (intent.page === 'convert') {
@@ -36,7 +36,23 @@ function MainApp() {
           setActiveTab('ai');
         }
       }
+    };
+
+    const off = EventsOn('app:launch-intent', (intent: any) => {
+      handleIntent(intent);
     });
+
+    (async () => {
+      try {
+        const intent = await (window as any).go.main.App.GetPendingIntent();
+        if (intent) {
+          handleIntent(intent);
+        }
+      } catch (e) {
+        console.error('Failed to get pending intent:', e);
+      }
+    })();
+
     return () => {
       off();
     };

@@ -18,6 +18,10 @@ export function GetImageInfo(arg1) {
   return window['go']['main']['App']['GetImageInfo'](arg1);
 }
 
+export function GetPendingIntent() {
+  return window['go']['main']['App']['GetPendingIntent']();
+}
+
 export function HandleLaunchIntent(arg1) {
   return window['go']['main']['App']['HandleLaunchIntent'](arg1);
 }

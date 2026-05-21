@@ -12,6 +12,8 @@ export function GetApiKey():Promise<string>;
 
 export function GetImageInfo(arg1:string):Promise<Record<string, any>>;
 
+export function GetPendingIntent():Promise<shell.LaunchIntent>;
+
 export function HandleLaunchIntent(arg1:shell.LaunchIntent):Promise<void>;
 
 export function InstallContextMenu():Promise<void>;
