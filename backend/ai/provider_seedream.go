@@ -27,6 +27,7 @@ func NewSeedreamProvider(apiKey, baseURL string) *SeedreamProvider {
 	if baseURL == "" {
 		baseURL = DefaultSeedreamBaseURL
 	}
+	baseURL = strings.TrimSuffix(baseURL, "/")
 	return &SeedreamProvider{
 		apiKey:  apiKey,
 		baseURL: baseURL,
@@ -158,73 +159,38 @@ func (p *SeedreamProvider) Generate(ctx context.Context, req model.AIImageReques
 }
 
 func (p *SeedreamProvider) Models() []model.ModelInfo {
-	return []model.ModelInfo{
-		{
-			ID: "doubao-seedream-5-0-260128",
-			Capabilities: model.ModelCapabilities{
-				SupportsImageInput:   true,
-				SupportsSequential:   true,
-				SupportsStream:       true,
-				SupportsSeed:         true,
-				SupportsOutputFormat: true,
-				SupportsWebSearch:    true,
-				SupportsWatermark:    true,
-				DefaultOutputFormat:  "jpeg",
-				AllowedSizes:         []string{"1K", "2K", "3K"},
-			},
-		},
-		{
-			ID: "doubao-seedream-4-5-250130",
-			Capabilities: model.ModelCapabilities{
-				SupportsImageInput:  true,
-				SupportsSequential:  true,
-				SupportsStream:      true,
-				SupportsSeed:        true,
-				SupportsWatermark:   true,
-				DefaultOutputFormat: "jpeg",
-				AllowedSizes:        []string{"1K", "2K", "3K", "4K"},
-			},
-		},
-		{
-			ID: "doubao-seedream-4-0-250130",
-			Capabilities: model.ModelCapabilities{
-				SupportsImageInput:         true,
-				SupportsSequential:         true,
-				SupportsStream:             true,
-				SupportsSeed:               true,
-				SupportsWatermark:          true,
-				SupportsFastPromptOptimize: true,
-				DefaultOutputFormat:        "jpeg",
-				AllowedSizes:               []string{"1K", "2K", "3K", "4K"},
-			},
-		},
-		{
-			ID: "doubao-seedream-3-0-t2i-250115",
-			Capabilities: model.ModelCapabilities{
-				SupportsGuidanceScale: true,
-				DefaultOutputFormat:   "jpeg",
-				AllowedSizes:          []string{"2K", "3K"},
-			},
-		},
+	infos := make([]model.ModelInfo, len(seedreamModelDefs))
+	for i, def := range seedreamModelDefs {
+		infos[i] = model.ModelInfo{ID: def.id, Capabilities: def.caps}
 	}
+	return infos
 }
-
-// ---------------------------------------------------------------------------
-// Internal helpers
-// ---------------------------------------------------------------------------
 
 func seedreamCapabilities(modelName string) model.ModelCapabilities {
 	normalized := strings.ToLower(modelName)
-
-	switch {
-	case strings.Contains(normalized, "3-0-t2i"):
-		return model.ModelCapabilities{
-			SupportsGuidanceScale: true,
-			DefaultOutputFormat:   "jpeg",
-			AllowedSizes:          []string{"2K", "3K"},
+	var best model.ModelCapabilities
+	var bestLen int
+	for _, def := range seedreamModelDefs {
+		if strings.Contains(normalized, def.pattern) && len(def.pattern) > bestLen {
+			best = def.caps
+			bestLen = len(def.pattern)
 		}
-	case strings.Contains(normalized, "5-0"):
-		return model.ModelCapabilities{
+	}
+	if bestLen > 0 {
+		return best
+	}
+	return model.ModelCapabilities{DefaultOutputFormat: "jpeg"}
+}
+
+var seedreamModelDefs = []struct {
+	pattern string
+	id      string
+	caps    model.ModelCapabilities
+}{
+	{
+		pattern: "5-0",
+		id:      "doubao-seedream-5-0-260128",
+		caps: model.ModelCapabilities{
 			SupportsImageInput:   true,
 			SupportsSequential:   true,
 			SupportsStream:       true,
@@ -234,9 +200,12 @@ func seedreamCapabilities(modelName string) model.ModelCapabilities {
 			SupportsWatermark:    true,
 			DefaultOutputFormat:  "jpeg",
 			AllowedSizes:         []string{"1K", "2K", "3K"},
-		}
-	case strings.Contains(normalized, "4-5"):
-		return model.ModelCapabilities{
+		},
+	},
+	{
+		pattern: "4-5",
+		id:      "doubao-seedream-4-5-250130",
+		caps: model.ModelCapabilities{
 			SupportsImageInput:  true,
 			SupportsSequential:  true,
 			SupportsStream:      true,
@@ -244,24 +213,36 @@ func seedreamCapabilities(modelName string) model.ModelCapabilities {
 			SupportsWatermark:   true,
 			DefaultOutputFormat: "jpeg",
 			AllowedSizes:        []string{"1K", "2K", "3K", "4K"},
-		}
-	case strings.Contains(normalized, "4-0"):
-		return model.ModelCapabilities{
+		},
+	},
+	{
+		pattern: "4-0",
+		id:      "doubao-seedream-4-0-250130",
+		caps: model.ModelCapabilities{
 			SupportsImageInput:         true,
 			SupportsSequential:         true,
 			SupportsStream:             true,
 			SupportsSeed:               true,
-			SupportsFastPromptOptimize: true,
 			SupportsWatermark:          true,
+			SupportsFastPromptOptimize: true,
 			DefaultOutputFormat:        "jpeg",
 			AllowedSizes:               []string{"1K", "2K", "3K", "4K"},
-		}
-	default:
-		return model.ModelCapabilities{
-			DefaultOutputFormat: "jpeg",
-		}
-	}
+		},
+	},
+	{
+		pattern: "3-0-t2i",
+		id:      "doubao-seedream-3-0-t2i-250115",
+		caps: model.ModelCapabilities{
+			SupportsGuidanceScale: true,
+			DefaultOutputFormat:   "jpeg",
+			AllowedSizes:          []string{"2K", "3K"},
+		},
+	},
 }
+
+// ---------------------------------------------------------------------------
+// Internal helpers
+// ---------------------------------------------------------------------------
 
 func allowedSizesMap(sizes []string) map[string]bool {
 	m := make(map[string]bool, len(sizes))
