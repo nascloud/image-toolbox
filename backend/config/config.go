@@ -74,7 +74,10 @@ func SaveActiveProvider(path, name string) error {
 func LoadActiveProvider(path string) (string, error) {
 	cfg, err := loadConfig(path)
 	if err != nil {
-		return "seedream", nil
+		if os.IsNotExist(err) {
+			return "seedream", nil
+		}
+		return "", err
 	}
 	if cfg.ActiveProvider == "" {
 		return "seedream", nil
@@ -85,7 +88,10 @@ func LoadActiveProvider(path string) (string, error) {
 func SaveAiOutputDir(path, dir string) error {
 	cfg, err := loadConfig(path)
 	if err != nil {
-		cfg = &appConfig{}
+		cfg = &appConfig{Providers: make(map[string]ProviderConfig)}
+	}
+	if cfg.Providers == nil {
+		cfg.Providers = make(map[string]ProviderConfig)
 	}
 	cfg.AiOutputDir = dir
 	return saveConfig(path, cfg)
@@ -137,8 +143,9 @@ func saveConfig(path string, cfg *appConfig) error {
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return err
 	}
-	cfg.ApiKey = ""
-	data, err := json.MarshalIndent(cfg, "", "  ")
+	clone := *cfg
+	clone.ApiKey = ""
+	data, err := json.MarshalIndent(&clone, "", "  ")
 	if err != nil {
 		return err
 	}
