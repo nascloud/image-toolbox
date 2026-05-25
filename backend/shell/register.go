@@ -10,6 +10,11 @@ import (
 
 var appExePath string
 
+var imageExtensions = []string{
+	".jpg", ".jpeg", ".jfif", ".png",
+	".webp", ".bmp", ".gif", ".tiff",
+}
+
 func init() {
 	exe, err := os.Executable()
 	if err == nil {
@@ -35,6 +40,15 @@ func InstallContextMenu() error {
 	if err := installForKey(regDirectory, "%V"); err != nil {
 		return fmt.Errorf("install directory: %w", err)
 	}
+
+	// 按扩展名注册，确保.webp等非常规关联格式也能显示菜单
+	for _, ext := range imageExtensions {
+		extKey := "Software\\Classes\\" + ext + "\\shell\\ImageToolbox"
+		if err := installForKey(extKey, "%1"); err != nil {
+			return fmt.Errorf("install %s: %w", ext, err)
+		}
+	}
+
 	return nil
 }
 
@@ -74,6 +88,13 @@ func UninstallContextMenu() error {
 	for _, parent := range []string{regImageFiles, regDirectory} {
 		if err := deleteRegistryTree(registry.CURRENT_USER, parent); err != nil {
 			return fmt.Errorf("uninstall %s: %w", parent, err)
+		}
+	}
+	// 清理按扩展名注册的条目
+	for _, ext := range imageExtensions {
+		extKey := "Software\\Classes\\" + ext + "\\shell\\ImageToolbox"
+		if err := deleteRegistryTree(registry.CURRENT_USER, extKey); err != nil {
+			return fmt.Errorf("uninstall %s: %w", ext, err)
 		}
 	}
 	return nil
