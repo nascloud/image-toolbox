@@ -23,10 +23,14 @@ function loadModelList(): { id: string; name: string }[] {
   } catch { /* no-op */ }
   return defaultModels;
 }export const Settings: React.FC = () => {
-  const [apiKey, setApiKey] = useState('');
   const [aiOutputDir, setAiOutputDir] = useState('');
-  const [apiSaved, setApiSaved] = useState(false);
   const [dirSaved, setDirSaved] = useState(false);
+  const [providers, setProviders] = useState<{[key: string]: {apiKey: string, baseURL: string}}>({
+    seedream: {apiKey: '', baseURL: 'https://ark.cn-beijing.volces.com/api/v3'},
+    chatgpt2api: {apiKey: '', baseURL: 'https://image.wq727.cf:21118'},
+  });
+  const [activeProvider, setActiveProvider] = useState('seedream');
+  const [providerSaved, setProviderSaved] = useState<{[key: string]: boolean}>({});
   const [modelList, setModelList] = useState<{ id: string; name: string }[]>(loadModelList);
   const [editingModel, setEditingModel] = useState<{ id: string; name: string } | null>(null);
   const [isAddingModel, setIsAddingModel] = useState(false);
@@ -44,23 +48,40 @@ function loadModelList(): { id: string; name: string }[] {
   useEffect(() => {
     (async () => {
       try {
-        const [key, dir, cmInstalled] = await Promise.all([
-          (window as any).go.main.App.GetApiKey(),
-          (window as any).go.main.App.GetAiOutputDir(),
-          (window as any).go.main.App.IsContextMenuInstalled(),
-        ]);
-        if (key) setApiKey(key);
+        const active = await (window as any).go.main.App.GetActiveProvider();
+        if (active) setActiveProvider(active);
+      } catch { /* no-op */ }
+      for (const name of ['seedream', 'chatgpt2api']) {
+        try {
+          const cfg = await (window as any).go.main.App.GetProviderConfig(name);
+          setProviders(prev => ({
+            ...prev,
+            [name]: {apiKey: cfg.hasApiKey ? '••••••••' : '', baseURL: cfg.baseURL || prev[name].baseURL}
+          }));
+        } catch { /* no-op */ }
+      }
+      try {
+        const dir = await (window as any).go.main.App.GetAiOutputDir();
         if (dir) setAiOutputDir(dir);
+      } catch { /* no-op */ }
+      try {
+        const cmInstalled = await (window as any).go.main.App.IsContextMenuInstalled();
         setContextMenuInstalled(!!cmInstalled);
       } catch { /* no-op */ }
     })();
   }, []);
 
-  const handleSaveApiKey = async () => {
+  const handleSaveProvider = async (name: string) => {
     try {
-      await (window as any).go.main.App.SaveApiKey(apiKey);
-      setApiSaved(true);
-      setTimeout(() => setApiSaved(false), 2000);
+      await (window as any).go.main.App.SaveProviderConfig(name, providers[name].apiKey, providers[name].baseURL);
+      setProviderSaved(prev => ({...prev, [name]: true}));
+      setTimeout(() => setProviderSaved(prev => ({...prev, [name]: false})), 2000);
+    } catch { /* no-op */ }
+  };
+
+  const handleSetActive = async (name: string) => {
+    try {
+      await (window as any).go.main.App.SetActiveProvider(name);
     } catch { /* no-op */ }
   };
 
@@ -112,25 +133,51 @@ function loadModelList(): { id: string; name: string }[] {
     <div style={{ maxWidth: 600, margin: '0 auto' }}>
       <h2 className="page-title">设置</h2>
 
-      {/* API Key */}
+      {/* Default Provider */}
       <div className="card mb-8">
         <label className="card-label" style={{ marginBottom: 8, textTransform: 'none', letterSpacing: 0 }}>
-          Volcano Engine API Key
+          默认 AI Provider
         </label>
-        <input
-          type="password"
-          value={apiKey}
-          onChange={e => setApiKey(e.target.value)}
-          placeholder="输入你的火山方舟 API Key"
+        <select
           className="input"
-        />
-        <p className="text-xs text-muted mt-4">
-          API Key 仅保存在本地 ~/.imagetool/config.json，不会上传到任何第三方
-        </p>
-        <button onClick={handleSaveApiKey} className="btn btn-primary mt-6">
-          {apiSaved ? '已保存 ✓' : '保存'}
-        </button>
+          value={activeProvider}
+          onChange={e => { setActiveProvider(e.target.value); handleSetActive(e.target.value); }}
+          style={{ width: '100%', padding: '8px 12px' }}
+        >
+          <option value="seedream">Seedream (Volcano Engine)</option>
+          <option value="chatgpt2api">ChatGPT2API</option>
+        </select>
       </div>
+
+      {/* Provider configs */}
+      {['seedream', 'chatgpt2api'].map(name => (
+        <div className="card mb-8" key={name}>
+          <label className="card-label" style={{ marginBottom: 8, textTransform: 'none', letterSpacing: 0 }}>
+            {name === 'seedream' ? 'Seedream (Volcano Engine)' : 'ChatGPT2API'} 配置
+          </label>
+          <input
+            type="password"
+            placeholder="API Key"
+            value={providers[name].apiKey}
+            onChange={e => setProviders(p => ({...p, [name]: {...p[name], apiKey: e.target.value}}))}
+            className="input"
+          />
+          <div style={{ marginTop: 8 }} />
+          <input
+            type="text"
+            placeholder="Base URL"
+            value={providers[name].baseURL}
+            onChange={e => setProviders(p => ({...p, [name]: {...p[name], baseURL: e.target.value}}))}
+            className="input"
+          />
+          <p className="text-xs text-muted mt-4">
+            API Key 仅保存在本地 ~/.imagetool/config.json，不会上传到任何第三方
+          </p>
+          <button onClick={() => handleSaveProvider(name)} className="btn btn-primary mt-6">
+            {providerSaved[name] ? '已保存 ✓' : '保存'}
+          </button>
+        </div>
+      ))}
 
       {/* AI 输出目录 */}
       <div className="card">
