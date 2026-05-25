@@ -198,6 +198,10 @@ export const AIBatch: React.FC = () => {
   const [leftZoom, setLeftZoom] = useState(1);
   const [rightZoom, setRightZoom] = useState(1);
   const [downloadProgress, setDownloadProgress] = useState<{ current: number; total: number; active: boolean }>({ current: 0, total: 0, active: false });
+  const [provider, setProvider] = useState('seedream');
+  const [availableModels, setAvailableModels] = useState<Array<{ id: string; capabilities: any }>>([]);
+  const [n, setN] = useState(1);
+  const savedProviderParams = useRef<Record<string, any>>({});
   const { updateProgress } = useProgressContext();
   const [hoverPreviewImg, setHoverPreviewImg] = useState<string | null>(null);
   const [hoverPreviewPos, setHoverPreviewPos] = useState({ x: 0, y: 0 });
@@ -242,6 +246,7 @@ export const AIBatch: React.FC = () => {
       concurrent: Math.min(concurrent, paths.length),
       referenceImages,
       downloadWidth: isNaN(downloadW) ? 0 : downloadW,
+      n: currentModelCaps.supportsN ? n : 1,
     };
   }
 
@@ -253,12 +258,22 @@ export const AIBatch: React.FC = () => {
   }, []);
 
   // ── Model capability helpers ──
-  const isSequentialSupported = model.includes('5-0') || model.includes('4-5') || model.includes('4-0');
-  const isOutputFormatSupported = model.includes('5-0');
-  const isGuidanceSupported = model.includes('3-0-t2i');
-  const isWebSearchSupported = model.includes('5-0');
-  const isFastPromptOptimizeSupported = model.includes('4-0');
-  const modelSizeOptions = useMemo(() => getSizeOptions(model), [model]);
+  const hasCapabilities = availableModels.length > 0;
+  const currentModelCaps = useMemo(() => {
+    const m = availableModels.find(m => m.id === model);
+    return m?.capabilities ?? {};
+  }, [availableModels, model]);
+
+  const isSequentialSupported = hasCapabilities ? (currentModelCaps.supportsSequential ?? false) : (model.includes('5-0') || model.includes('4-5') || model.includes('4-0'));
+  const isOutputFormatSupported = hasCapabilities ? (currentModelCaps.supportsOutputFormat ?? false) : model.includes('5-0');
+  const isGuidanceSupported = hasCapabilities ? (currentModelCaps.supportsGuidanceScale ?? false) : model.includes('3-0-t2i');
+  const isWebSearchSupported = hasCapabilities ? (currentModelCaps.supportsWebSearch ?? false) : model.includes('5-0');
+  const isFastPromptOptimizeSupported = hasCapabilities ? (currentModelCaps.supportsFastPromptOptimize ?? false) : model.includes('4-0');
+  const modelSizeOptions = useMemo((): string[] => {
+    if (currentModelCaps.allowedSizes?.length) return currentModelCaps.allowedSizes;
+    return getSizeOptions(model);
+  }, [currentModelCaps, model]);
+  const displayModels = availableModels.length > 0 ? availableModels : modelList;
 
   // ── Computed-like ──
   const pendingCount = queue.filter(i => i.status === 'pending' || i.status === 'error').length;
@@ -281,6 +296,53 @@ export const AIBatch: React.FC = () => {
       setOptimizePromptMode('standard');
     }
   }, [model, modelSizeOptions, size, isOutputFormatSupported, outputFormat, isSequentialSupported, sequentialMode, isWebSearchSupported, webSearch, isFastPromptOptimizeSupported, optimizePromptMode]);
+
+  // Load active provider on mount
+  useEffect(() => {
+    (async () => {
+      try {
+        const active = await (window as any).go.main.App.GetActiveProvider();
+        if (active && active !== provider) setProvider(active);
+      } catch { /* no-op */ }
+    })();
+  }, []);
+
+  // Fetch models when provider changes
+  useEffect(() => {
+    (async () => {
+      if (!provider) return;
+      try {
+        const models = await (window as any).go.main.App.GetProviderModels(provider);
+        setAvailableModels(models);
+        if (models.length > 0 && !(models as any[]).find((m: any) => m.id === model)) {
+          setModel(models[0].id);
+        }
+      } catch {
+        setAvailableModels([]);
+      }
+    })();
+  }, [provider]);
+
+  // Provider switch handler — saves current params, restores saved params for new provider
+  const handleProviderChange = (newProvider: string) => {
+    const currentParams = { model, seed, showCustomSeed, outputFormat, watermark, guidanceScale, sequentialMode, maxImages, optimizePromptMode, webSearch, n };
+    savedProviderParams.current[provider] = currentParams;
+    setProvider(newProvider);
+    const restored = savedProviderParams.current[newProvider];
+    if (restored) {
+      setModel(restored.model);
+      setSeed(restored.seed);
+      setShowCustomSeed(restored.showCustomSeed);
+      setOutputFormat(restored.outputFormat);
+      setWatermark(restored.watermark);
+      setGuidanceScale(restored.guidanceScale);
+      setSequentialMode(restored.sequentialMode);
+      setMaxImages(restored.maxImages);
+      setOptimizePromptMode(restored.optimizePromptMode);
+      setWebSearch(restored.webSearch);
+      setN(restored.n);
+    }
+  };
 
   // Load AI output directory
   useEffect(() => {
@@ -1049,6 +1111,20 @@ export const AIBatch: React.FC = () => {
         );
       })()}
 
+      {/* Provider Selector */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 0', borderBottom: '1px solid var(--color-border-subtle)' }}>
+        <span className="text-xs text-muted">服务商:</span>
+        <select
+          value={provider}
+          onChange={e => handleProviderChange(e.target.value)}
+          className="select"
+          style={{ fontSize: 12, padding: '4px 8px', width: 120 }}
+        >
+          <option value="seedream">Seedream</option>
+          <option value="chatgpt2api">ChatGPT2API</option>
+        </select>
+      </div>
+
       {/* ─── Main Two-Column Layout ─── */}
       <div style={{ display: 'flex', gap: 20, flex: 1, minHeight: 0 }}>
 
@@ -1126,7 +1202,7 @@ export const AIBatch: React.FC = () => {
               </div>
 
               {/* --- Seed --- */}
-              <div className="param-row">
+              {currentModelCaps.supportsSeed !== false && (<div className="param-row">
                 <span className="param-label">种子</span>
                 <div className="flex items-center gap-3">
                   {!showCustomSeed ? (
@@ -1142,15 +1218,15 @@ export const AIBatch: React.FC = () => {
                     </>
                   )}
                 </div>
-              </div>
+              </div>)}
 
               {/* --- Watermark --- */}
-              <div className="param-row">
+              {currentModelCaps.supportsWatermark !== false && (<div className="param-row">
                 <span className="param-label">水印</span>
                 <label className="checkbox-label" style={{ fontSize: 12 }}>
                   <input type="checkbox" checked={watermark} onChange={e => setWatermark(e.target.checked)} /> Seedream 水印
                 </label>
-              </div>
+              </div>)}
 
               {/* --- Response Format --- */}
               <div className="param-row">
@@ -1202,13 +1278,13 @@ export const AIBatch: React.FC = () => {
               </div>)}
 
               {/* --- Optimize Prompt --- */}
-              <div className="param-row">
+              {currentModelCaps.supportsFastPromptOptimize !== false && (<div className="param-row">
                 <span className="param-label">提示词优化</span>
                 <select value={optimizePromptMode} onChange={e => setOptimizePromptMode(e.target.value)} className="select" style={{ width: 150, fontSize: 12, padding: '4px 8px' }}>
                   <option value="standard">标准模式 (高质量)</option>
                   {isFastPromptOptimizeSupported && <option value="fast">快速模式 (低耗时)</option>}
                 </select>
-              </div>
+              </div>)}
 
               {/* --- Web Search --- */}
               {isWebSearchSupported && (<div className="param-row">
@@ -1226,6 +1302,21 @@ export const AIBatch: React.FC = () => {
                   <span className="text-xs text-secondary" style={{ width: 24 }}>{concurrent}</span>
                 </div>
               </div>
+
+              {/* --- N (images per request) --- */}
+              {currentModelCaps.supportsN && (<div className="param-row">
+                <span className="param-label">每请求图片数 (n)</span>
+                <div className="flex items-center gap-3">
+                  <input type="number" min={1} max={currentModelCaps.nMax || 4} value={n}
+                    onChange={e => setN(Math.max(1, Math.min(currentModelCaps.nMax || 4, Number(e.target.value))))}
+                    className="input" style={{ width: 70, padding: '4px 8px', fontSize: 12 }} />
+                  {pendingCount > 0 && n > 1 && (
+                    <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>
+                      将生成 {pendingCount} × {n} = {pendingCount * n} 张图片
+                    </span>
+                  )}
+                </div>
+              </div>)}
 
               {/* --- Recursive --- */}
               <div className="param-row">
@@ -1316,8 +1407,8 @@ export const AIBatch: React.FC = () => {
               {/* Model */}
               <div className="flex items-center gap-2">
                 <span className="text-xs text-muted">模型:</span>
-                <select value={model} onChange={e => setModel(e.target.value)} className="select" style={{ width: 140, fontSize: 12, padding: '4px 8px' }}>
-                  {modelList.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                <select value={model} onChange={e => setModel(e.target.value)} className="select" style={{ width: 160, fontSize: 12, padding: '4px 8px' }}>
+                  {displayModels.map(m => <option key={m.id} value={m.id}>{(m as any).name || m.id}</option>)}
                 </select>
               </div>
 
