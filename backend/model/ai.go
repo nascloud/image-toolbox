@@ -2,6 +2,7 @@ package model
 
 // AIImageRequest represents a request to an AI image generation API.
 type AIImageRequest struct {
+	N int `json:"n,omitempty"`
 	Model                     string   `json:"model"`
 	Prompt                    string   `json:"prompt"`
 	Size                      string   `json:"size"`
@@ -28,7 +29,7 @@ type AIImageResult struct {
 }
 
 // AIImageResponse represents the API response from the image generation endpoint.
-type AIImageResponse struct {
+type 	AIImageResponse struct {
 	Data []struct {
 		URL     string `json:"url,omitempty"`
 		B64JSON string `json:"b64_json,omitempty"`
@@ -49,8 +50,40 @@ type AIImageResponse struct {
 	} `json:"error,omitempty"`
 }
 
+// ModelCapabilities describes API parameters accepted by a model.
+type ModelCapabilities struct {
+	SupportsImageInput         bool     `json:"supportsImageInput"`
+	SupportsEdits              bool     `json:"supportsEdits"`
+	SupportsSequential         bool     `json:"supportsSequential"`
+	SupportsStream             bool     `json:"supportsStream"`
+	SupportsGuidanceScale      bool     `json:"supportsGuidanceScale"`
+	SupportsOutputFormat       bool     `json:"supportsOutputFormat"`
+	SupportsWebSearch          bool     `json:"supportsWebSearch"`
+	SupportsFastPromptOptimize bool     `json:"supportsFastPromptOptimize"`
+	SupportsSeed               bool     `json:"supportsSeed"`
+	SupportsWatermark          bool     `json:"supportsWatermark"`
+	SupportsN                  bool     `json:"supportsN"`
+	DefaultOutputFormat        string   `json:"defaultOutputFormat"`
+	AllowedSizes               []string `json:"allowedSizes"`
+	NMax                       int      `json:"nMax"`
+}
+
+// ModelInfo describes a single model offered by a provider.
+type ModelInfo struct {
+	ID           string            `json:"id"`
+	Capabilities ModelCapabilities `json:"capabilities"`
+}
+
+// ProviderConfigResponse is returned to the frontend (API key masked).
+type ProviderConfigResponse struct {
+	HasAPIKey bool   `json:"hasApiKey"`
+	BaseURL   string `json:"baseURL"`
+}
+
 // AIBatchRequest holds AI batch processing parameters.
 type AIBatchRequest struct {
+	Provider string `json:"provider"`
+	N        int    `json:"n"`
 	SourcePaths               []string `json:"sourcePaths"`
 	OutputDir                 string   `json:"outputDir"`
 	Prompt                    string   `json:"prompt"`
