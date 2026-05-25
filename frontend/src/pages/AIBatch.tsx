@@ -1384,18 +1384,52 @@ export const AIBatch: React.FC = () => {
                 {completedCount > 0 && (
                   <button
                     onClick={async () => {
-                      const completedPaths = queue.flatMap(i => i.status === 'completed' ? (i.outputPaths && i.outputPaths.length > 0 ? i.outputPaths : i.outputPath ? [i.outputPath] : []) : []);
-                      if (completedPaths.length === 0) return;
-                      const destDir = await (window as any).go.main.App.SelectDirectory();
-                      if (!destDir) return;
-                      setDownloadProgress({ current: 0, total: completedPaths.length, active: true });
-                      try {
-                        const count = await (window as any).go.main.App.SaveFilesToDir(completedPaths, destDir);
-                        showToast(`${count}/${completedPaths.length} 已保存到 ${destDir}`, 'success');
-                      } catch (err: any) {
-                        showToast(`保存失败: ${err.message}`, 'error');
+                      const completed = queue.filter(i => i.status === 'completed');
+                      if (completed.length === 0) return;
+
+                      if (aiOutputDir) {
+                        const allPaths = completed.flatMap(i =>
+                          i.outputPaths?.length ? i.outputPaths : i.outputPath ? [i.outputPath] : []);
+                        if (!allPaths.length) return;
+                        setDownloadProgress({ current: 0, total: allPaths.length, active: true });
+                        try {
+                          const count = await (window as any).go.main.App.SaveFilesToDir(allPaths, aiOutputDir);
+                          showToast(`${count}/${allPaths.length} 已保存到 ${aiOutputDir}`, 'success');
+                        } catch (err: any) {
+                          showToast(`保存失败: ${err.message}`, 'error');
+                        }
+                        setDownloadProgress(p => ({ ...p, active: false }));
+                      } else {
+                        const byDir = new Map<string, string[]>();
+                        for (const i of completed) {
+                          const dir = i.path.replace(/[^\\/]+$/, '') || '';
+                          if (!dir) continue;
+                          const paths = i.outputPaths?.length ? i.outputPaths : i.outputPath ? [i.outputPath] : [];
+                          if (!paths.length) continue;
+                          const existing = byDir.get(dir);
+                          if (existing) existing.push(...paths); else byDir.set(dir, [...paths]);
+                        }
+                        if (byDir.size === 0) return;
+                        const total = [...byDir.values()].reduce((s, p) => s + p.length, 0);
+                        let saved = 0, failed = 0;
+                        setDownloadProgress({ current: 0, total, active: true });
+                        for (const [dir, paths] of byDir) {
+                          try {
+                            const count = await (window as any).go.main.App.SaveFilesToDir(paths, dir);
+                            saved += count;
+                            setDownloadProgress(p => ({ ...p, current: saved }));
+                          } catch {
+                            failed += paths.length;
+                            setDownloadProgress(p => ({ ...p, current: saved }));
+                          }
+                        }
+                        setDownloadProgress(p => ({ ...p, active: false }));
+                        if (failed > 0) {
+                          showToast(`${saved}/${total} 已保存到原图目录，${failed} 张失败`, 'warning');
+                        } else {
+                          showToast(`${saved}/${total} 已保存到原图目录`, 'success');
+                        }
                       }
-                      setDownloadProgress(p => ({ ...p, active: false }));
                     }}
                     className="btn btn-sm"
                     style={{ border: '1px solid var(--color-accent)', color: 'var(--color-accent)', background: 'transparent', fontSize: 11, padding: '2px 10px' }}
@@ -1527,15 +1561,15 @@ export const AIBatch: React.FC = () => {
                         <button onClick={async () => {
                           const outputPaths = item.outputPaths && item.outputPaths.length > 0 ? item.outputPaths : item.outputPath ? [item.outputPath] : [];
                           if (outputPaths.length === 0) return;
-                          const destDir = await (window as any).go.main.App.SelectDirectory();
+                          const destDir = aiOutputDir || item.path?.replace(/[^\\/]+$/, '') || '';
                           if (!destDir) return;
                           try {
                             const count = await (window as any).go.main.App.SaveFilesToDir(outputPaths, destDir);
-                            showToast(`已保存 ${count}/${outputPaths.length} 张`, 'success');
+                            showToast(`已保存 ${count}/${outputPaths.length} 张到 ${destDir}`, 'success');
                           } catch (err: any) {
                             showToast(`保存失败: ${err.message}`, 'error');
                           }
-                        }} className="btn btn-sm" title="保存到...">💾</button>
+                        }} className="btn btn-sm" title="保存到输出目录">💾</button>
                       )}
                       {(item.status === 'error' || item.status === 'completed') && (
                         <button

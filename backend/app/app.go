@@ -459,6 +459,9 @@ func (a *App) SaveAiOutputDir(dir string) error {
 
 // SaveFilesToDir copies a list of source files to the given destination directory.
 func (a *App) SaveFilesToDir(sourcePaths []string, destDir string) (int, error) {
+	if err := os.MkdirAll(destDir, 0755); err != nil {
+		return 0, fmt.Errorf("create destination directory: %w", err)
+	}
 	var count int
 	for _, src := range sourcePaths {
 		if _, err := file.CopyFile(src, destDir); err != nil {
