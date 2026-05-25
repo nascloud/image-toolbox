@@ -18,8 +18,8 @@ import (
 )
 
 // ProcessSingleImage handles one image through the AI generation pipeline.
-func ProcessSingleImage(client *Client, srcPath, outputDir string, opts model.AIBatchRequest) (string, error) {
-	outPaths, err := ProcessSingleImagesWithContext(context.Background(), client, srcPath, outputDir, opts, "")
+func ProcessSingleImage(provider Provider, srcPath, outputDir string, opts model.AIBatchRequest) (string, error) {
+	outPaths, err := ProcessSingleImagesWithContext(context.Background(), provider, srcPath, outputDir, opts, "")
 	if err != nil {
 		return "", err
 	}
@@ -29,9 +29,9 @@ func ProcessSingleImage(client *Client, srcPath, outputDir string, opts model.AI
 	return outPaths[0], nil
 }
 
-// ProcessSingleImageWithContext handles one image through the AI generation pipeline.
-func ProcessSingleImageWithContext(ctx context.Context, client *Client, srcPath, outputDir string, opts model.AIBatchRequest, outputPath string) (string, error) {
-	outPaths, err := ProcessSingleImagesWithContext(ctx, client, srcPath, outputDir, opts, outputPath)
+// ProcessSingleImageWithContext handles one image through the AI generation pipeline with a context.
+func ProcessSingleImageWithContext(ctx context.Context, provider Provider, srcPath, outputDir string, opts model.AIBatchRequest, outputPath string) (string, error) {
+	outPaths, err := ProcessSingleImagesWithContext(ctx, provider, srcPath, outputDir, opts, outputPath)
 	if err != nil {
 		return "", err
 	}
@@ -42,9 +42,8 @@ func ProcessSingleImageWithContext(ctx context.Context, client *Client, srcPath,
 }
 
 // ProcessSingleImagesWithContext handles one image through the AI generation pipeline and saves every returned image.
-func ProcessSingleImagesWithContext(ctx context.Context, client *Client, srcPath, outputDir string, opts model.AIBatchRequest, outputPath string) ([]string, error) {
-	caps := CapabilitiesForModel(opts.Model)
-	effectiveOutputFormat := EffectiveOutputFormat(opts.Model, opts.OutputFormat)
+func ProcessSingleImagesWithContext(ctx context.Context, provider Provider, srcPath, outputDir string, opts model.AIBatchRequest, outputPath string) ([]string, error) {
+	caps := ProviderCapabilities(provider, opts.Model)
 
 	var imgData string
 	var refs []string
@@ -64,6 +63,8 @@ func ProcessSingleImagesWithContext(ctx context.Context, client *Client, srcPath
 		}
 	}
 
+	outExt := outputFileExtension(caps, opts.OutputFormat)
+
 	req := model.AIImageRequest{
 		Model:                     opts.Model,
 		Prompt:                    BuildPrompt(opts.Prompt),
@@ -71,7 +72,7 @@ func ProcessSingleImagesWithContext(ctx context.Context, client *Client, srcPath
 		Image:                     imgData,
 		ReferenceImages:           refs,
 		Seed:                      opts.Seed,
-		OutputFormat:              effectiveOutputFormat,
+		OutputFormat:              opts.OutputFormat,
 		Watermark:                 opts.Watermark,
 		GuidanceScale:             opts.GuidanceScale,
 		ResponseFormat:            opts.ResponseFormat,
@@ -80,20 +81,16 @@ func ProcessSingleImagesWithContext(ctx context.Context, client *Client, srcPath
 		MaxImages:                 opts.MaxImages,
 		OptimizePromptMode:        opts.OptimizePromptMode,
 		WebSearch:                 opts.WebSearch,
+		N:                         opts.N,
 	}
 
-	resp, err := client.GenerateWithContext(ctx, req)
+	resp, err := provider.Generate(ctx, req)
 	if err != nil {
 		return nil, fmt.Errorf("API call: %w", err)
 	}
 
 	if len(resp.Data) == 0 {
 		return nil, fmt.Errorf("no images returned")
-	}
-
-	outExt := ".png"
-	if effectiveOutputFormat == "jpeg" {
-		outExt = ".jpg"
 	}
 
 	outPaths := make([]string, 0, len(resp.Data))
@@ -114,7 +111,7 @@ func ProcessSingleImagesWithContext(ctx context.Context, client *Client, srcPath
 		}
 
 		if opts.DownloadWidth > 0 {
-			resized, err := resizeImageBytes(imageData, opts.DownloadWidth, effectiveOutputFormat)
+			resized, err := resizeImageBytes(imageData, opts.DownloadWidth, outExt)
 			if err != nil {
 				if len(outPaths) == 0 {
 					return nil, fmt.Errorf("resize download: %w", err)
@@ -202,7 +199,7 @@ func resizeImageBytes(data []byte, targetWidth int, outputFormat string) ([]byte
 	draw.ApproxBiLinear.Scale(dst, dst.Bounds(), img, bounds, draw.Over, nil)
 
 	var buf bytes.Buffer
-	if outputFormat == "jpeg" {
+	if outputFormat == "jpeg" || outputFormat == ".jpg" || outputFormat == ".jpeg" {
 		if err := jpeg.Encode(&buf, dst, &jpeg.Options{Quality: 95}); err != nil {
 			return nil, fmt.Errorf("encode jpeg: %w", err)
 		}
@@ -212,4 +209,20 @@ func resizeImageBytes(data []byte, targetWidth int, outputFormat string) ([]byte
 		}
 	}
 	return buf.Bytes(), nil
+}
+
+func ProviderCapabilities(provider Provider, modelID string) model.ModelCapabilities {
+	for _, m := range provider.Models() {
+		if m.ID == modelID {
+			return m.Capabilities
+		}
+	}
+	return model.ModelCapabilities{}
+}
+
+func outputFileExtension(caps model.ModelCapabilities, requestedFormat string) string {
+	if requestedFormat == "png" || (requestedFormat == "" && caps.DefaultOutputFormat == "png") {
+		return ".png"
+	}
+	return ".jpg"
 }

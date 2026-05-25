@@ -21,27 +21,27 @@ func RunAIImageBatch(ctx context.Context, req model.AIBatchRequest, configPath s
 		return model.BatchResult{Error: "API key not configured. Go to Settings to set your API key."}
 	}
 
-	client := backendAI.NewClient(apiKey)
-
 	if req.Model == "" {
 		req.Model = "doubao-seedream-5-0-260128"
 	}
 	if req.Size == "" {
 		req.Size = "2048x2048"
 	}
-	effectiveOutputFormat := backendAI.EffectiveOutputFormat(req.Model, req.OutputFormat)
+
+	provider := backendAI.NewSeedreamProvider(apiKey, "")
+	caps := backendAI.ProviderCapabilities(provider, req.Model)
 
 	outputPaths := uniqueOutputPaths(req.SourcePaths, func(srcPath string) string {
-		outExt := ".png"
-		if effectiveOutputFormat == "jpeg" {
-			outExt = ".jpg"
+		outExt := ".jpg"
+		if caps.DefaultOutputFormat == "png" {
+			outExt = ".png"
 		}
 		name := trimImageExt(srcPath)
 		return filepath.Join(req.OutputDir, name+"_ai"+outExt)
 	})
 
 	jobFn := func(srcPath string) ([]string, error) {
-		return backendAI.ProcessSingleImagesWithContext(ctx, client, srcPath, req.OutputDir, req, outputPaths[srcPath])
+		return backendAI.ProcessSingleImagesWithContext(ctx, provider, srcPath, req.OutputDir, req, outputPaths[srcPath])
 	}
 
 	maxConcurrent := 2

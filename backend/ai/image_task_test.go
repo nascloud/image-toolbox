@@ -82,10 +82,9 @@ func TestProcessSingleImagesSavesAllReturnedImages(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewClient("test-key")
-	client.BaseURL = server.URL
+	provider := NewSeedreamProvider("test-key", server.URL)
 	outDir := t.TempDir()
-	outPaths, err := ProcessSingleImagesWithContext(context.Background(), client, srcPath, outDir, model.AIBatchRequest{
+	outPaths, err := ProcessSingleImagesWithContext(context.Background(), provider, srcPath, outDir, model.AIBatchRequest{
 		Model:          "doubao-seedream-5-0-lite-260128",
 		Prompt:         "test",
 		Size:           "2K",
