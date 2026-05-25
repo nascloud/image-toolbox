@@ -1,6 +1,7 @@
 package ai
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -10,7 +11,7 @@ import (
 	"image-toolbox/backend/model"
 )
 
-func TestGenerateImage(t *testing.T) {
+func TestSeedreamGenerateImage(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Authorization") != "Bearer test-key" {
 			t.Error("missing or wrong auth header")
@@ -52,8 +53,7 @@ func TestGenerateImage(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewClient("test-key")
-	client.BaseURL = server.URL
+	p := NewSeedreamProvider("test-key", server.URL)
 
 	req := model.AIImageRequest{
 		Model:  "test-model",
@@ -61,7 +61,7 @@ func TestGenerateImage(t *testing.T) {
 		Size:   "1024x1024",
 	}
 
-	resp, err := client.Generate(req)
+	resp, err := p.Generate(context.Background(), req)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -73,7 +73,7 @@ func TestGenerateImage(t *testing.T) {
 	}
 }
 
-func TestGenerateImageAPIError(t *testing.T) {
+func TestSeedreamGenerateAPIError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)
 		json.NewEncoder(w).Encode(model.AIImageResponse{
@@ -85,10 +85,9 @@ func TestGenerateImageAPIError(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewClient("bad-key")
-	client.BaseURL = server.URL
+	p := NewSeedreamProvider("bad-key", server.URL)
 
-	_, err := client.Generate(model.AIImageRequest{
+	_, err := p.Generate(context.Background(), model.AIImageRequest{
 		Model: "test", Prompt: "test", Size: "1024x1024",
 	})
 	if err == nil {
@@ -96,7 +95,7 @@ func TestGenerateImageAPIError(t *testing.T) {
 	}
 }
 
-func TestGenerateIncludesGuidanceScaleForSupportedModel(t *testing.T) {
+func TestSeedreamIncludesGuidanceScaleForSupportedModel(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req map[string]any
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -119,10 +118,9 @@ func TestGenerateIncludesGuidanceScaleForSupportedModel(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewClient("test-key")
-	client.BaseURL = server.URL
+	p := NewSeedreamProvider("test-key", server.URL)
 
-	_, err := client.Generate(model.AIImageRequest{
+	_, err := p.Generate(context.Background(), model.AIImageRequest{
 		Model:         "doubao-seedream-3-0-t2i-250415",
 		Prompt:        "test",
 		Size:          "1024x1024",
@@ -133,7 +131,7 @@ func TestGenerateIncludesGuidanceScaleForSupportedModel(t *testing.T) {
 	}
 }
 
-func TestGenerateOmitsGuidanceScaleForUnsupportedModel(t *testing.T) {
+func TestSeedreamOmitsGuidanceScaleForUnsupportedModel(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req map[string]any
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -156,10 +154,9 @@ func TestGenerateOmitsGuidanceScaleForUnsupportedModel(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewClient("test-key")
-	client.BaseURL = server.URL
+	p := NewSeedreamProvider("test-key", server.URL)
 
-	_, err := client.Generate(model.AIImageRequest{
+	_, err := p.Generate(context.Background(), model.AIImageRequest{
 		Model:         "doubao-seedream-5-0-lite-260128",
 		Prompt:        "test",
 		Size:          "1024x1024",
@@ -170,7 +167,7 @@ func TestGenerateOmitsGuidanceScaleForUnsupportedModel(t *testing.T) {
 	}
 }
 
-func TestGenerateOmitsUnsupportedOutputFormat(t *testing.T) {
+func TestSeedreamOmitsUnsupportedOutputFormat(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req map[string]any
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -193,10 +190,9 @@ func TestGenerateOmitsUnsupportedOutputFormat(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewClient("test-key")
-	client.BaseURL = server.URL
+	p := NewSeedreamProvider("test-key", server.URL)
 
-	_, err := client.Generate(model.AIImageRequest{
+	_, err := p.Generate(context.Background(), model.AIImageRequest{
 		Model:        "doubao-seedream-4-5-251128",
 		Prompt:       "test",
 		Size:         "2K",
@@ -207,7 +203,7 @@ func TestGenerateOmitsUnsupportedOutputFormat(t *testing.T) {
 	}
 }
 
-func TestGenerateIncludesOutputFormatForSeedream5(t *testing.T) {
+func TestSeedreamIncludesOutputFormatForSeedream5(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req map[string]any
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -230,10 +226,9 @@ func TestGenerateIncludesOutputFormatForSeedream5(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewClient("test-key")
-	client.BaseURL = server.URL
+	p := NewSeedreamProvider("test-key", server.URL)
 
-	_, err := client.Generate(model.AIImageRequest{
+	_, err := p.Generate(context.Background(), model.AIImageRequest{
 		Model:        "doubao-seedream-5-0-lite-260128",
 		Prompt:       "test",
 		Size:         "2K",
@@ -244,7 +239,7 @@ func TestGenerateIncludesOutputFormatForSeedream5(t *testing.T) {
 	}
 }
 
-func TestGenerateOmitsImageAndSequentialForSeedream3(t *testing.T) {
+func TestSeedreamOmitsImageAndSequentialForSeedream3(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req map[string]any
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -270,10 +265,9 @@ func TestGenerateOmitsImageAndSequentialForSeedream3(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewClient("test-key")
-	client.BaseURL = server.URL
+	p := NewSeedreamProvider("test-key", server.URL)
 
-	_, err := client.Generate(model.AIImageRequest{
+	_, err := p.Generate(context.Background(), model.AIImageRequest{
 		Model:                     "doubao-seedream-3-0-t2i-250415",
 		Prompt:                    "test",
 		Size:                      "2K",
@@ -287,18 +281,107 @@ func TestGenerateOmitsImageAndSequentialForSeedream3(t *testing.T) {
 	}
 }
 
-func TestDownloadImageReturnsHTTPError(t *testing.T) {
+func TestSeedreamModels(t *testing.T) {
+	p := NewSeedreamProvider("test-key", "")
+	models := p.Models()
+	if len(models) != 4 {
+		t.Fatalf("expected 4 models, got %d", len(models))
+	}
+
+	expected := map[string]struct {
+		hasImageInput bool
+		hasSequential bool
+		hasStream     bool
+		hasSeed       bool
+		hasOutputFmt  bool
+		hasWebSearch  bool
+		hasGuidance   bool
+		hasPromptOpt  bool
+		hasWatermark  bool
+		sizes         int
+	}{
+		"doubao-seedream-5-0-260128": {
+			hasImageInput: true, hasSequential: true, hasStream: true,
+			hasSeed: true, hasOutputFmt: true, hasWebSearch: true, hasWatermark: true,
+			sizes: 3,
+		},
+		"doubao-seedream-4-5-250130": {
+			hasImageInput: true, hasSequential: true, hasStream: true,
+			hasSeed: true, hasWatermark: true,
+			sizes: 4,
+		},
+		"doubao-seedream-4-0-250130": {
+			hasImageInput: true, hasSequential: true, hasStream: true,
+			hasSeed: true, hasPromptOpt: true, hasWatermark: true,
+			sizes: 4,
+		},
+		"doubao-seedream-3-0-t2i-250115": {
+			hasGuidance: true,
+			sizes:       2,
+		},
+	}
+
+	for _, m := range models {
+		exp, ok := expected[m.ID]
+		if !ok {
+			t.Errorf("unexpected model: %s", m.ID)
+			continue
+		}
+		if m.Capabilities.SupportsImageInput != exp.hasImageInput {
+			t.Errorf("%s: SupportsImageInput=%v, want %v", m.ID, m.Capabilities.SupportsImageInput, exp.hasImageInput)
+		}
+		if m.Capabilities.SupportsSequential != exp.hasSequential {
+			t.Errorf("%s: SupportsSequential=%v, want %v", m.ID, m.Capabilities.SupportsSequential, exp.hasSequential)
+		}
+		if m.Capabilities.SupportsStream != exp.hasStream {
+			t.Errorf("%s: SupportsStream=%v, want %v", m.ID, m.Capabilities.SupportsStream, exp.hasStream)
+		}
+		if m.Capabilities.SupportsSeed != exp.hasSeed {
+			t.Errorf("%s: SupportsSeed=%v, want %v", m.ID, m.Capabilities.SupportsSeed, exp.hasSeed)
+		}
+		if m.Capabilities.SupportsOutputFormat != exp.hasOutputFmt {
+			t.Errorf("%s: SupportsOutputFormat=%v, want %v", m.ID, m.Capabilities.SupportsOutputFormat, exp.hasOutputFmt)
+		}
+		if m.Capabilities.SupportsWebSearch != exp.hasWebSearch {
+			t.Errorf("%s: SupportsWebSearch=%v, want %v", m.ID, m.Capabilities.SupportsWebSearch, exp.hasWebSearch)
+		}
+		if m.Capabilities.SupportsGuidanceScale != exp.hasGuidance {
+			t.Errorf("%s: SupportsGuidanceScale=%v, want %v", m.ID, m.Capabilities.SupportsGuidanceScale, exp.hasGuidance)
+		}
+		if m.Capabilities.SupportsFastPromptOptimize != exp.hasPromptOpt {
+			t.Errorf("%s: SupportsFastPromptOptimize=%v, want %v", m.ID, m.Capabilities.SupportsFastPromptOptimize, exp.hasPromptOpt)
+		}
+		if m.Capabilities.SupportsWatermark != exp.hasWatermark {
+			t.Errorf("%s: SupportsWatermark=%v, want %v", m.ID, m.Capabilities.SupportsWatermark, exp.hasWatermark)
+		}
+		if len(m.Capabilities.AllowedSizes) != exp.sizes {
+			t.Errorf("%s: AllowedSizes count=%d, want %d", m.ID, len(m.Capabilities.AllowedSizes), exp.sizes)
+		}
+		if m.Capabilities.DefaultOutputFormat != "jpeg" {
+			t.Errorf("%s: DefaultOutputFormat=%s, want jpeg", m.ID, m.Capabilities.DefaultOutputFormat)
+		}
+	}
+}
+
+func TestSeedreamGenerateWithContextCancel(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusForbidden)
-		w.Write([]byte("forbidden"))
+		t.Error("request should not have been sent")
 	}))
 	defer server.Close()
 
-	_, err := DownloadImage(server.URL)
+	p := NewSeedreamProvider("test-key", server.URL)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, err := p.Generate(ctx, model.AIImageRequest{
+		Model:  "doubao-seedream-5-0-260128",
+		Prompt: "test",
+		Size:   "2K",
+	})
 	if err == nil {
-		t.Fatal("expected download error")
+		t.Fatal("expected error for cancelled context")
 	}
-	if !strings.Contains(err.Error(), "HTTP 403") {
-		t.Fatalf("expected HTTP status in error, got %v", err)
+	if !strings.Contains(err.Error(), context.Canceled.Error()) {
+		t.Fatalf("expected context canceled error, got: %v", err)
 	}
 }
