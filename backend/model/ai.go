@@ -2,7 +2,7 @@ package model
 
 // AIImageRequest represents a request to an AI image generation API.
 type AIImageRequest struct {
-	N int `json:"n,omitempty"`
+	N                         int      `json:"n,omitempty"`
 	Model                     string   `json:"model"`
 	Prompt                    string   `json:"prompt"`
 	Size                      string   `json:"size"`
@@ -29,7 +29,7 @@ type AIImageResult struct {
 }
 
 // AIImageResponse represents the API response from the image generation endpoint.
-type 	AIImageResponse struct {
+type AIImageResponse struct {
 	Data []struct {
 		URL     string `json:"url,omitempty"`
 		B64JSON string `json:"b64_json,omitempty"`
@@ -82,8 +82,8 @@ type ProviderConfigResponse struct {
 
 // AIBatchRequest holds AI batch processing parameters.
 type AIBatchRequest struct {
-	Provider string `json:"provider"`
-	N        int    `json:"n"`
+	Provider                  string   `json:"provider"`
+	N                         int      `json:"n"`
 	SourcePaths               []string `json:"sourcePaths"`
 	OutputDir                 string   `json:"outputDir"`
 	Prompt                    string   `json:"prompt"`
