@@ -19,6 +19,7 @@ import (
 	_ "golang.org/x/image/tiff"
 	_ "golang.org/x/image/webp"
 
+	"image-toolbox/backend/ai"
 	"image-toolbox/backend/batch"
 	"image-toolbox/backend/config"
 	"image-toolbox/backend/file"
@@ -479,6 +480,57 @@ func (a *App) SaveFilesToDir(sourcePaths []string, destDir string) (int, error) 
 func (a *App) GetAiOutputDir() (string, error) {
 	configPath := filepath.Join(getConfigDir(), "config.json")
 	return config.LoadAiOutputDir(configPath)
+}
+
+// GetProviderModels returns available models for a given provider.
+func (a *App) GetProviderModels(providerName string) ([]model.ModelInfo, error) {
+	configPath := filepath.Join(getConfigDir(), "config.json")
+
+	apiKey, baseURL, err := config.LoadProviderConfig(configPath, providerName)
+	if err != nil {
+		return nil, err
+	}
+	if apiKey == "" {
+		return nil, fmt.Errorf("API key not configured for %s", providerName)
+	}
+
+	provider, err := ai.NewProvider(providerName, apiKey, baseURL)
+	if err != nil {
+		return nil, err
+	}
+	return provider.Models(), nil
+}
+
+// GetProviderConfig returns the provider config (API key masked) for display.
+func (a *App) GetProviderConfig(providerName string) (model.ProviderConfigResponse, error) {
+	configPath := filepath.Join(getConfigDir(), "config.json")
+
+	apiKey, baseURL, err := config.LoadProviderConfig(configPath, providerName)
+	if err != nil {
+		return model.ProviderConfigResponse{}, err
+	}
+	return model.ProviderConfigResponse{
+		HasAPIKey: apiKey != "",
+		BaseURL:   baseURL,
+	}, nil
+}
+
+// SaveProviderConfig persists API key and base URL for a provider.
+func (a *App) SaveProviderConfig(providerName, apiKey, baseURL string) error {
+	configPath := filepath.Join(getConfigDir(), "config.json")
+	return config.SaveProviderConfig(configPath, providerName, apiKey, baseURL)
+}
+
+// SetActiveProvider sets the default provider.
+func (a *App) SetActiveProvider(providerName string) error {
+	configPath := filepath.Join(getConfigDir(), "config.json")
+	return config.SaveActiveProvider(configPath, providerName)
+}
+
+// GetActiveProvider returns the name of the default provider.
+func (a *App) GetActiveProvider() (string, error) {
+	configPath := filepath.Join(getConfigDir(), "config.json")
+	return config.LoadActiveProvider(configPath)
 }
 
 // InstallContextMenu registers the right-click context menu in Windows registry.
