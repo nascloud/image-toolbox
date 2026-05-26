@@ -79,27 +79,48 @@ func TestChatGPT2APIGenerateEdits(t *testing.T) {
 		if !strings.HasSuffix(r.URL.Path, "/v1/images/edits") {
 			t.Fatalf("expected /v1/images/edits, got %s", r.URL.Path)
 		}
-		var req map[string]any
-		json.NewDecoder(r.Body).Decode(&req)
-		if req["model"] != "gpt-image-2" {
-			t.Errorf("expected model gpt-image-2, got %v", req["model"])
+		ct := r.Header.Get("Content-Type")
+		if !strings.HasPrefix(ct, "multipart/form-data") {
+			t.Fatalf("expected multipart/form-data, got %s", ct)
 		}
-		if req["prompt"] != "edit prompt" {
-			t.Errorf("expected prompt, got %v", req["prompt"])
+
+		if err := r.ParseMultipartForm(10 << 20); err != nil {
+			t.Fatalf("parse multipart: %v", err)
 		}
-		images, ok := req["images"].([]any)
-		if !ok {
-			t.Fatal("expected images array")
+
+		if r.FormValue("model") != "gpt-image-2" {
+			t.Errorf("expected model gpt-image-2, got %v", r.FormValue("model"))
 		}
-		if len(images) != 2 {
-			t.Fatalf("expected 2 images, got %d", len(images))
+		if r.FormValue("prompt") != "edit prompt" {
+			t.Errorf("expected prompt, got %v", r.FormValue("prompt"))
 		}
-		img0 := images[0].(map[string]any)
-		if _, ok := img0["image_url"]; !ok {
-			t.Error("expected image_url in images[0]")
+		if r.FormValue("response_format") != "b64_json" {
+			t.Errorf("expected response_format b64_json, got %v", r.FormValue("response_format"))
 		}
-		if _, ok := req["response_format"]; ok {
-			t.Error("did not expect response_format in edits JSON body")
+
+		// Check image files were uploaded (main image + reference images share "image" field)
+		imageFiles := r.MultipartForm.File["image"]
+		if len(imageFiles) != 2 {
+			t.Fatalf("expected 2 image files (1 main + 1 ref), got %d", len(imageFiles))
+		}
+
+		// First file is the main input image
+		mainFile, err := imageFiles[0].Open()
+		if err != nil {
+			t.Fatalf("open main image: %v", err)
+		}
+		mainFile.Close()
+
+		// Second file is the reference image
+		refFile, err := imageFiles[1].Open()
+		if err != nil {
+			t.Fatalf("open ref image: %v", err)
+		}
+		refBuf := make([]byte, 4)
+		refFile.Read(refBuf)
+		refFile.Close()
+		if string(refBuf) != "ref1" {
+			t.Errorf("expected ref image content, got %x", refBuf)
 		}
 
 		json.NewEncoder(w).Encode(model.AIImageResponse{
@@ -142,10 +163,12 @@ func TestChatGPT2APIModels(t *testing.T) {
 	if len(models) == 0 {
 		t.Fatal("expected at least one model")
 	}
-	found := false
+	foundImage2 := false
+	foundGPT5 := false
 	for _, m := range models {
-		if m.ID == "gpt-image-2" {
-			found = true
+		switch m.ID {
+		case "gpt-image-2":
+			foundImage2 = true
 			if !m.Capabilities.SupportsImageInput {
 				t.Error("gpt-image-2 should support image input")
 			}
@@ -158,10 +181,21 @@ func TestChatGPT2APIModels(t *testing.T) {
 			if m.Capabilities.NMax != 4 {
 				t.Errorf("expected NMax 4, got %d", m.Capabilities.NMax)
 			}
+		case "gpt-5":
+			foundGPT5 = true
+			if !m.Capabilities.SupportsImageInput {
+				t.Error("gpt-5 should support image input")
+			}
+			if !m.Capabilities.SupportsEdits {
+				t.Error("gpt-5 should support edits")
+			}
 		}
 	}
-	if !found {
+	if !foundImage2 {
 		t.Fatal("expected gpt-image-2 in models")
+	}
+	if !foundGPT5 {
+		t.Fatal("expected gpt-5 in models")
 	}
 }
 
