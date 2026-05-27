@@ -6,6 +6,14 @@ export function CancelBatch() {
   return window['go']['main']['App']['CancelBatch']();
 }
 
+export function FetchProviderModels(arg1) {
+  return window['go']['main']['App']['FetchProviderModels'](arg1);
+}
+
+export function GetActiveProvider() {
+  return window['go']['main']['App']['GetActiveProvider']();
+}
+
 export function GetAiOutputDir() {
   return window['go']['main']['App']['GetAiOutputDir']();
 }
@@ -20,6 +28,14 @@ export function GetImageInfo(arg1) {
 
 export function GetPendingIntent() {
   return window['go']['main']['App']['GetPendingIntent']();
+}
+
+export function GetProviderConfig(arg1) {
+  return window['go']['main']['App']['GetProviderConfig'](arg1);
+}
+
+export function GetProviderModels(arg1) {
+  return window['go']['main']['App']['GetProviderModels'](arg1);
 }
 
 export function HandleLaunchIntent(arg1) {
@@ -70,8 +86,12 @@ export function SaveApiKey(arg1) {
   return window['go']['main']['App']['SaveApiKey'](arg1);
 }
 
-export function SaveFilesToDir(arg1, arg2) {
-  return window['go']['main']['App']['SaveFilesToDir'](arg1, arg2);
+export function SaveFilesToDir(arg1, arg2, arg3) {
+  return window['go']['main']['App']['SaveFilesToDir'](arg1, arg2, arg3);
+}
+
+export function SaveProviderConfig(arg1, arg2, arg3) {
+  return window['go']['main']['App']['SaveProviderConfig'](arg1, arg2, arg3);
 }
 
 export function ScanDirectory(arg1, arg2) {
@@ -88,6 +108,10 @@ export function SelectFiles() {
 
 export function SelectOutputDir() {
   return window['go']['main']['App']['SelectOutputDir']();
+}
+
+export function SetActiveProvider(arg1) {
+  return window['go']['main']['App']['SetActiveProvider'](arg1);
 }
 
 export function SetContext(arg1) {

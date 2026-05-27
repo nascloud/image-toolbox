@@ -284,8 +284,8 @@ func TestSeedreamOmitsImageAndSequentialForSeedream3(t *testing.T) {
 func TestSeedreamModels(t *testing.T) {
 	p := NewSeedreamProvider("test-key", "")
 	models := p.Models()
-	if len(models) != 4 {
-		t.Fatalf("expected 4 models, got %d", len(models))
+	if len(models) != 5 {
+		t.Fatalf("expected 5 models, got %d", len(models))
 	}
 
 	expected := map[string]struct {
@@ -305,17 +305,22 @@ func TestSeedreamModels(t *testing.T) {
 			hasSeed: true, hasOutputFmt: true, hasWebSearch: true, hasWatermark: true,
 			sizes: 3,
 		},
-		"doubao-seedream-4-5-250130": {
+		"doubao-seedream-5-0-lite-260128": {
+			hasImageInput: true, hasSequential: true, hasStream: true,
+			hasSeed: true, hasOutputFmt: true, hasWebSearch: true, hasWatermark: true,
+			sizes: 2,
+		},
+		"doubao-seedream-4-5-251128": {
 			hasImageInput: true, hasSequential: true, hasStream: true,
 			hasSeed: true, hasWatermark: true,
 			sizes: 4,
 		},
-		"doubao-seedream-4-0-250130": {
+		"doubao-seedream-4-0-250828": {
 			hasImageInput: true, hasSequential: true, hasStream: true,
 			hasSeed: true, hasPromptOpt: true, hasWatermark: true,
 			sizes: 4,
 		},
-		"doubao-seedream-3-0-t2i-250115": {
+		"doubao-seedream-3-0-t2i-250415": {
 			hasGuidance: true,
 			sizes:       2,
 		},

@@ -2,13 +2,17 @@ package config
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
+
+	"image-toolbox/backend/model"
 )
 
 type appConfig struct {
 	ActiveProvider string                    `json:"activeProvider"`
 	Providers      map[string]ProviderConfig `json:"providers"`
+	ProviderModels map[string][]model.ModelInfo `json:"providerModels,omitempty"`
 	AiOutputDir    string                    `json:"aiOutputDir"`
 	ApiKey         string                    `json:"apiKey,omitempty"`
 }
@@ -103,6 +107,30 @@ func LoadAiOutputDir(path string) (string, error) {
 		return "", err
 	}
 	return cfg.AiOutputDir, nil
+}
+
+func SaveProviderModels(path, name string, models []model.ModelInfo) error {
+	cfg, err := loadConfig(path)
+	if err != nil {
+		cfg = &appConfig{Providers: make(map[string]ProviderConfig)}
+	}
+	if cfg.ProviderModels == nil {
+		cfg.ProviderModels = make(map[string][]model.ModelInfo)
+	}
+	cfg.ProviderModels[name] = models
+	return saveConfig(path, cfg)
+}
+
+func LoadProviderModels(path, name string) ([]model.ModelInfo, error) {
+	cfg, err := loadConfig(path)
+	if err != nil {
+		return nil, err
+	}
+	models, ok := cfg.ProviderModels[name]
+	if !ok || len(models) == 0 {
+		return nil, fmt.Errorf("no cached models for %s", name)
+	}
+	return models, nil
 }
 
 func defaultBaseURL(name string) string {

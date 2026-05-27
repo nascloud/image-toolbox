@@ -1,18 +1,12 @@
 package ai
 
 import (
-	"bytes"
 	"context"
 	"encoding/base64"
 	"fmt"
-	"image"
-	"image/jpeg"
-	"image/png"
 	"os"
 	"path/filepath"
 	"strings"
-
-	"golang.org/x/image/draw"
 
 	"image-toolbox/backend/model"
 )
@@ -69,6 +63,7 @@ func ProcessSingleImagesWithContext(ctx context.Context, provider Provider, srcP
 		Model:                     opts.Model,
 		Prompt:                    BuildPrompt(opts.Prompt),
 		Size:                      opts.Size,
+		Quality:                   opts.Quality,
 		Image:                     imgData,
 		ReferenceImages:           refs,
 		Seed:                      opts.Seed,
@@ -108,17 +103,6 @@ func ProcessSingleImagesWithContext(ctx context.Context, provider Provider, srcP
 				return nil, err
 			}
 			continue
-		}
-
-		if opts.DownloadWidth > 0 {
-			resized, err := resizeImageBytes(imageData, opts.DownloadWidth, outExt)
-			if err != nil {
-				if len(outPaths) == 0 {
-					return nil, fmt.Errorf("resize download: %w", err)
-				}
-				continue
-			}
-			imageData = resized
 		}
 
 		outPath := indexedOutputPath(srcPath, outputDir, outputPath, outExt, idx)
@@ -177,38 +161,6 @@ func indexedOutputPath(srcPath, outputDir, firstOutputPath, outExt string, idx i
 	ext := filepath.Ext(outPath)
 	base := strings.TrimSuffix(outPath, ext)
 	return fmt.Sprintf("%s_%02d%s", base, idx+1, ext)
-}
-
-func resizeImageBytes(data []byte, targetWidth int, outputFormat string) ([]byte, error) {
-	img, _, err := image.Decode(bytes.NewReader(data))
-	if err != nil {
-		return nil, fmt.Errorf("decode: %w", err)
-	}
-	if targetWidth <= 0 || img.Bounds().Dx() == targetWidth {
-		return data, nil
-	}
-
-	bounds := img.Bounds()
-	ratio := float64(targetWidth) / float64(bounds.Dx())
-	targetHeight := int(float64(bounds.Dy())*ratio + 0.5)
-	if targetHeight < 1 {
-		targetHeight = 1
-	}
-
-	dst := image.NewRGBA(image.Rect(0, 0, targetWidth, targetHeight))
-	draw.ApproxBiLinear.Scale(dst, dst.Bounds(), img, bounds, draw.Over, nil)
-
-	var buf bytes.Buffer
-	if outputFormat == "jpeg" || outputFormat == ".jpg" || outputFormat == ".jpeg" {
-		if err := jpeg.Encode(&buf, dst, &jpeg.Options{Quality: 95}); err != nil {
-			return nil, fmt.Errorf("encode jpeg: %w", err)
-		}
-	} else {
-		if err := png.Encode(&buf, dst); err != nil {
-			return nil, fmt.Errorf("encode png: %w", err)
-		}
-	}
-	return buf.Bytes(), nil
 }
 
 func ProviderCapabilities(provider Provider, modelID string) model.ModelCapabilities {

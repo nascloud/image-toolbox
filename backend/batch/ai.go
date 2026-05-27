@@ -43,7 +43,7 @@ func RunAIImageBatch(ctx context.Context, req model.AIBatchRequest, configPath s
 			req.Model = "doubao-seedream-5-0-260128"
 		}
 	}
-	if req.Size == "" {
+	if req.Size == "" && providerName != "chatgpt2api" {
 		req.Size = "2048x2048"
 	}
 	if req.N <= 0 {

@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	imgpkg "image-toolbox/backend/image"
 	"image-toolbox/backend/model"
 )
 
@@ -30,7 +31,7 @@ func TestResizeImageBytesResizesToDownloadWidth(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	resized, err := resizeImageBytes(buf.Bytes(), 20, "png")
+	resized, err := imgpkg.ResizeImageBytes(buf.Bytes(), 20)
 	if err != nil {
 		t.Fatal(err)
 	}

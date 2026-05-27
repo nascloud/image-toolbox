@@ -108,18 +108,7 @@ function loadPresets(): PromptPreset[] {
   return defaultPromptPresets;
 }
 
-function saveModelList(models: { id: string; name: string }[]) {
-  try { localStorage.setItem('model_list', JSON.stringify(models)); } catch { /* no-op */ }
-}
-
 function loadModelList(): { id: string; name: string }[] {
-  try {
-    const raw = localStorage.getItem('model_list');
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-    }
-  } catch { /* no-op */ }
   return defaultModels;
 }
 
@@ -152,14 +141,32 @@ function hoverPreviewStyle(pos: { x: number; y: number }): React.CSSProperties {
   };
 }
 
+const modelNameMap: Record<string, string> = {
+  'doubao-seedream-5-0-260128': 'Seedream 5.0',
+  'doubao-seedream-5-0-lite-260128': 'Seedream 5.0 Lite',
+  'doubao-seedream-4-5-251128': 'Seedream 4.5',
+  'doubao-seedream-4-0-250828': 'Seedream 4.0',
+  'doubao-seedream-3-0-t2i-250415': 'Seedream 3.0',
+};
+
+function displayModelName(m: { id: string; name?: string }): string {
+  return m.name || modelNameMap[m.id] || m.id;
+}
+
+const providerDefaultModel: Record<string, string> = {
+  seedream: 'doubao-seedream-5-0-lite-260128',
+  chatgpt2api: 'gpt-image-2',
+};
+
 // ── Component ──
 export const AIBatch: React.FC = () => {
 
   // ── State ──
   const [prompt, setPrompt] = useState('');
-  const [model, setModel] = useState('doubao-seedream-5-0-lite-260128');
+  const [model, setModel] = useState(providerDefaultModel.seedream);
   const [modelList, setModelList] = useState<{ id: string; name: string }[]>(loadModelList);
   const [size, setSize] = useState('2K');
+  const [quality, setQuality] = useState('auto');
   const [seed, setSeed] = useState(-1);
   const [showCustomSeed, setShowCustomSeed] = useState(false);
   const [outputFormat, setOutputFormat] = useState('png');
@@ -221,19 +228,25 @@ export const AIBatch: React.FC = () => {
   const cancelRef = useRef(false);
   const toastTimer = useRef<ReturnType<typeof setTimeout>>();
 
+  function getEffectiveWidth(): number {
+    return downloadWidth === 'custom'
+      ? (parseInt(customWidth) || 0)
+      : downloadWidth === 'original' ? 0 : parseInt(downloadWidth);
+  }
+
   // Build RunAIImageBatch request from current panel parameters for given source paths
   function buildBatchRequest(paths: string[]) {
     const outputDir = aiOutputDir || (paths[0]?.substring(0, paths[0].lastIndexOf('\\')) ?? '');
-    const downloadW = downloadWidth === 'custom'
-      ? (parseInt(customWidth) || 0)
-      : downloadWidth === 'original' ? 0 : parseInt(downloadWidth);
+    const downloadW = getEffectiveWidth();
     const maxGeneratedImages = Math.max(1, 15 - (1 + referenceImages.length));
     return {
       sourcePaths: paths,
       outputDir,
+      provider,
       prompt,
       model,
       size,
+      quality,
       seed: isGuidanceSupported && seed >= 0 ? seed : -1,
       outputFormat: isOutputFormatSupported ? outputFormat : 'jpeg',
       watermark,
@@ -270,9 +283,12 @@ export const AIBatch: React.FC = () => {
   const isWebSearchSupported = hasCapabilities ? (currentModelCaps.supportsWebSearch ?? false) : model.includes('5-0');
   const isFastPromptOptimizeSupported = hasCapabilities ? (currentModelCaps.supportsFastPromptOptimize ?? false) : model.includes('4-0');
   const modelSizeOptions = useMemo((): string[] => {
+    if (provider === 'chatgpt2api') {
+      return ['auto', '1:1', '3:4', '4:3', '16:9', '9:16', '3:2', '2:3', '21:9'];
+    }
     if (currentModelCaps.allowedSizes?.length) return currentModelCaps.allowedSizes;
     return getSizeOptions(model);
-  }, [currentModelCaps, model]);
+  }, [currentModelCaps, model, provider]);
   const displayModels = availableModels.length > 0 ? availableModels : modelList;
 
   // ── Computed-like ──
@@ -315,7 +331,12 @@ export const AIBatch: React.FC = () => {
         const models = await (window as any).go.main.App.GetProviderModels(provider);
         setAvailableModels(models);
         if (models.length > 0 && !(models as any[]).find((m: any) => m.id === model)) {
-          setModel(models[0].id);
+          const fallback = providerDefaultModel[provider] || models[0].id;
+          if ((models as any[]).find((m: any) => m.id === fallback)) {
+            setModel(fallback);
+          } else {
+            setModel(models[0].id);
+          }
         }
       } catch {
         setAvailableModels([]);
@@ -325,12 +346,14 @@ export const AIBatch: React.FC = () => {
 
   // Provider switch handler — saves current params, restores saved params for new provider
   const handleProviderChange = (newProvider: string) => {
-    const currentParams = { model, seed, showCustomSeed, outputFormat, watermark, guidanceScale, sequentialMode, maxImages, optimizePromptMode, webSearch, n };
+    const currentParams = { model, size, quality, seed, showCustomSeed, outputFormat, watermark, guidanceScale, sequentialMode, maxImages, optimizePromptMode, webSearch, n };
     savedProviderParams.current[provider] = currentParams;
     setProvider(newProvider);
     const restored = savedProviderParams.current[newProvider];
     if (restored) {
       setModel(restored.model);
+      if (restored.size) setSize(restored.size);
+      if (restored.quality) setQuality(restored.quality);
       setSeed(restored.seed);
       setShowCustomSeed(restored.showCustomSeed);
       setOutputFormat(restored.outputFormat);
@@ -1111,20 +1134,6 @@ export const AIBatch: React.FC = () => {
         );
       })()}
 
-      {/* Provider Selector */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 0', borderBottom: '1px solid var(--color-border-subtle)' }}>
-        <span className="text-xs text-muted">服务商:</span>
-        <select
-          value={provider}
-          onChange={e => handleProviderChange(e.target.value)}
-          className="select"
-          style={{ fontSize: 12, padding: '4px 8px', width: 120 }}
-        >
-          <option value="seedream">Seedream</option>
-          <option value="chatgpt2api">ChatGPT2API</option>
-        </select>
-      </div>
-
       {/* ─── Main Two-Column Layout ─── */}
       <div style={{ display: 'flex', gap: 20, flex: 1, minHeight: 0 }}>
 
@@ -1200,6 +1209,17 @@ export const AIBatch: React.FC = () => {
                   {modelSizeOptions.map(sz => <option key={sz} value={sz}>{sz}</option>)}
                 </select>
               </div>
+
+              {/* --- Quality (ChatGPT2API only) --- */}
+              {provider === 'chatgpt2api' && (<div className="param-row">
+                <span className="param-label">画质</span>
+                <select value={quality} onChange={e => setQuality(e.target.value)} className="select" style={{ width: 150, fontSize: 12, padding: '4px 8px' }}>
+                  <option value="auto">自动 (AI决定)</option>
+                  <option value="low">低 (~1MP)</option>
+                  <option value="medium">中 (~4MP)</option>
+                  <option value="high">高 (~8MP)</option>
+                </select>
+              </div>)}
 
               {/* --- Seed --- */}
               {currentModelCaps.supportsSeed !== false && (<div className="param-row">
@@ -1404,11 +1424,24 @@ export const AIBatch: React.FC = () => {
 
             {/* Model & Download Width */}
             <div className="flex items-center gap-4 ml-auto">
+              {/* Provider */}
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted">服务商:</span>
+                <select
+                  value={provider}
+                  onChange={e => handleProviderChange(e.target.value)}
+                  className="select"
+                  style={{ fontSize: 12, padding: '4px 8px', width: 120 }}
+                >
+                  <option value="seedream">Seedream</option>
+                  <option value="chatgpt2api">ChatGPT2API</option>
+                </select>
+              </div>
               {/* Model */}
               <div className="flex items-center gap-2">
                 <span className="text-xs text-muted">模型:</span>
                 <select value={model} onChange={e => setModel(e.target.value)} className="select" style={{ width: 160, fontSize: 12, padding: '4px 8px' }}>
-                  {displayModels.map(m => <option key={m.id} value={m.id}>{(m as any).name || m.id}</option>)}
+                  {displayModels.map(m => <option key={m.id} value={m.id}>{displayModelName(m)}</option>)}
                 </select>
               </div>
 
@@ -1484,7 +1517,7 @@ export const AIBatch: React.FC = () => {
                         if (!allPaths.length) return;
                         setDownloadProgress({ current: 0, total: allPaths.length, active: true });
                         try {
-                          const count = await (window as any).go.main.App.SaveFilesToDir(allPaths, aiOutputDir);
+                          const count = await (window as any).go.main.App.SaveFilesToDir(allPaths, aiOutputDir, getEffectiveWidth());
                           showToast(`${count}/${allPaths.length} 已保存到 ${aiOutputDir}`, 'success');
                         } catch (err: any) {
                           showToast(`保存失败: ${err.message}`, 'error');
@@ -1506,7 +1539,7 @@ export const AIBatch: React.FC = () => {
                         setDownloadProgress({ current: 0, total, active: true });
                         for (const [dir, paths] of byDir) {
                           try {
-                            const count = await (window as any).go.main.App.SaveFilesToDir(paths, dir);
+                            const count = await (window as any).go.main.App.SaveFilesToDir(paths, dir, getEffectiveWidth());
                             saved += count;
                             setDownloadProgress(p => ({ ...p, current: saved }));
                           } catch {
@@ -1655,7 +1688,7 @@ export const AIBatch: React.FC = () => {
                           const destDir = aiOutputDir || item.path?.replace(/[^\\/]+$/, '') || '';
                           if (!destDir) return;
                           try {
-                            const count = await (window as any).go.main.App.SaveFilesToDir(outputPaths, destDir);
+                            const count = await (window as any).go.main.App.SaveFilesToDir(outputPaths, destDir, getEffectiveWidth());
                             showToast(`已保存 ${count}/${outputPaths.length} 张到 ${destDir}`, 'success');
                           } catch (err: any) {
                             showToast(`保存失败: ${err.message}`, 'error');

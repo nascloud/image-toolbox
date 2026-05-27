@@ -30,8 +30,8 @@ import (
 
 // App is the thin Wails API layer that exposes methods to the frontend.
 type App struct {
-	ctx       context.Context
-	cancelFn  context.CancelFunc
+	ctx      context.Context
+	cancelFn context.CancelFunc
 }
 
 // NewApp creates a new API App instance.
@@ -459,14 +459,41 @@ func (a *App) SaveAiOutputDir(dir string) error {
 }
 
 // SaveFilesToDir copies a list of source files to the given destination directory.
-func (a *App) SaveFilesToDir(sourcePaths []string, destDir string) (int, error) {
+// If downloadWidth > 0, images are resized to that width (preserving aspect ratio) during copy.
+func (a *App) SaveFilesToDir(sourcePaths []string, destDir string, downloadWidth int) (int, error) {
 	if err := os.MkdirAll(destDir, 0755); err != nil {
 		return 0, fmt.Errorf("create destination directory: %w", err)
 	}
 	var count int
 	for _, src := range sourcePaths {
-		if _, err := file.CopyFile(src, destDir); err != nil {
-			continue
+		if downloadWidth > 0 {
+			data, err := os.ReadFile(src)
+			if err != nil {
+				continue
+			}
+			resized, err := backendImage.ResizeImageBytes(data, downloadWidth)
+			if err != nil {
+				continue
+			}
+			_, name := filepath.Split(src)
+			destPath := filepath.Join(destDir, name)
+			if _, err := os.Stat(destPath); err == nil {
+				ext := filepath.Ext(name)
+				base := name[:len(name)-len(ext)]
+				for i := 1; ; i++ {
+					destPath = filepath.Join(destDir, fmt.Sprintf("%s_%d%s", base, i, ext))
+					if _, err := os.Stat(destPath); os.IsNotExist(err) {
+						break
+					}
+				}
+			}
+			if err := os.WriteFile(destPath, resized, 0644); err != nil {
+				continue
+			}
+		} else {
+			if _, err := file.CopyFile(src, destDir); err != nil {
+				continue
+			}
 		}
 		count++
 	}
@@ -482,8 +509,14 @@ func (a *App) GetAiOutputDir() (string, error) {
 	return config.LoadAiOutputDir(configPath)
 }
 
-// GetProviderModels returns available models for a given provider.
+// GetProviderModels returns cached models for a given provider from config.
 func (a *App) GetProviderModels(providerName string) ([]model.ModelInfo, error) {
+	configPath := filepath.Join(getConfigDir(), "config.json")
+	return config.LoadProviderModels(configPath, providerName)
+}
+
+// FetchProviderModels fetches models from the provider API, saves to config, and returns them.
+func (a *App) FetchProviderModels(providerName string) ([]model.ModelInfo, error) {
 	configPath := filepath.Join(getConfigDir(), "config.json")
 
 	apiKey, baseURL, err := config.LoadProviderConfig(configPath, providerName)
@@ -498,7 +531,14 @@ func (a *App) GetProviderModels(providerName string) ([]model.ModelInfo, error) 
 	if err != nil {
 		return nil, err
 	}
-	return provider.Models(), nil
+
+	models := provider.Models()
+
+	if err := config.SaveProviderModels(configPath, providerName, models); err != nil {
+		return nil, fmt.Errorf("failed to save models: %w", err)
+	}
+
+	return models, nil
 }
 
 // GetProviderConfig returns the provider config (API key masked) for display.

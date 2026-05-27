@@ -1,7 +1,10 @@
 package image
 
 import (
+	"bytes"
 	"image"
+	"image/jpeg"
+	"image/png"
 	"math"
 
 	"golang.org/x/image/draw"
@@ -88,4 +91,38 @@ func ResizeImage(src image.Image, opts ResizeOptions) image.Image {
 	dst := image.NewRGBA(image.Rect(0, 0, dstW, dstH))
 	draw.ApproxBiLinear.Scale(dst, dst.Bounds(), src, src.Bounds(), draw.Over, nil)
 	return dst
+}
+
+// ResizeImageBytes decodes the image data, resizes to targetWidth (preserving aspect ratio),
+// and re-encodes in the original format (JPEG or PNG).
+func ResizeImageBytes(data []byte, targetWidth int) ([]byte, error) {
+	img, format, err := image.Decode(bytes.NewReader(data))
+	if err != nil {
+		return nil, err
+	}
+	if targetWidth <= 0 || img.Bounds().Dx() == targetWidth {
+		return data, nil
+	}
+
+	bounds := img.Bounds()
+	ratio := float64(targetWidth) / float64(bounds.Dx())
+	targetHeight := int(float64(bounds.Dy())*ratio + 0.5)
+	if targetHeight < 1 {
+		targetHeight = 1
+	}
+
+	dst := image.NewRGBA(image.Rect(0, 0, targetWidth, targetHeight))
+	draw.ApproxBiLinear.Scale(dst, dst.Bounds(), img, bounds, draw.Over, nil)
+
+	var buf bytes.Buffer
+	if format == "jpeg" {
+		if err := jpeg.Encode(&buf, dst, &jpeg.Options{Quality: 95}); err != nil {
+			return nil, err
+		}
+	} else {
+		if err := png.Encode(&buf, dst); err != nil {
+			return nil, err
+		}
+	}
+	return buf.Bytes(), nil
 }

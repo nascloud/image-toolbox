@@ -1,11 +1,12 @@
 package model
 
-// AIImageRequest represents a request to an AI image generation API.
+	// AIImageRequest represents a request to an AI image generation API.
 type AIImageRequest struct {
 	N                         int      `json:"n,omitempty"`
 	Model                     string   `json:"model"`
 	Prompt                    string   `json:"prompt"`
 	Size                      string   `json:"size"`
+	Quality                   string   `json:"quality,omitempty"`
 	Image                     string   `json:"image,omitempty"`
 	ReferenceImages           []string `json:"referenceImages,omitempty"`
 	Seed                      int      `json:"seed,omitempty"`
@@ -89,6 +90,7 @@ type AIBatchRequest struct {
 	Prompt                    string   `json:"prompt"`
 	Model                     string   `json:"model"`
 	Size                      string   `json:"size"`
+	Quality                   string   `json:"quality"`
 	ReferenceImages           []string `json:"referenceImages"`
 	Seed                      int      `json:"seed"`
 	OutputFormat              string   `json:"outputFormat"`
