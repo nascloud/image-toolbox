@@ -1120,11 +1120,14 @@ export const AIBatch: React.FC = () => {
               </div>
             </div>
           ) : (
-            <div style={{ maxWidth: '80vw', maxHeight: '75vh', overflow: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={e => e.stopPropagation()}>
+            <div style={{ maxWidth: '90vw', maxHeight: '80vh', overflow: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={e => e.stopPropagation()}>
               {previewLoading ? (
                 <div style={{ padding: 40, color: 'var(--color-text-muted)', fontSize: 16 }}>加载中...</div>
               ) : previewDataUrl ? (
-                <img src={previewDataUrl} style={{ transform: `scale(${previewZoom})`, transformOrigin: 'center center', maxWidth: '100%', maxHeight: '75vh' }} alt="preview" />
+                <img src={previewDataUrl} style={previewZoom === 1
+                  ? { maxWidth: '100%', maxHeight: '80vh', objectFit: 'contain', display: 'block' }
+                  : { width: `${previewZoom * 100}%`, maxWidth: 'none', display: 'block' }
+                } alt="preview" />
               ) : (
                 <div style={{ padding: 40, color: 'var(--color-text-muted)', fontSize: 14 }}>无法加载图片</div>
               )}
