@@ -487,12 +487,13 @@ func validateConstraints(w, h float64, wRatio, hRatio int) (float64, float64) {
 //   - Total pixels ∈ [655360, 8294400]
 //
 // Priority:
-//  1. quality=auto/empty or size=auto → omit size (let API decide)
-//  2. size is pixel format ("WxH") → use directly
-//  3. quality + ratio ("W:H") → compute pixel dimensions
+//  1. size is "auto" or empty → omit size (let API decide)
+//  2. quality=auto with a ratio → use medium target (~4MP)
+//  3. size is pixel format ("WxH") → use directly
+//  4. quality + ratio ("W:H") → compute pixel dimensions
 func resolveChatGPT2APISize(quality, size string) string {
-	if quality == "auto" || quality == "" || size == "auto" {
-		return ""
+	if size == "" || size == "auto" {
+		return "" // let API decide everything
 	}
 
 	// If size is already a pixel value, use it directly
@@ -505,9 +506,10 @@ func resolveChatGPT2APISize(quality, size string) string {
 		return ""
 	}
 
+	// When quality is auto, use a default medium target to respect the ratio
 	targetPixels := chatgpt2apiQualityTarget(quality)
 	if targetPixels <= 0 {
-		return size
+		targetPixels = 2048 * 2048 // ~4MP medium default
 	}
 
 	// Compute scale factor: k = sqrt(targetPixels / (wRatio * hRatio))

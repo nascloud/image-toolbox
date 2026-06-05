@@ -13,6 +13,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 	_ "golang.org/x/image/bmp"
@@ -30,14 +31,18 @@ import (
 
 // App is the thin Wails API layer that exposes methods to the frontend.
 type App struct {
-	ctx      context.Context
-	cancelFn context.CancelFunc
+	ctx         context.Context
+	mu          sync.Mutex
+	cancelSeq   int
+	cancelFuncs map[int]context.CancelFunc
 }
 
 // NewApp creates a new API App instance.
 func NewApp() *App {
 	file.CleanupOldAITempDirs()
-	return &App{}
+	return &App{
+		cancelFuncs: make(map[int]context.CancelFunc),
+	}
 }
 
 // SetContext stores the Wails runtime context for dialog and event calls.
@@ -46,21 +51,36 @@ func (a *App) SetContext(ctx context.Context) {
 }
 
 // newBatchContext creates a cancellable context for batch operations.
-func (a *App) newBatchContext() context.Context {
-	if a.cancelFn != nil {
-		a.cancelFn()
-	}
+// Multiple contexts can coexist concurrently; each gets its own cancel func.
+// The returned cleanup function MUST be called via defer when the operation completes.
+func (a *App) newBatchContext() (context.Context, func()) {
 	ctx, cancel := context.WithCancel(context.Background())
-	a.cancelFn = cancel
-	return ctx
+	a.mu.Lock()
+	id := a.cancelSeq
+	a.cancelSeq++
+	if a.cancelFuncs == nil {
+		a.cancelFuncs = make(map[int]context.CancelFunc)
+	}
+	a.cancelFuncs[id] = cancel
+	a.mu.Unlock()
+
+	cleanup := func() {
+		a.mu.Lock()
+		delete(a.cancelFuncs, id)
+		a.mu.Unlock()
+	}
+
+	return ctx, cleanup
 }
 
-// CancelBatch cancels the currently running batch operation.
+// CancelBatch cancels all currently running batch operations.
 func (a *App) CancelBatch() {
-	if a.cancelFn != nil {
-		a.cancelFn()
-		a.cancelFn = nil
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	for _, cancel := range a.cancelFuncs {
+		cancel()
 	}
+	a.cancelFuncs = make(map[int]context.CancelFunc)
 }
 
 // OpenOutputDir opens the given directory in the file explorer.
@@ -216,7 +236,8 @@ func (a *App) ProcessImagesBatch(req model.BatchRequest) (model.BatchResult, err
 		req.SourcePaths = paths
 	}
 
-	ctx := a.newBatchContext()
+	ctx, cleanup := a.newBatchContext()
+	defer cleanup()
 	progressCh := make(chan model.ProgressUpdate, 100)
 	go func() {
 		for update := range progressCh {
@@ -248,7 +269,8 @@ func (a *App) SliceImages(req model.SliceRequest) (model.BatchResult, error) {
 		req.Saturation = 1.0
 	}
 
-	ctx := a.newBatchContext()
+	ctx, cleanup := a.newBatchContext()
+	defer cleanup()
 	progressCh := make(chan model.ProgressUpdate, 100)
 	go func() {
 		for update := range progressCh {
@@ -279,7 +301,8 @@ func (a *App) WatermarkImages(req model.WatermarkRequest) (model.BatchResult, er
 		req.Position = "bottomRight"
 	}
 
-	ctx := a.newBatchContext()
+	ctx, cleanup := a.newBatchContext()
+	defer cleanup()
 	progressCh := make(chan model.ProgressUpdate, 100)
 	go func() {
 		for update := range progressCh {
@@ -426,7 +449,8 @@ func (a *App) RunAIImageBatch(req model.AIBatchRequest) (model.BatchResult, erro
 	}
 	req.OutputDir = tmpDir
 
-	ctx := a.newBatchContext()
+	ctx, cleanup := a.newBatchContext()
+	defer cleanup()
 	progressCh := make(chan model.ProgressUpdate, 100)
 	go func() {
 		for update := range progressCh {

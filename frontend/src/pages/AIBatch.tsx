@@ -201,9 +201,6 @@ export const AIBatch: React.FC = () => {
   const [selectedOutputPath, setSelectedOutputPath] = useState<string | null>(null);
   const [previewIndex, setPreviewIndex] = useState(0);
   const [previewZoom, setPreviewZoom] = useState(1);
-  const [compareMode, setCompareMode] = useState(false);
-  const [leftZoom, setLeftZoom] = useState(1);
-  const [rightZoom, setRightZoom] = useState(1);
   const [downloadProgress, setDownloadProgress] = useState<{ current: number; total: number; active: boolean }>({ current: 0, total: 0, active: false });
   const [provider, setProvider] = useState('seedream');
   const [availableModels, setAvailableModels] = useState<Array<{ id: string; capabilities: any }>>([]);
@@ -217,8 +214,6 @@ export const AIBatch: React.FC = () => {
   const [referenceDragOver, setReferenceDragOver] = useState(false);
   // Preview modal: full-res base64 data URLs (loaded on demand)
   const [previewDataUrl, setPreviewDataUrl] = useState<string | null>(null);
-  const [compareSourceUrl, setCompareSourceUrl] = useState<string | null>(null);
-  const [compareOutputUrl, setCompareOutputUrl] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const refInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -227,6 +222,13 @@ export const AIBatch: React.FC = () => {
   const nextId = useRef(0);
   const cancelRef = useRef(false);
   const toastTimer = useRef<ReturnType<typeof setTimeout>>();
+  const previewIndexRef = useRef(previewIndex);
+  previewIndexRef.current = previewIndex;
+  const retryingItems = useRef(new Set<number>());
+  const previewLoadSeq = useRef(0);
+  const saveInProgressRef = useRef(false);
+  const selectedPreviewRef = useRef(selectedPreview);
+  selectedPreviewRef.current = selectedPreview;
 
   function getEffectiveWidth(): number {
     return downloadWidth === 'custom'
@@ -497,8 +499,13 @@ export const AIBatch: React.FC = () => {
 
   const retryItem = async (id: number) => {
     if (processing) return;
+    if (retryingItems.current.has(id)) return;
+
     const item = queue.find(i => i.id === id);
     if (!item) return;
+
+    retryingItems.current.add(id);
+    updateProgress({ completed: 0, total: 1, current: '正在重试...', running: true, done: false });
 
     // Reset item to processing immediately
     setQueue(prev => prev.map(i =>
@@ -506,14 +513,6 @@ export const AIBatch: React.FC = () => {
         results: undefined, outputPath: undefined, outputPaths: undefined,
         thumbUrl: undefined, thumbUrls: undefined, resultHoverUrls: undefined } : i
     ));
-    setProcessing(true);
-    updateProgress({
-      completed: 0,
-      total: 1,
-      current: item.name,
-      running: true,
-      done: false,
-    });
 
     try {
       const result = await (window as any).go.main.App.RunAIImageBatch(
@@ -524,15 +523,7 @@ export const AIBatch: React.FC = () => {
         setQueue(prev => prev.map(i =>
           i.id === id ? { ...i, status: 'error' as const, error: result?.error || '处理失败' } : i
         ));
-        updateProgress({
-          completed: 0,
-          total: 1,
-          current: '',
-          running: false,
-          done: true,
-          error: result?.error || '处理失败',
-        });
-        setProcessing(false);
+        updateProgress({ completed: 0, total: 1, current: '', running: false, done: true, error: result?.error || '处理失败' });
         return;
       }
 
@@ -571,31 +562,29 @@ export const AIBatch: React.FC = () => {
           ));
         }
       }
-      updateProgress({
-        completed: 1,
-        total: 1,
-        current: '',
-        running: false,
-        done: true,
-      });
+
+      if (!r.success) {
+        updateProgress({ completed: 0, total: 1, current: '', running: false, done: true, error: r.error || '处理失败' });
+      } else {
+        updateProgress({ completed: 1, total: 1, current: '', running: false, done: true });
+      }
     } catch (err: any) {
       setQueue(prev => prev.map(i =>
         i.id === id ? { ...i, status: 'error' as const, error: err.message } : i
       ));
-      updateProgress({
-        completed: 0,
-        total: 1,
-        current: '',
-        running: false,
-        done: true,
-        error: err.message,
-      });
+      updateProgress({ completed: 0, total: 1, current: '', running: false, done: true, error: err.message });
+    } finally {
+      retryingItems.current.delete(id);
     }
-    setProcessing(false);
   };
 
   const removeItem = (id: number) => {
     setQueue(prev => prev.filter(i => i.id !== id));
+  };
+
+  const clearQueue = () => {
+    setQueue([]);
+    nextId.current = 0;
   };
 
   // ── Reference Images ──
@@ -667,7 +656,7 @@ export const AIBatch: React.FC = () => {
       showToast('请添加图片和提示词', 'warning');
       return;
     }
-    if (processing) return; // re-entry guard
+    if (processing || retryingItems.current.size > 0) return;
 
     setProcessing(true);
     updateProgress({
@@ -824,7 +813,7 @@ export const AIBatch: React.FC = () => {
   };
 
   const retryAll = async () => {
-    if (processing) return;
+    if (processing || retryingItems.current.size > 0) return;
     const toRetry = queue.filter(i => i.status === 'error' || i.status === 'completed');
     if (toRetry.length === 0) { showToast('没有需要重试的图片', 'warning'); return; }
 
@@ -958,48 +947,34 @@ export const AIBatch: React.FC = () => {
 
   // ── Preview ──
   const openPreview = async (item: ImageItem, outputPath?: string) => {
+    const seq = ++previewLoadSeq.current;
     setSelectedPreview(item);
-    setSelectedOutputPath(outputPath || null);
-    setPreviewIndex(0);
     setPreviewZoom(1);
-    setCompareMode(Boolean(outputPath));
-    setLeftZoom(1);
-    setRightZoom(1);
-    setPreviewDataUrl(null);
-    setCompareSourceUrl(null);
-    setCompareOutputUrl(null);
     setPreviewLoading(true);
 
     if (outputPath) {
-      await loadCompareImages(item, outputPath);
-      // Also load source image for single-mode fallback
+      const paths = item.outputPaths || [];
+      const idx = paths.indexOf(outputPath);
+      setPreviewIndex(idx >= 0 ? idx : 0);
+      setSelectedOutputPath(outputPath);
+      setPreviewDataUrl(null);
       try {
-        const dataUrl = await (window as any).go.main.App.ReadImageAsBase64(item.path);
+        const dataUrl = await (window as any).go.main.App.ReadImageAsBase64(outputPath);
+        if (seq !== previewLoadSeq.current) return;
         if (dataUrl) setPreviewDataUrl(dataUrl);
       } catch { /* no-op */ }
     } else {
+      setSelectedOutputPath(null);
+      setPreviewIndex(0);
+      setPreviewDataUrl(null);
       try {
         const dataUrl = await (window as any).go.main.App.ReadImageAsBase64(item.path);
+        if (seq !== previewLoadSeq.current) return;
         if (dataUrl) setPreviewDataUrl(dataUrl);
       } catch { /* no-op */ }
     }
+    if (seq !== previewLoadSeq.current) return;
     setPreviewLoading(false);
-  };
-
-  // Load compare mode images on demand
-  const loadCompareImages = async (item: ImageItem, outputPath?: string) => {
-    const targetOutputPath = outputPath || selectedOutputPath || item.outputPath;
-    if (!targetOutputPath) return;
-    setCompareSourceUrl(null);
-    setCompareOutputUrl(null);
-    try {
-      const [srcUrl, outUrl] = await Promise.all([
-        (window as any).go.main.App.ReadImageAsBase64(item.path),
-        (window as any).go.main.App.ReadImageAsBase64(targetOutputPath),
-      ]);
-      if (srcUrl) setCompareSourceUrl(srcUrl);
-      if (outUrl) setCompareOutputUrl(outUrl);
-    } catch { /* no-op */ }
   };
 
   const closePreview = () => {
@@ -1008,18 +983,45 @@ export const AIBatch: React.FC = () => {
     setPreviewZoom(1);
     setSelectedOutputPath(null);
     setPreviewDataUrl(null);
-    setCompareSourceUrl(null);
-    setCompareOutputUrl(null);
   };
 
-  // Load source image for single-mode preview fallback
-  const loadPreviewSource = async () => {
+  // Navigate to specific result image in preview
+  const navigateToResult = async (targetIndex: number) => {
     if (!selectedPreview) return;
+    const paths = selectedPreview.outputPaths;
+    if (!paths || paths.length === 0) return;
+    const idx = Math.max(0, Math.min(targetIndex, paths.length - 1));
+    const seq = ++previewLoadSeq.current;
+    setPreviewIndex(idx);
+    setSelectedOutputPath(paths[idx]);
+    setPreviewDataUrl(null);
+    setPreviewLoading(true);
     try {
-      const dataUrl = await (window as any).go.main.App.ReadImageAsBase64(selectedPreview.path);
+      const dataUrl = await (window as any).go.main.App.ReadImageAsBase64(paths[idx]);
+      if (seq !== previewLoadSeq.current) return;
       if (dataUrl) setPreviewDataUrl(dataUrl);
     } catch { /* no-op */ }
+    if (seq !== previewLoadSeq.current) return;
+    setPreviewLoading(false);
   };
+
+  // Keyboard navigation
+  useEffect(() => {
+    if (!selectedPreview) return;
+    const onKey = (e: KeyboardEvent) => {
+      const preview = selectedPreviewRef.current;
+      if (!preview) return;
+      if (e.key === 'Escape') { closePreview(); return; }
+      if (e.key === 'ArrowLeft' && preview.outputPaths && preview.outputPaths.length > 1) {
+        navigateToResult(previewIndexRef.current - 1);
+      }
+      if (e.key === 'ArrowRight' && preview.outputPaths && preview.outputPaths.length > 1) {
+        navigateToResult(previewIndexRef.current + 1);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [selectedPreview]);
 
   // ── Styles ──
   // Inline styles kept only where CSS classes can't express the layout
@@ -1060,79 +1062,118 @@ export const AIBatch: React.FC = () => {
         </div>
       )}
 
-      {/* Preview Modal */}
+      {/* Preview Modal — fullscreen overlay */}
       {selectedPreview && (() => {
-        const hasOutput = selectedPreview.status === 'completed' && (selectedOutputPath || selectedPreview.outputPath);
-        const outputName = selectedOutputPath ? fileNameFromPath(selectedOutputPath) : selectedPreview.name;
+        const outputPaths = selectedPreview.outputPaths;
+        const resultCount = outputPaths && outputPaths.length > 1 ? outputPaths.length : 0;
+        const viewingResult = selectedOutputPath && selectedPreview.status === 'completed';
+        const displayName = viewingResult
+          ? `结果 ${previewIndex + 1}${resultCount ? ` / ${resultCount}` : ''}`
+          : selectedPreview.name;
         return (
-        <div className="modal-overlay" style={{ background: 'rgba(0,0,0,0.85)' }} onClick={closePreview}>
-          {/* Controls */}
-          <div style={{ position: 'absolute', top: 16, right: 16, display: 'flex', gap: 8, zIndex: 1 }} onClick={e => e.stopPropagation()}>
-            {hasOutput && (
-              <button onClick={() => {
-                const next = !compareMode;
-                setCompareMode(next);
-                if (next && !compareSourceUrl) {
-                  loadCompareImages(selectedPreview);
-                } else if (!next && !previewDataUrl && selectedPreview) {
-                  loadPreviewSource();
-                }
-              }} className="btn btn-sm" style={{ background: compareMode ? 'var(--color-accent)' : 'var(--color-bg-elevated)' }}>
-                {compareMode ? '单图' : '对比'}
-              </button>
-            )}
-            <button onClick={closePreview} className="btn-icon" style={{ fontSize: 18 }}>×</button>
-          </div>
-          <div className="flex items-center gap-8" style={{ position: 'absolute', bottom: 40 }} onClick={e => e.stopPropagation()}>
-            <span className="text-sm text-secondary">
-              {compareMode && hasOutput ? '前后对比' : hasOutput ? 'AI 结果' : '源图'} · {outputName}
-            </span>
-            {!compareMode && (
-              <>
-                <button onClick={() => setPreviewZoom(z => Math.min(3, z + 0.25))} className="btn btn-sm btn-ghost">+放大</button>
-                <button onClick={() => setPreviewZoom(z => Math.max(0.5, z - 0.25))} className="btn btn-sm btn-ghost">-缩小</button>
-                <button onClick={() => setPreviewZoom(1)} className="btn btn-sm btn-ghost">重置</button>
-                <span className="text-xs text-muted">{Math.round(previewZoom * 100)}%</span>
-              </>
-            )}
-          </div>
-          {compareMode && hasOutput ? (
-            <div className="compare-view" onClick={e => e.stopPropagation()}>
-              <div className="compare-pane">
-                <p className="text-sm text-muted mb-4">原图</p>
-                <div className="compare-image-frame">
-                  {compareSourceUrl ? (
-                    <img src={compareSourceUrl} alt="original" />
-                  ) : (
-                    <div style={{ padding: 40, color: 'var(--color-text-muted)' }}>加载中...</div>
-                  )}
-                </div>
-              </div>
-              <div className="compare-pane">
-                <p className="text-sm text-muted mb-4">AI 结果</p>
-                <div className="compare-image-frame">
-                  {compareOutputUrl ? (
-                    <img src={compareOutputUrl} alt="ai result" />
-                  ) : (
-                    <div style={{ padding: 40, color: 'var(--color-text-muted)' }}>加载中...</div>
-                  )}
-                </div>
-              </div>
-            </div>
-          ) : (
-            <div style={{ maxWidth: '90vw', maxHeight: '80vh', overflow: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={e => e.stopPropagation()}>
-              {previewLoading ? (
-                <div style={{ padding: 40, color: 'var(--color-text-muted)', fontSize: 16 }}>加载中...</div>
-              ) : previewDataUrl ? (
-                <img src={previewDataUrl} style={previewZoom === 1
-                  ? { maxWidth: '100%', maxHeight: '80vh', objectFit: 'contain', display: 'block' }
-                  : { width: `${previewZoom * 100}%`, maxWidth: 'none', display: 'block' }
-                } alt="preview" />
-              ) : (
-                <div style={{ padding: 40, color: 'var(--color-text-muted)', fontSize: 14 }}>无法加载图片</div>
-              )}
-            </div>
+        <div
+          className="modal-overlay"
+          style={{
+            position: 'fixed', inset: 0, zIndex: 9999,
+            background: 'rgba(10, 12, 16, 0.92)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}
+          onClick={closePreview}
+        >
+          {/* Close button */}
+          <button
+            onClick={closePreview}
+            style={{
+              position: 'absolute', top: 16, right: 16, zIndex: 2,
+              width: 40, height: 40, borderRadius: '50%',
+              background: 'rgba(255,255,255,0.1)', border: 'none',
+              color: '#fff', fontSize: 20, cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              transition: 'background 0.15s',
+            }}
+            onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.2)')}
+            onMouseLeave={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.1)')}
+          >✕</button>
+
+          {/* Left nav arrow */}
+          {resultCount > 1 && previewIndex > 0 && (
+            <button
+              onClick={e => { e.stopPropagation(); navigateToResult(previewIndex - 1); }}
+              style={{
+                position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)', zIndex: 2,
+                width: 44, height: 44, borderRadius: '50%',
+                background: 'rgba(255,255,255,0.08)', border: 'none',
+                color: '#fff', fontSize: 22, cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}
+            >‹</button>
           )}
+
+          {/* Right nav arrow */}
+          {resultCount > 1 && previewIndex < resultCount - 1 && (
+            <button
+              onClick={e => { e.stopPropagation(); navigateToResult(previewIndex + 1); }}
+              style={{
+                position: 'absolute', right: 16, top: '50%', transform: 'translateY(-50%)', zIndex: 2,
+                width: 44, height: 44, borderRadius: '50%',
+                background: 'rgba(255,255,255,0.08)', border: 'none',
+                color: '#fff', fontSize: 22, cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}
+            >›</button>
+          )}
+
+          {/* Image area */}
+          <div
+            style={{
+              width: '100%', height: '100%', padding: '48px 64px 64px',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              boxSizing: 'border-box',
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            {previewLoading ? (
+              <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 16, letterSpacing: 1 }}>加载中...</div>
+            ) : previewDataUrl ? (
+              <img
+                src={previewDataUrl}
+                alt="preview"
+                style={{
+                  maxWidth: '100%', maxHeight: '100%',
+                  width: previewZoom > 1 ? `${previewZoom * 100}%` : 'auto',
+                  height: previewZoom > 1 ? 'auto' : 'auto',
+                  objectFit: 'contain',
+                  display: 'block',
+                  borderRadius: 4,
+                  boxShadow: '0 4px 30px rgba(0,0,0,0.5)',
+                }}
+              />
+            ) : (
+              <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 14 }}>无法加载图片</div>
+            )}
+          </div>
+
+          {/* Bottom bar */}
+          <div
+            style={{
+              position: 'absolute', bottom: 0, left: 0, right: 0,
+              height: 48, background: 'rgba(0,0,0,0.6)',
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              padding: '0 24px', zIndex: 2,
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            <span style={{ color: 'rgba(255,255,255,0.7)', fontSize: 13 }}>{displayName}</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <button onClick={() => setPreviewZoom(z => Math.min(3, z + 0.25))}
+                style={{ background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.6)', fontSize: 16, cursor: 'pointer', padding: '2px 6px' }}>+</button>
+              <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: 12, minWidth: 36, textAlign: 'center' }}>{Math.round(previewZoom * 100)}%</span>
+              <button onClick={() => setPreviewZoom(z => Math.max(0.5, z - 0.25))}
+                style={{ background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.6)', fontSize: 16, cursor: 'pointer', padding: '2px 6px' }}>−</button>
+              <button onClick={() => setPreviewZoom(1)}
+                style={{ background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.4)', fontSize: 11, cursor: 'pointer', padding: '2px 6px' }}>重置</button>
+            </div>
+          </div>
         </div>
         );
       })()}
@@ -1469,8 +1510,8 @@ export const AIBatch: React.FC = () => {
                 取消处理
               </button>
             ) : (
-              <button onClick={handleRun} disabled={queue.length === 0 || !prompt || processing}
-                className="btn btn-primary" style={{ fontWeight: 600, padding: '8px 24px', opacity: (queue.length === 0 || !prompt || processing) ? 0.4 : 1 }}>
+              <button onClick={handleRun} disabled={queue.length === 0 || !prompt || processing || retryingItems.current.size > 0}
+                className="btn btn-primary" style={{ fontWeight: 600, padding: '8px 24px', opacity: (queue.length === 0 || !prompt || processing || retryingItems.current.size > 0) ? 0.4 : 1 }}>
                 开始处理 {pendingCount > 0 ? `(${pendingCount}张)` : ''}
               </button>
             )}
@@ -1510,68 +1551,83 @@ export const AIBatch: React.FC = () => {
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 {completedCount > 0 && (
                   <button
+                    disabled={downloadProgress.active}
                     onClick={async () => {
+                      if (saveInProgressRef.current) return;
                       const completed = queue.filter(i => i.status === 'completed');
                       if (completed.length === 0) return;
 
-                      if (aiOutputDir) {
-                        const allPaths = completed.flatMap(i =>
-                          i.outputPaths?.length ? i.outputPaths : i.outputPath ? [i.outputPath] : []);
-                        if (!allPaths.length) return;
-                        setDownloadProgress({ current: 0, total: allPaths.length, active: true });
-                        try {
+                      const totalBulkPaths = completed.reduce((s, i) => s + (i.outputPaths?.length || (i.outputPath ? 1 : 0)), 0);
+                      saveInProgressRef.current = true;
+                      setDownloadProgress({ current: 0, total: totalBulkPaths, active: true });
+                      try {
+                        if (aiOutputDir) {
+                          const allPaths = completed.flatMap(i =>
+                            i.outputPaths?.length ? i.outputPaths : i.outputPath ? [i.outputPath] : []);
+                          if (!allPaths.length) return;
                           const count = await (window as any).go.main.App.SaveFilesToDir(allPaths, aiOutputDir, getEffectiveWidth());
                           showToast(`${count}/${allPaths.length} 已保存到 ${aiOutputDir}`, 'success');
-                        } catch (err: any) {
-                          showToast(`保存失败: ${err.message}`, 'error');
-                        }
-                        setDownloadProgress(p => ({ ...p, active: false }));
-                      } else {
-                        const byDir = new Map<string, string[]>();
-                        for (const i of completed) {
-                          const dir = i.path.replace(/[^\\/]+$/, '') || '';
-                          if (!dir) continue;
-                          const paths = i.outputPaths?.length ? i.outputPaths : i.outputPath ? [i.outputPath] : [];
-                          if (!paths.length) continue;
-                          const existing = byDir.get(dir);
-                          if (existing) existing.push(...paths); else byDir.set(dir, [...paths]);
-                        }
-                        if (byDir.size === 0) return;
-                        const total = [...byDir.values()].reduce((s, p) => s + p.length, 0);
-                        let saved = 0, failed = 0;
-                        setDownloadProgress({ current: 0, total, active: true });
-                        for (const [dir, paths] of byDir) {
-                          try {
-                            const count = await (window as any).go.main.App.SaveFilesToDir(paths, dir, getEffectiveWidth());
-                            saved += count;
-                            setDownloadProgress(p => ({ ...p, current: saved }));
-                          } catch {
-                            failed += paths.length;
-                            setDownloadProgress(p => ({ ...p, current: saved }));
+                        } else {
+                          const byDir = new Map<string, string[]>();
+                          for (const i of completed) {
+                            const dir = i.path.replace(/[^\\/]+$/, '') || '';
+                            if (!dir) continue;
+                            const paths = i.outputPaths?.length ? i.outputPaths : i.outputPath ? [i.outputPath] : [];
+                            if (!paths.length) continue;
+                            const existing = byDir.get(dir);
+                            if (existing) existing.push(...paths); else byDir.set(dir, [...paths]);
+                          }
+                          if (byDir.size === 0) return;
+                          const total = [...byDir.values()].reduce((s, p) => s + p.length, 0);
+                          let saved = 0, failed = 0;
+                          setDownloadProgress({ current: 0, total, active: true });
+                          for (const [dir, paths] of byDir) {
+                            try {
+                              const count = await (window as any).go.main.App.SaveFilesToDir(paths, dir, getEffectiveWidth());
+                              saved += count;
+                              setDownloadProgress(p => ({ ...p, current: saved }));
+                            } catch {
+                              failed += paths.length;
+                              setDownloadProgress(p => ({ ...p, current: saved }));
+                            }
+                          }
+                          if (failed > 0) {
+                            showToast(`${saved}/${total} 已保存到原图目录，${failed} 张失败`, 'warning');
+                          } else {
+                            showToast(`${saved}/${total} 已保存到原图目录`, 'success');
                           }
                         }
-                        setDownloadProgress(p => ({ ...p, active: false }));
-                        if (failed > 0) {
-                          showToast(`${saved}/${total} 已保存到原图目录，${failed} 张失败`, 'warning');
-                        } else {
-                          showToast(`${saved}/${total} 已保存到原图目录`, 'success');
-                        }
+                      } catch (err: any) {
+                        showToast(`保存失败: ${err.message}`, 'error');
+                      } finally {
+                        saveInProgressRef.current = false;
+                        setDownloadProgress({ current: 0, total: 0, active: false });
                       }
                     }}
                     className="btn btn-sm"
                     style={{ border: '1px solid var(--color-accent)', color: 'var(--color-accent)', background: 'transparent', fontSize: 11, padding: '2px 10px' }}
                   >
-                    全部保存
+                    {downloadProgress.active ? `保存中 ${downloadProgress.current}/${downloadProgress.total}` : '全部保存'}
                   </button>
                 )}
                 {queue.filter(i => i.status === 'error' || i.status === 'completed').length > 0 && (
                   <button
                     onClick={retryAll}
-                    disabled={processing}
+                    disabled={processing || retryingItems.current.size > 0}
                     className="btn btn-sm"
                     style={{ border: '1px solid var(--color-warning)', color: 'var(--color-warning)', background: 'transparent', fontSize: 11, padding: '2px 10px' }}
                   >
                     全部重试
+                  </button>
+                )}
+                {queue.length > 0 && (
+                  <button
+                    onClick={clearQueue}
+                    disabled={processing || retryingItems.current.size > 0 || saveInProgressRef.current}
+                    className="btn btn-sm"
+                    style={{ border: '1px solid var(--color-danger)', color: 'var(--color-danger)', background: 'transparent', fontSize: 11, padding: '2px 10px' }}
+                  >
+                    清空
                   </button>
                 )}
                 <span>{completedCount}/{queue.length} 完成</span>
@@ -1599,8 +1655,12 @@ export const AIBatch: React.FC = () => {
                 </div>
               ) : (
                 queue.map(item => (
-                  <div key={item.id} className="queue-item">
+                    <div key={item.id} className="queue-item">
                     <div className="queue-thumb"
+                      style={selectedPreview?.id === item.id ? {
+                        boxShadow: '0 0 0 2px rgba(79, 158, 255, 0.8), 0 0 12px rgba(79, 158, 255, 0.4)',
+                        borderRadius: 6,
+                      } : undefined}
                       onMouseMove={(e) => {
                         // Use higher-res (640px) thumbnail for hover preview
                         const hoverSrc = item.hoverThumbUrl || item.sourceThumbUrl || null;
@@ -1638,6 +1698,9 @@ export const AIBatch: React.FC = () => {
                           <button
                             key={outPath}
                             className="queue-result-thumb"
+                            style={selectedPreview?.id === item.id && selectedOutputPath === outPath ? {
+                              boxShadow: '0 0 0 2px rgba(79, 158, 255, 0.8), 0 0 12px rgba(79, 158, 255, 0.4)',
+                            } : undefined}
                             onClick={() => openPreview(item, outPath)}
                             title={fileNameFromPath(outPath)}
                             onMouseMove={(e) => {
@@ -1685,25 +1748,33 @@ export const AIBatch: React.FC = () => {
                     {/* Actions */}
                     <div className="flex gap-2 shrink-0">
                       {item.status === 'completed' && (item.outputPaths?.length || item.outputPath) && (
-                        <button onClick={async () => {
-                          const outputPaths = item.outputPaths && item.outputPaths.length > 0 ? item.outputPaths : item.outputPath ? [item.outputPath] : [];
-                          if (outputPaths.length === 0) return;
-                          const destDir = aiOutputDir || item.path?.replace(/[^\\/]+$/, '') || '';
-                          if (!destDir) return;
-                          try {
-                            const count = await (window as any).go.main.App.SaveFilesToDir(outputPaths, destDir, getEffectiveWidth());
-                            showToast(`已保存 ${count}/${outputPaths.length} 张到 ${destDir}`, 'success');
-                          } catch (err: any) {
-                            showToast(`保存失败: ${err.message}`, 'error');
-                          }
-                        }} className="btn btn-sm" title="保存到输出目录">💾</button>
+                        <button
+                          disabled={downloadProgress.active}
+                          onClick={async () => {
+                            if (saveInProgressRef.current) return;
+                            const outputPaths = item.outputPaths && item.outputPaths.length > 0 ? item.outputPaths : item.outputPath ? [item.outputPath] : [];
+                            if (outputPaths.length === 0) return;
+                            const destDir = aiOutputDir || item.path?.replace(/[^\\/]+$/, '') || '';
+                            if (!destDir) return;
+                            saveInProgressRef.current = true;
+                            setDownloadProgress({ current: 0, total: outputPaths.length, active: true });
+                            try {
+                              const count = await (window as any).go.main.App.SaveFilesToDir(outputPaths, destDir, getEffectiveWidth());
+                              showToast(`已保存 ${count}/${outputPaths.length} 张到 ${destDir}`, 'success');
+                            } catch (err: any) {
+                              showToast(`保存失败: ${err.message}`, 'error');
+                            } finally {
+                              saveInProgressRef.current = false;
+                              setDownloadProgress({ current: 0, total: 0, active: false });
+                            }
+                          }} className="btn btn-sm" title="保存到输出目录">💾</button>
                       )}
                       {(item.status === 'error' || item.status === 'completed') && (
                         <button
                           onClick={() => retryItem(item.id)}
+                          disabled={retryingItems.current.has(item.id)}
                           className="btn btn-sm btn-ghost"
-                          style={{ border: '1px solid var(--color-warning)', color: 'var(--color-warning)' }}
-                          disabled={processing}
+                          style={{ border: '1px solid var(--color-warning)', color: 'var(--color-warning)', opacity: retryingItems.current.has(item.id) ? 0.4 : 1 }}
                         >
                           重试
                         </button>
