@@ -77,6 +77,19 @@ function fileNameFromPath(path: string): string {
   return path.split('\\').pop() || path.split('/').pop() || path;
 }
 
+function outputPathsForItem(item: ImageItem | null | undefined): string[] {
+  if (!item) return [];
+  if (Array.isArray(item.outputPaths) && item.outputPaths.length > 0) {
+    return item.outputPaths.filter(Boolean);
+  }
+  return item.outputPath ? [item.outputPath] : [];
+}
+
+function clampOutputIndex(index: number, length: number): number {
+  if (length <= 0) return 0;
+  return Math.max(0, Math.min(index, length - 1));
+}
+
 function normalizeDroppedPath(path: string): string {
   let normalized = path.trim();
   if (normalized.startsWith('file:///')) {
@@ -241,6 +254,7 @@ export const AIBatch: React.FC = () => {
   const cancelRef = useRef(false);
   const activeBatchIdRef = useRef<string | null>(null);
   const queueRef = useRef<ImageItem[]>([]);
+  const previewLoadTokenRef = useRef(0);
   const toastTimer = useRef<ReturnType<typeof setTimeout>>();
 
   function getEffectiveWidth(): number {
@@ -1026,12 +1040,14 @@ export const AIBatch: React.FC = () => {
   };
 
   // ── Preview ──
-  const openPreview = async (item: ImageItem, outputPath?: string) => {
-    setSelectedPreview(item);
-    setSelectedOutputPath(outputPath || null);
-    setPreviewIndex(0);
+  const loadPreviewImages = useCallback(async (item: ImageItem, outputIndex: number, nextCompareMode: boolean) => {
+    const loadToken = ++previewLoadTokenRef.current;
+    const outputPaths = outputPathsForItem(item);
+    const safeOutputIndex = clampOutputIndex(outputIndex, outputPaths.length);
+    const outputPath = outputPaths[safeOutputIndex] || null;
+    setSelectedOutputPath(outputPath);
+    setPreviewIndex(safeOutputIndex);
     setPreviewZoom(1);
-    setCompareMode(Boolean(outputPath));
     setLeftZoom(1);
     setRightZoom(1);
     setPreviewDataUrl(null);
@@ -1039,46 +1055,99 @@ export const AIBatch: React.FC = () => {
     setCompareOutputUrl(null);
     setPreviewLoading(true);
 
-    if (outputPath) {
-      await loadCompareImages(item, outputPath);
-      // Also load source image for single-mode fallback
-      try {
-        const dataUrl = await (window as any).go.main.App.ReadImageAsBase64(item.path);
-        if (dataUrl) setPreviewDataUrl(dataUrl);
-      } catch { /* no-op */ }
-    } else {
-      try {
-        const dataUrl = await (window as any).go.main.App.ReadImageAsBase64(item.path);
-        if (dataUrl) setPreviewDataUrl(dataUrl);
-      } catch { /* no-op */ }
-    }
-    setPreviewLoading(false);
-  };
-
-  // Load compare mode images on demand
-  const loadCompareImages = async (item: ImageItem, outputPath?: string) => {
-    const targetOutputPath = outputPath || selectedOutputPath || item.outputPath;
-    if (!targetOutputPath) return;
-    setCompareSourceUrl(null);
-    setCompareOutputUrl(null);
     try {
-      const [srcUrl, outUrl] = await Promise.all([
-        (window as any).go.main.App.ReadImageAsBase64(item.path),
-        (window as any).go.main.App.ReadImageAsBase64(targetOutputPath),
-      ]);
-      if (srcUrl) setCompareSourceUrl(srcUrl);
-      if (outUrl) setCompareOutputUrl(outUrl);
+      const sourcePromise = (window as any).go.main.App.ReadImageAsBase64(item.path);
+      if (nextCompareMode && outputPath) {
+        const [srcUrl, outUrl] = await Promise.all([
+          sourcePromise,
+          (window as any).go.main.App.ReadImageAsBase64(outputPath),
+        ]);
+        if (previewLoadTokenRef.current !== loadToken) return;
+        if (srcUrl) {
+          setCompareSourceUrl(srcUrl);
+          setPreviewDataUrl(srcUrl);
+        }
+        if (outUrl) setCompareOutputUrl(outUrl);
+      } else {
+        const dataUrl = await sourcePromise;
+        if (previewLoadTokenRef.current !== loadToken) return;
+        if (dataUrl) setPreviewDataUrl(dataUrl);
+      }
     } catch { /* no-op */ }
+
+    if (previewLoadTokenRef.current === loadToken) {
+      setPreviewLoading(false);
+    }
+  }, []);
+
+  const openPreview = async (item: ImageItem, outputPath?: string) => {
+    const outputPaths = outputPathsForItem(item);
+    const outputIndex = outputPath ? Math.max(0, outputPaths.indexOf(outputPath)) : 0;
+    const nextCompareMode = Boolean(outputPath || outputPaths.length > 0);
+    setSelectedPreview(item);
+    setCompareMode(nextCompareMode);
+    await loadPreviewImages(item, outputIndex, nextCompareMode);
   };
 
-  const closePreview = () => {
+  const movePreviewOutput = useCallback((delta: number) => {
+    if (!selectedPreview) return;
+    const outputPaths = outputPathsForItem(selectedPreview);
+    if (outputPaths.length <= 1) return;
+    const nextIndex = (previewIndex + delta + outputPaths.length) % outputPaths.length;
+    void loadPreviewImages(selectedPreview, nextIndex, true);
+  }, [loadPreviewImages, previewIndex, selectedPreview]);
+
+  const movePreviewQueue = useCallback((delta: number) => {
+    if (!selectedPreview) return;
+    const navigable = queue.filter(item => outputPathsForItem(item).length > 0);
+    if (navigable.length <= 1) return;
+    const currentIndex = navigable.findIndex(item => item.id === selectedPreview.id);
+    if (currentIndex < 0) return;
+    const nextItem = navigable[(currentIndex + delta + navigable.length) % navigable.length];
+    setSelectedPreview(nextItem);
+    setCompareMode(true);
+    void loadPreviewImages(nextItem, 0, true);
+  }, [loadPreviewImages, queue, selectedPreview]);
+
+  const closePreview = useCallback(() => {
+    previewLoadTokenRef.current += 1;
     setSelectedPreview(null);
     setPreviewIndex(0);
     setPreviewZoom(1);
+    setCompareMode(false);
     setSelectedOutputPath(null);
     setPreviewDataUrl(null);
     setCompareSourceUrl(null);
     setCompareOutputUrl(null);
+  }, []);
+
+  useEffect(() => {
+    if (!selectedPreview) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        closePreview();
+      } else if (event.key === 'ArrowLeft') {
+        event.preventDefault();
+        movePreviewOutput(-1);
+      } else if (event.key === 'ArrowRight') {
+        event.preventDefault();
+        movePreviewOutput(1);
+      } else if (event.key === 'ArrowUp') {
+        event.preventDefault();
+        movePreviewQueue(-1);
+      } else if (event.key === 'ArrowDown') {
+        event.preventDefault();
+        movePreviewQueue(1);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [closePreview, movePreviewOutput, movePreviewQueue, selectedPreview]);
+
+  // Load compare mode images on demand
+  const loadCompareImages = async (item: ImageItem) => {
+    const outputPaths = outputPathsForItem(item);
+    await loadPreviewImages(item, previewIndex, outputPaths.length > 0);
   };
 
   // Load source image for single-mode preview fallback
@@ -1131,77 +1200,119 @@ export const AIBatch: React.FC = () => {
 
       {/* Preview Modal */}
       {selectedPreview && (() => {
-        const hasOutput = selectedPreview.status === 'completed' && (selectedOutputPath || selectedPreview.outputPath);
+        const outputPaths = outputPathsForItem(selectedPreview);
+        const hasOutput = selectedPreview.status === 'completed' && outputPaths.length > 0 && selectedOutputPath;
         const outputName = selectedOutputPath ? fileNameFromPath(selectedOutputPath) : selectedPreview.name;
+        const currentQueueIndex = queue.findIndex(item => item.id === selectedPreview.id);
+        const canSwitchOutputs = outputPaths.length > 1;
+        const canSwitchQueue = queue.filter(item => outputPathsForItem(item).length > 0).length > 1;
         return (
-        <div className="modal-overlay" style={{ background: 'rgba(0,0,0,0.85)' }} onClick={closePreview}>
-          {/* Controls */}
-          <div style={{ position: 'absolute', top: 16, right: 16, display: 'flex', gap: 8, zIndex: 1 }} onClick={e => e.stopPropagation()}>
+        <div className="modal-overlay compare-modal-overlay" onClick={closePreview}>
+          <div className="compare-modal-shell" onClick={e => e.stopPropagation()}>
+            <div className="compare-toolbar">
+              <div className="compare-title-block">
+                <span className="compare-kicker">
+                  {hasOutput ? '原图 / AI 对比' : '源图预览'}
+                  {currentQueueIndex >= 0 ? ` · 队列 ${currentQueueIndex + 1}/${queue.length}` : ''}
+                </span>
+                <strong className="compare-title">{selectedPreview.name}</strong>
+                <span className="compare-subtitle">
+                  {hasOutput ? `${outputName} · 结果 ${previewIndex + 1}/${outputPaths.length}` : outputName}
+                </span>
+              </div>
+              <div className="compare-toolbar-actions">
+                {hasOutput && (
+                  <button onClick={() => {
+                    const next = !compareMode;
+                    setCompareMode(next);
+                    if (next) {
+                      void loadCompareImages(selectedPreview);
+                    } else if (!previewDataUrl && selectedPreview) {
+                      void loadPreviewSource();
+                    }
+                  }} className="btn btn-sm" style={{ background: compareMode ? 'var(--color-accent)' : 'var(--color-bg-elevated)' }}>
+                    {compareMode ? '单图' : '对比'}
+                  </button>
+                )}
+                <button onClick={closePreview} className="btn-icon" style={{ fontSize: 18 }} title="关闭">×</button>
+              </div>
+            </div>
+
             {hasOutput && (
-              <button onClick={() => {
-                const next = !compareMode;
-                setCompareMode(next);
-                if (next && !compareSourceUrl) {
-                  loadCompareImages(selectedPreview);
-                } else if (!next && !previewDataUrl && selectedPreview) {
-                  loadPreviewSource();
-                }
-              }} className="btn btn-sm" style={{ background: compareMode ? 'var(--color-accent)' : 'var(--color-bg-elevated)' }}>
-                {compareMode ? '单图' : '对比'}
-              </button>
-            )}
-            <button onClick={closePreview} className="btn-icon" style={{ fontSize: 18 }}>×</button>
-          </div>
-          <div className="flex items-center gap-8" style={{ position: 'absolute', bottom: 40 }} onClick={e => e.stopPropagation()}>
-            <span className="text-sm text-secondary">
-              {compareMode && hasOutput ? '前后对比' : hasOutput ? 'AI 结果' : '源图'} · {outputName}
-            </span>
-            {!compareMode && (
               <>
-                <button onClick={() => setPreviewZoom(z => Math.min(3, z + 0.25))} className="btn btn-sm btn-ghost">+放大</button>
-                <button onClick={() => setPreviewZoom(z => Math.max(0.5, z - 0.25))} className="btn btn-sm btn-ghost">-缩小</button>
-                <button onClick={() => setPreviewZoom(1)} className="btn btn-sm btn-ghost">重置</button>
-                <span className="text-xs text-muted">{Math.round(previewZoom * 100)}%</span>
+                <button
+                  className="compare-nav compare-nav-left"
+                  onClick={() => movePreviewOutput(-1)}
+                  disabled={!canSwitchOutputs}
+                  title="上一张结果 (←)"
+                >
+                  ‹
+                </button>
+                <button
+                  className="compare-nav compare-nav-right"
+                  onClick={() => movePreviewOutput(1)}
+                  disabled={!canSwitchOutputs}
+                  title="下一张结果 (→)"
+                >
+                  ›
+                </button>
+                <button
+                  className="compare-nav compare-nav-up"
+                  onClick={() => movePreviewQueue(-1)}
+                  disabled={!canSwitchQueue}
+                  title="队列上一张 (↑)"
+                >
+                  ↑
+                </button>
+                <button
+                  className="compare-nav compare-nav-down"
+                  onClick={() => movePreviewQueue(1)}
+                  disabled={!canSwitchQueue}
+                  title="队列下一张 (↓)"
+                >
+                  ↓
+                </button>
               </>
             )}
-          </div>
+
           {compareMode && hasOutput ? (
-            <div className="compare-view" onClick={e => e.stopPropagation()}>
+            <div className="compare-view">
               <div className="compare-pane">
-                <p className="text-sm text-muted mb-4">原图</p>
+                <p className="compare-pane-label">原图</p>
                 <div className="compare-image-frame">
                   {compareSourceUrl ? (
                     <img src={compareSourceUrl} alt="original" />
                   ) : (
-                    <div style={{ padding: 40, color: 'var(--color-text-muted)' }}>加载中...</div>
+                    <div className="compare-loading">加载中...</div>
                   )}
                 </div>
               </div>
               <div className="compare-pane">
-                <p className="text-sm text-muted mb-4">AI 结果</p>
+                <p className="compare-pane-label">AI 结果</p>
                 <div className="compare-image-frame">
                   {compareOutputUrl ? (
                     <img src={compareOutputUrl} alt="ai result" />
                   ) : (
-                    <div style={{ padding: 40, color: 'var(--color-text-muted)' }}>加载中...</div>
+                    <div className="compare-loading">加载中...</div>
                   )}
                 </div>
               </div>
             </div>
           ) : (
-            <div style={{ maxWidth: '90vw', maxHeight: '80vh', overflow: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={e => e.stopPropagation()}>
+            <div className="single-preview-frame">
               {previewLoading ? (
-                <div style={{ padding: 40, color: 'var(--color-text-muted)', fontSize: 16 }}>加载中...</div>
+                <div className="compare-loading">加载中...</div>
               ) : previewDataUrl ? (
                 <img src={previewDataUrl} style={previewZoom === 1
                   ? { maxWidth: '100%', maxHeight: '80vh', objectFit: 'contain', display: 'block' }
                   : { width: `${previewZoom * 100}%`, maxWidth: 'none', display: 'block' }
                 } alt="preview" />
               ) : (
-                <div style={{ padding: 40, color: 'var(--color-text-muted)', fontSize: 14 }}>无法加载图片</div>
+                <div className="compare-loading">无法加载图片</div>
               )}
             </div>
           )}
+          </div>
         </div>
         );
       })()}
@@ -1735,7 +1846,13 @@ export const AIBatch: React.FC = () => {
                           </button>
                         ))}
                         {item.outputPaths.length > 4 && (
-                          <span className="queue-result-more">+{item.outputPaths.length - 4}</span>
+                          <button
+                            className="queue-result-more"
+                            onClick={() => openPreview(item, item.outputPaths?.[4])}
+                            title="查看更多 AI 结果"
+                          >
+                            +{item.outputPaths.length - 4}
+                          </button>
                         )}
                       </div>
                     )}
