@@ -21,6 +21,14 @@ interface ImageItem {
   hoverThumbUrl?: string;
 }
 
+interface BatchImageResult {
+  sourcePath?: string;
+  outputPath?: string;
+  outputPaths?: string[];
+  success?: boolean;
+  error?: string;
+}
+
 interface PromptPreset {
   name: string;
   text: string;
@@ -262,6 +270,72 @@ export const AIBatch: React.FC = () => {
       n: currentModelCaps.supportsN ? n : 1,
     };
   }
+
+  const outputPathsFromResult = useCallback((result: BatchImageResult): string[] => {
+    if (Array.isArray(result.outputPaths) && result.outputPaths.length > 0) {
+      return result.outputPaths;
+    }
+    return result.outputPath ? [result.outputPath] : [];
+  }, []);
+
+  const loadResultThumbnails = useCallback(async (sourcePath: string, outputPaths: string[]) => {
+    if (outputPaths.length === 0) return;
+
+    const thumbUrls = await Promise.all(outputPaths.map(async (outPath: string) => {
+      try {
+        const dataUrl = await (window as any).go.main.App.ReadImageThumbnail(outPath, 80);
+        return dataUrl && dataUrl.startsWith('data:') ? dataUrl : '';
+      } catch {
+        return '';
+      }
+    }));
+    const resultHoverUrls = await Promise.all(outputPaths.map(async (outPath: string) => {
+      try {
+        const dataUrl = await (window as any).go.main.App.ReadImageThumbnail(outPath, 640);
+        return dataUrl && dataUrl.startsWith('data:') ? dataUrl : '';
+      } catch {
+        return '';
+      }
+    }));
+
+    setQueue(prev => prev.map(i => {
+      if (i.path !== sourcePath) return i;
+      return { ...i, thumbUrl: thumbUrls[0], thumbUrls, resultHoverUrls };
+    }));
+  }, []);
+
+  const applyImageResultToQueue = useCallback((result: BatchImageResult, realtimeOnly: boolean) => {
+    if (!result?.sourcePath) return;
+
+    const outputPaths = outputPathsFromResult(result);
+    setQueue(prev => prev.map(i => {
+      if (i.path !== result.sourcePath) return i;
+      if (realtimeOnly && i.status !== 'processing') return i;
+      if (result.success && outputPaths.length > 0) {
+        return { ...i, status: 'completed' as const, outputPath: outputPaths[0], outputPaths };
+      }
+      return {
+        ...i,
+        status: 'error' as const,
+        error: result.success ? '未返回输出文件路径' : (result.error || '处理失败'),
+      };
+    }));
+  }, [outputPathsFromResult]);
+
+  useEffect(() => {
+    const off = EventsOn('batch-image-result', (result: BatchImageResult) => {
+      if (!result?.sourcePath) return;
+      const outputPaths = outputPathsFromResult(result);
+      applyImageResultToQueue(result, true);
+      if (result.success && outputPaths.length > 0) {
+        void loadResultThumbnails(result.sourcePath, outputPaths);
+      }
+    });
+
+    return () => {
+      off();
+    };
+  }, [applyImageResultToQueue, loadResultThumbnails, outputPathsFromResult]);
 
   // Clean up toast timer on unmount
   useEffect(() => {

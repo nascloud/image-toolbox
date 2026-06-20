@@ -30,6 +30,12 @@ func RunConcurrent(ctx context.Context, sources []string, fn JobFunc, maxConcurr
 
 // RunConcurrentPaths executes jobs concurrently and supports multiple output paths per source.
 func RunConcurrentPaths(ctx context.Context, sources []string, fn JobFuncPaths, maxConcurrent int, progressCh chan<- model.ProgressUpdate) []model.ImageResult {
+	return RunConcurrentPathsWithResultCallback(ctx, sources, fn, maxConcurrent, progressCh, nil)
+}
+
+// RunConcurrentPathsWithResultCallback executes jobs concurrently and reports each
+// image result as soon as that source has finished.
+func RunConcurrentPathsWithResultCallback(ctx context.Context, sources []string, fn JobFuncPaths, maxConcurrent int, progressCh chan<- model.ProgressUpdate, resultCh chan<- model.ImageResult) []model.ImageResult {
 	if maxConcurrent <= 0 {
 		maxConcurrent = 1
 	}
@@ -87,6 +93,9 @@ func RunConcurrentPaths(ctx context.Context, sources []string, fn JobFuncPaths, 
 					Current:   path,
 					Error:     r.Error,
 				}
+			}
+			if resultCh != nil {
+				resultCh <- r
 			}
 		}(i, src)
 	}

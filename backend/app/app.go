@@ -428,15 +428,22 @@ func (a *App) RunAIImageBatch(req model.AIBatchRequest) (model.BatchResult, erro
 
 	ctx := a.newBatchContext()
 	progressCh := make(chan model.ProgressUpdate, 100)
+	resultCh := make(chan model.ImageResult, 100)
 	go func() {
 		for update := range progressCh {
 			runtime.EventsEmit(a.ctx, "batch-progress", update)
 		}
 	}()
+	go func() {
+		for result := range resultCh {
+			runtime.EventsEmit(a.ctx, "batch-image-result", result)
+		}
+	}()
 
 	configPath := filepath.Join(getConfigDir(), "config.json")
-	result := batch.RunAIImageBatch(ctx, req, configPath, progressCh)
+	result := batch.RunAIImageBatchWithResultEvents(ctx, req, configPath, progressCh, resultCh)
 	close(progressCh)
+	close(resultCh)
 	return result, nil
 }
 

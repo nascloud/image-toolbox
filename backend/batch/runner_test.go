@@ -48,6 +48,32 @@ func TestRunConcurrentNormalizesInvalidConcurrency(t *testing.T) {
 	}
 }
 
+func TestRunConcurrentPathsReportsResultBeforeBatchReturns(t *testing.T) {
+	resultCh := make(chan model.ImageResult, 2)
+	returned := make(chan struct{})
+
+	go func() {
+		RunConcurrentPathsWithResultCallback(context.Background(), []string{"a", "b"}, func(srcPath string) ([]string, error) {
+			if srcPath == "b" {
+				time.Sleep(50 * time.Millisecond)
+			}
+			return []string{srcPath + ".out"}, nil
+		}, 1, nil, resultCh)
+		close(returned)
+	}()
+
+	select {
+	case result := <-resultCh:
+		if result.SourcePath != "a" || !result.Success {
+			t.Fatalf("expected first successful result for a, got %+v", result)
+		}
+	case <-returned:
+		t.Fatal("batch returned before emitting the first image result")
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for image result")
+	}
+}
+
 func TestNormalizeAIConcurrency(t *testing.T) {
 	tests := []struct {
 		name      string
