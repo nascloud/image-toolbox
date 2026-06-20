@@ -188,21 +188,6 @@ var seedreamModelDefs = []struct {
 	caps    model.ModelCapabilities
 }{
 	{
-		pattern: "5-0",
-		id:      "doubao-seedream-5-0-260128",
-		caps: model.ModelCapabilities{
-			SupportsImageInput:   true,
-			SupportsSequential:   true,
-			SupportsStream:       true,
-			SupportsSeed:         true,
-			SupportsOutputFormat: true,
-			SupportsWebSearch:    true,
-			SupportsWatermark:    true,
-			DefaultOutputFormat:  "jpeg",
-			AllowedSizes:         []string{"1K", "2K", "3K"},
-		},
-	},
-	{
 		pattern: "5-0-lite",
 		id:      "doubao-seedream-5-0-lite-260128",
 		caps: model.ModelCapabilities{
@@ -215,6 +200,21 @@ var seedreamModelDefs = []struct {
 			SupportsWatermark:    true,
 			DefaultOutputFormat:  "jpeg",
 			AllowedSizes:         []string{"2K", "3K"},
+		},
+	},
+	{
+		pattern: "5-0",
+		id:      "doubao-seedream-5-0-260128",
+		caps: model.ModelCapabilities{
+			SupportsImageInput:   true,
+			SupportsSequential:   true,
+			SupportsStream:       true,
+			SupportsSeed:         true,
+			SupportsOutputFormat: true,
+			SupportsWebSearch:    true,
+			SupportsWatermark:    true,
+			DefaultOutputFormat:  "jpeg",
+			AllowedSizes:         []string{"1K", "2K", "3K"},
 		},
 	},
 	{

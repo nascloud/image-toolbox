@@ -91,48 +91,72 @@ func (p *ChatGPT2APIProvider) generateEdits(ctx context.Context, req model.AIIma
 	w := multipart.NewWriter(&b)
 
 	// Text fields
-	w.WriteField("model", req.Model)
-	w.WriteField("prompt", req.Prompt)
+	if err := w.WriteField("model", req.Model); err != nil {
+		return nil, fmt.Errorf("write model field: %w", err)
+	}
+	if err := w.WriteField("prompt", req.Prompt); err != nil {
+		return nil, fmt.Errorf("write prompt field: %w", err)
+	}
 	nStr := strconv.Itoa(clampN(req.N))
-	w.WriteField("n", nStr)
-	w.WriteField("response_format", "b64_json")
+	if err := w.WriteField("n", nStr); err != nil {
+		return nil, fmt.Errorf("write n field: %w", err)
+	}
+	if err := w.WriteField("response_format", "b64_json"); err != nil {
+		return nil, fmt.Errorf("write response_format field: %w", err)
+	}
 
 	if size := resolveChatGPT2APISize(req.Quality, req.Size); size != "" {
-		w.WriteField("size", size)
+		if err := w.WriteField("size", size); err != nil {
+			return nil, fmt.Errorf("write size field: %w", err)
+		}
 	}
 
 	if req.Stream {
-		w.WriteField("stream", "true")
+		if err := w.WriteField("stream", "true"); err != nil {
+			return nil, fmt.Errorf("write stream field: %w", err)
+		}
 	}
 
 	// Main image — decode data URI and write as file
-	if req.Image != "" {
-		mimeType, rawData, err := decodeDataURI(req.Image)
-		if err == nil && len(rawData) > 0 {
-			ext := ".png"
-			if strings.Contains(mimeType, "jpeg") {
-				ext = ".jpg"
-			}
-			part, _ := w.CreateFormFile("image", "input"+ext)
-			part.Write(rawData)
-		}
+	if req.Image == "" {
+		return nil, fmt.Errorf("input image is required for edits")
+	}
+	mimeType, rawData, err := decodeDataURI(req.Image)
+	if err != nil {
+		return nil, fmt.Errorf("decode input image: %w", err)
+	}
+	if len(rawData) == 0 {
+		return nil, fmt.Errorf("decode input image: empty data")
+	}
+	part, err := w.CreateFormFile("image", "input"+extensionForMime(mimeType))
+	if err != nil {
+		return nil, fmt.Errorf("create input image field: %w", err)
+	}
+	if _, err := part.Write(rawData); err != nil {
+		return nil, fmt.Errorf("write input image: %w", err)
 	}
 
 	// Reference images — decode data URIs and write as file fields
-	for _, ref := range req.ReferenceImages {
-		mimeType, rawData, err := decodeDataURI(ref)
-		if err != nil || len(rawData) == 0 {
-			continue
+	for idx, ref := range req.ReferenceImages {
+		refMimeType, refData, err := decodeDataURI(ref)
+		if err != nil {
+			return nil, fmt.Errorf("decode reference image %d: %w", idx+1, err)
 		}
-		ext := ".png"
-		if strings.Contains(mimeType, "jpeg") {
-			ext = ".jpg"
+		if len(refData) == 0 {
+			return nil, fmt.Errorf("decode reference image %d: empty data", idx+1)
 		}
-		part, _ := w.CreateFormFile("image", "ref"+ext)
-		part.Write(rawData)
+		refPart, err := w.CreateFormFile("image", fmt.Sprintf("ref_%02d%s", idx+1, extensionForMime(refMimeType)))
+		if err != nil {
+			return nil, fmt.Errorf("create reference image %d field: %w", idx+1, err)
+		}
+		if _, err := refPart.Write(refData); err != nil {
+			return nil, fmt.Errorf("write reference image %d: %w", idx+1, err)
+		}
 	}
 
-	w.Close()
+	if err := w.Close(); err != nil {
+		return nil, fmt.Errorf("close multipart writer: %w", err)
+	}
 
 	httpReq, err := http.NewRequestWithContext(ctx, "POST", p.baseURL+"/v1/images/edits", &b)
 	if err != nil {
@@ -262,6 +286,9 @@ func (p *ChatGPT2APIProvider) fetchModels() ([]model.ModelInfo, error) {
 
 	var models []model.ModelInfo
 	for _, item := range result.Data {
+		if strings.TrimSpace(item.ID) == "" {
+			continue
+		}
 		models = append(models, model.ModelInfo{
 			ID:           item.ID,
 			Capabilities: chatgpt2apiCapabilities(item.ID),
@@ -365,6 +392,19 @@ func decodeDataURI(uri string) (string, []byte, error) {
 	}
 
 	return mimeType, raw, nil
+}
+
+func extensionForMime(mimeType string) string {
+	switch strings.ToLower(mimeType) {
+	case "image/jpeg", "image/jpg":
+		return ".jpg"
+	case "image/webp":
+		return ".webp"
+	case "image/gif":
+		return ".gif"
+	default:
+		return ".png"
+	}
 }
 
 // chatgpt2apiQualityTarget returns target total pixels for a given quality level.

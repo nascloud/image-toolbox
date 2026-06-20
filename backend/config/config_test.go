@@ -102,3 +102,26 @@ func TestProviderConfigRoundTrip(t *testing.T) {
 		t.Fatal("legacy top-level apiKey field should be omitted after new-format save")
 	}
 }
+
+func TestSaveProviderConfigPreservesExistingKey(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.json")
+
+	if err := SaveProviderConfig(cfgPath, "chatgpt2api", "sk-original", "http://localhost:3000"); err != nil {
+		t.Fatal(err)
+	}
+	if err := SaveProviderConfigWithKeyMode(cfgPath, "chatgpt2api", "", "http://127.0.0.1:3000", true); err != nil {
+		t.Fatal(err)
+	}
+
+	apiKey, baseURL, err := LoadProviderConfig(cfgPath, "chatgpt2api")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if apiKey != "sk-original" {
+		t.Fatalf("expected key to be preserved, got %q", apiKey)
+	}
+	if baseURL != "http://127.0.0.1:3000" {
+		t.Fatalf("expected updated baseURL, got %q", baseURL)
+	}
+}

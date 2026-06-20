@@ -12,8 +12,6 @@ export function GetActiveProvider():Promise<string>;
 
 export function GetAiOutputDir():Promise<string>;
 
-export function GetApiKey():Promise<string>;
-
 export function GetImageInfo(arg1:string):Promise<Record<string, any>>;
 
 export function GetPendingIntent():Promise<shell.LaunchIntent>;
@@ -48,7 +46,7 @@ export function SaveApiKey(arg1:string):Promise<void>;
 
 export function SaveFilesToDir(arg1:Array<string>,arg2:string,arg3:number):Promise<number>;
 
-export function SaveProviderConfig(arg1:string,arg2:string,arg3:string):Promise<void>;
+export function SaveProviderConfig(arg1:string,arg2:string,arg3:string,arg4:boolean):Promise<void>;
 
 export function ScanDirectory(arg1:string,arg2:boolean):Promise<Array<string>>;
 

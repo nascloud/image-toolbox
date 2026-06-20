@@ -18,10 +18,6 @@ export function GetAiOutputDir() {
   return window['go']['main']['App']['GetAiOutputDir']();
 }
 
-export function GetApiKey() {
-  return window['go']['main']['App']['GetApiKey']();
-}
-
 export function GetImageInfo(arg1) {
   return window['go']['main']['App']['GetImageInfo'](arg1);
 }
@@ -90,8 +86,8 @@ export function SaveFilesToDir(arg1, arg2, arg3) {
   return window['go']['main']['App']['SaveFilesToDir'](arg1, arg2, arg3);
 }
 
-export function SaveProviderConfig(arg1, arg2, arg3) {
-  return window['go']['main']['App']['SaveProviderConfig'](arg1, arg2, arg3);
+export function SaveProviderConfig(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['SaveProviderConfig'](arg1, arg2, arg3, arg4);
 }
 
 export function ScanDirectory(arg1, arg2) {

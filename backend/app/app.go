@@ -446,12 +446,6 @@ func (a *App) SaveApiKey(apiKey string) error {
 	return config.SaveApiKey(configPath, apiKey)
 }
 
-// GetApiKey retrieves the stored API key.
-func (a *App) GetApiKey() (string, error) {
-	configPath := filepath.Join(getConfigDir(), "config.json")
-	return config.LoadApiKey(configPath)
-}
-
 // SaveAiOutputDir persists the AI output directory.
 func (a *App) SaveAiOutputDir(dir string) error {
 	configPath := filepath.Join(getConfigDir(), "config.json")
@@ -556,9 +550,9 @@ func (a *App) GetProviderConfig(providerName string) (model.ProviderConfigRespon
 }
 
 // SaveProviderConfig persists API key and base URL for a provider.
-func (a *App) SaveProviderConfig(providerName, apiKey, baseURL string) error {
+func (a *App) SaveProviderConfig(providerName, apiKey, baseURL string, preserveExistingKey bool) error {
 	configPath := filepath.Join(getConfigDir(), "config.json")
-	return config.SaveProviderConfig(configPath, providerName, apiKey, baseURL)
+	return config.SaveProviderConfigWithKeyMode(configPath, providerName, apiKey, baseURL, preserveExistingKey)
 }
 
 // SetActiveProvider sets the default provider.

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -38,23 +39,24 @@ func ProcessSingleImageWithContext(ctx context.Context, provider Provider, srcPa
 // ProcessSingleImagesWithContext handles one image through the AI generation pipeline and saves every returned image.
 func ProcessSingleImagesWithContext(ctx context.Context, provider Provider, srcPath, outputDir string, opts model.AIBatchRequest, outputPath string) ([]string, error) {
 	caps := ProviderCapabilities(provider, opts.Model)
+	if !caps.SupportsImageInput {
+		return nil, fmt.Errorf("model %s does not support image input", opts.Model)
+	}
 
 	var imgData string
 	var refs []string
-	if caps.SupportsImageInput {
-		var err error
-		imgData, err = EncodeImageToBase64(srcPath)
-		if err != nil {
-			return nil, fmt.Errorf("encode input: %w", err)
-		}
+	var err error
+	imgData, err = EncodeImageToBase64(srcPath)
+	if err != nil {
+		return nil, fmt.Errorf("encode input: %w", err)
+	}
 
-		for _, refPath := range opts.ReferenceImages {
-			refData, err := EncodeImageToBase64(refPath)
-			if err != nil {
-				return nil, fmt.Errorf("encode reference %s: %w", refPath, err)
-			}
-			refs = append(refs, refData)
+	for _, refPath := range opts.ReferenceImages {
+		refData, err := EncodeImageToBase64(refPath)
+		if err != nil {
+			return nil, fmt.Errorf("encode reference %s: %w", refPath, err)
 		}
+		refs = append(refs, refData)
 	}
 
 	outExt := outputFileExtension(caps, opts.OutputFormat)
@@ -105,7 +107,7 @@ func ProcessSingleImagesWithContext(ctx context.Context, provider Provider, srcP
 			continue
 		}
 
-		outPath := indexedOutputPath(srcPath, outputDir, outputPath, outExt, idx)
+		outPath := withImageDataExtension(indexedOutputPath(srcPath, outputDir, outputPath, outExt, idx), imageData)
 		if err := os.MkdirAll(filepath.Dir(outPath), 0755); err != nil {
 			return nil, fmt.Errorf("create output dir: %w", err)
 		}
@@ -177,4 +179,29 @@ func outputFileExtension(caps model.ModelCapabilities, requestedFormat string) s
 		return ".png"
 	}
 	return ".jpg"
+}
+
+func withImageDataExtension(path string, imageData []byte) string {
+	ext := extensionForImageBytes(imageData)
+	if ext == "" || strings.EqualFold(filepath.Ext(path), ext) {
+		return path
+	}
+	base := strings.TrimSuffix(path, filepath.Ext(path))
+	return base + ext
+}
+
+func extensionForImageBytes(imageData []byte) string {
+	contentType := http.DetectContentType(imageData)
+	switch contentType {
+	case "image/jpeg":
+		return ".jpg"
+	case "image/png":
+		return ".png"
+	case "image/webp":
+		return ".webp"
+	case "image/gif":
+		return ".gif"
+	default:
+		return ""
+	}
 }

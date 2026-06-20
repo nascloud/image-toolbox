@@ -10,11 +10,11 @@ import (
 )
 
 type appConfig struct {
-	ActiveProvider string                    `json:"activeProvider"`
-	Providers      map[string]ProviderConfig `json:"providers"`
+	ActiveProvider string                       `json:"activeProvider"`
+	Providers      map[string]ProviderConfig    `json:"providers"`
 	ProviderModels map[string][]model.ModelInfo `json:"providerModels,omitempty"`
-	AiOutputDir    string                    `json:"aiOutputDir"`
-	ApiKey         string                    `json:"apiKey,omitempty"`
+	AiOutputDir    string                       `json:"aiOutputDir"`
+	ApiKey         string                       `json:"apiKey,omitempty"`
 }
 
 type ProviderConfig struct {
@@ -24,7 +24,7 @@ type ProviderConfig struct {
 
 const (
 	DefaultSeedreamBaseURL    = "https://ark.cn-beijing.volces.com/api/v3"
-	DefaultChatGPT2APIBaseURL = "https://image.wq727.cf:21118"
+	DefaultChatGPT2APIBaseURL = "http://localhost:3000"
 )
 
 func SaveApiKey(path, apiKey string) error {
@@ -37,12 +37,21 @@ func LoadApiKey(path string) (string, error) {
 }
 
 func SaveProviderConfig(path, name, apiKey, baseURL string) error {
+	return SaveProviderConfigWithKeyMode(path, name, apiKey, baseURL, false)
+}
+
+func SaveProviderConfigWithKeyMode(path, name, apiKey, baseURL string, preserveExistingKey bool) error {
 	cfg, err := loadConfig(path)
 	if err != nil {
 		cfg = &appConfig{Providers: make(map[string]ProviderConfig)}
 	}
 	if cfg.Providers == nil {
 		cfg.Providers = make(map[string]ProviderConfig)
+	}
+	if preserveExistingKey {
+		if existing, ok := cfg.Providers[name]; ok {
+			apiKey = existing.ApiKey
+		}
 	}
 	cfg.Providers[name] = ProviderConfig{ApiKey: apiKey, BaseURL: baseURL}
 	return saveConfig(path, cfg)
