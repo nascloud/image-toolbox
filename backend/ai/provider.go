@@ -20,6 +20,7 @@ type Provider interface {
 	Name() string
 	Generate(ctx context.Context, req model.AIImageRequest) (*model.AIImageResponse, error)
 	Models() []model.ModelInfo
+	ModelCapabilities(modelID string) model.ModelCapabilities
 }
 
 // NewProvider creates a provider by name, injecting API key and base URL.

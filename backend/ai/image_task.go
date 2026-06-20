@@ -166,12 +166,7 @@ func indexedOutputPath(srcPath, outputDir, firstOutputPath, outExt string, idx i
 }
 
 func ProviderCapabilities(provider Provider, modelID string) model.ModelCapabilities {
-	for _, m := range provider.Models() {
-		if m.ID == modelID {
-			return m.Capabilities
-		}
-	}
-	return model.ModelCapabilities{}
+	return provider.ModelCapabilities(modelID)
 }
 
 func outputFileExtension(caps model.ModelCapabilities, requestedFormat string) string {

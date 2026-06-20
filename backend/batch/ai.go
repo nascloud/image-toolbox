@@ -11,8 +11,17 @@ import (
 	"image-toolbox/backend/model"
 )
 
+const (
+	defaultAIConcurrency = 10
+	maxAIConcurrency     = 50
+)
+
 // RunAIImageBatch processes images through AI generation.
 func RunAIImageBatch(ctx context.Context, req model.AIBatchRequest, configPath string, progressCh chan<- model.ProgressUpdate) model.BatchResult {
+	if err := validateAIBatchRequest(req); err != nil {
+		return model.BatchResult{Error: err.Error()}
+	}
+
 	providerName := req.Provider
 	if providerName == "" {
 		var err error
@@ -51,6 +60,7 @@ func RunAIImageBatch(ctx context.Context, req model.AIBatchRequest, configPath s
 	} else if req.N > 4 {
 		req.N = 4
 	}
+	req.Stream = false
 
 	caps := ProviderCapabilities(provider, req.Model)
 	outExt := outputFileExtension(caps, req.OutputFormat)
@@ -64,22 +74,14 @@ func RunAIImageBatch(ctx context.Context, req model.AIBatchRequest, configPath s
 		return backendAI.ProcessSingleImagesWithContext(ctx, provider, srcPath, req.OutputDir, req, outputPaths[srcPath])
 	}
 
-	maxConcurrent := 2
-	if req.Concurrent > 0 {
-		maxConcurrent = req.Concurrent
-	}
+	maxConcurrent := normalizeAIConcurrency(req.Concurrent)
 	results := RunConcurrentPaths(ctx, req.SourcePaths, jobFn, maxConcurrent, progressCh)
 	return aggregateResults(results)
 }
 
 // ProviderCapabilities looks up capabilities for a model from any provider.
 func ProviderCapabilities(provider backendAI.Provider, modelID string) model.ModelCapabilities {
-	for _, m := range provider.Models() {
-		if m.ID == modelID {
-			return m.Capabilities
-		}
-	}
-	return model.ModelCapabilities{}
+	return provider.ModelCapabilities(modelID)
 }
 
 func outputFileExtension(caps model.ModelCapabilities, requestedFormat string) string {
@@ -92,4 +94,27 @@ func outputFileExtension(caps model.ModelCapabilities, requestedFormat string) s
 func trimImageExt(srcPath string) string {
 	base := filepath.Base(srcPath)
 	return strings.TrimSuffix(base, filepath.Ext(base))
+}
+
+func normalizeAIConcurrency(requested int) int {
+	if requested <= 0 {
+		return defaultAIConcurrency
+	}
+	if requested > maxAIConcurrency {
+		return maxAIConcurrency
+	}
+	return requested
+}
+
+func validateAIBatchRequest(req model.AIBatchRequest) error {
+	if len(req.SourcePaths) == 0 {
+		return fmt.Errorf("AI batch requires at least one source image")
+	}
+	if strings.TrimSpace(req.Prompt) == "" {
+		return fmt.Errorf("AI batch requires a prompt")
+	}
+	if strings.TrimSpace(req.OutputDir) == "" {
+		return fmt.Errorf("AI batch requires an output directory")
+	}
+	return nil
 }

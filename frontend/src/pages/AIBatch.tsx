@@ -177,7 +177,7 @@ export const AIBatch: React.FC = () => {
   const [maxImages, setMaxImages] = useState(4);
   const [optimizePromptMode, setOptimizePromptMode] = useState('standard');
   const [webSearch, setWebSearch] = useState(false);
-  const [concurrent, setConcurrent] = useState(20);
+  const [concurrent, setConcurrent] = useState(10);
   const [aiOutputDir, setAiOutputDir] = useState('');
   const [downloadWidth, setDownloadWidth] = useState('1440');
   const [customWidth, setCustomWidth] = useState('');
@@ -1321,7 +1321,7 @@ export const AIBatch: React.FC = () => {
               <div className="param-row">
                 <span className="param-label">并发数</span>
                 <div className="flex items-center gap-3">
-                  <input type="range" min={1} max={20} value={concurrent} onChange={e => setConcurrent(Number(e.target.value))} style={{ width: 80 }} />
+                  <input type="range" min={1} max={50} value={concurrent} onChange={e => setConcurrent(Number(e.target.value))} style={{ width: 80 }} />
                   <span className="text-xs text-secondary" style={{ width: 24 }}>{concurrent}</span>
                 </div>
               </div>

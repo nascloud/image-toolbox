@@ -166,6 +166,10 @@ func (p *SeedreamProvider) Models() []model.ModelInfo {
 	return infos
 }
 
+func (p *SeedreamProvider) ModelCapabilities(modelID string) model.ModelCapabilities {
+	return seedreamCapabilities(modelID)
+}
+
 func seedreamCapabilities(modelName string) model.ModelCapabilities {
 	normalized := strings.ToLower(modelName)
 	var best model.ModelCapabilities

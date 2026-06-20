@@ -47,3 +47,51 @@ func TestRunConcurrentNormalizesInvalidConcurrency(t *testing.T) {
 		t.Fatalf("expected successful result, got %+v", results)
 	}
 }
+
+func TestNormalizeAIConcurrency(t *testing.T) {
+	tests := []struct {
+		name      string
+		requested int
+		want      int
+	}{
+		{name: "default", requested: 0, want: defaultAIConcurrency},
+		{name: "negative", requested: -1, want: defaultAIConcurrency},
+		{name: "within limit", requested: 20, want: 20},
+		{name: "clamped", requested: 80, want: maxAIConcurrency},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := normalizeAIConcurrency(tt.requested); got != tt.want {
+				t.Fatalf("got %d, want %d", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestValidateAIBatchRequest(t *testing.T) {
+	valid := model.AIBatchRequest{
+		SourcePaths: []string{"input.png"},
+		OutputDir:   t.TempDir(),
+		Prompt:      "make it brighter",
+	}
+	if err := validateAIBatchRequest(valid); err != nil {
+		t.Fatalf("expected valid request, got %v", err)
+	}
+
+	tests := []struct {
+		name string
+		req  model.AIBatchRequest
+	}{
+		{name: "missing source", req: model.AIBatchRequest{OutputDir: t.TempDir(), Prompt: "prompt"}},
+		{name: "missing prompt", req: model.AIBatchRequest{SourcePaths: []string{"input.png"}, OutputDir: t.TempDir()}},
+		{name: "missing output dir", req: model.AIBatchRequest{SourcePaths: []string{"input.png"}, Prompt: "prompt"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := validateAIBatchRequest(tt.req); err == nil {
+				t.Fatal("expected validation error")
+			}
+		})
+	}
+}

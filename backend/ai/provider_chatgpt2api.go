@@ -253,6 +253,10 @@ func (p *ChatGPT2APIProvider) Models() []model.ModelInfo {
 	return cloneModels(models)
 }
 
+func (p *ChatGPT2APIProvider) ModelCapabilities(modelID string) model.ModelCapabilities {
+	return chatgpt2apiCapabilities(modelID)
+}
+
 func (p *ChatGPT2APIProvider) fetchModels() ([]model.ModelInfo, error) {
 	req, err := http.NewRequest("GET", p.baseURL+"/v1/models", nil)
 	if err != nil {
