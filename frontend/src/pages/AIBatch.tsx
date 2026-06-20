@@ -29,6 +29,11 @@ interface BatchImageResult {
   error?: string;
 }
 
+interface BatchProgressUpdate {
+  batchId?: string;
+  result?: BatchImageResult;
+}
+
 interface PromptPreset {
   name: string;
   text: string;
@@ -234,6 +239,8 @@ export const AIBatch: React.FC = () => {
   const referenceDropRef = useRef<HTMLDivElement>(null);
   const nextId = useRef(0);
   const cancelRef = useRef(false);
+  const activeBatchIdRef = useRef<string | null>(null);
+  const queueRef = useRef<ImageItem[]>([]);
   const toastTimer = useRef<ReturnType<typeof setTimeout>>();
 
   function getEffectiveWidth(): number {
@@ -243,11 +250,12 @@ export const AIBatch: React.FC = () => {
   }
 
   // Build RunAIImageBatch request from current panel parameters for given source paths
-  function buildBatchRequest(paths: string[]) {
+  function buildBatchRequest(paths: string[], batchId: string) {
     const outputDir = aiOutputDir || (paths[0]?.substring(0, paths[0].lastIndexOf('\\')) ?? '');
     const downloadW = getEffectiveWidth();
     const maxGeneratedImages = Math.max(1, 15 - (1 + referenceImages.length));
     return {
+      batchId,
       sourcePaths: paths,
       outputDir,
       provider,
@@ -271,6 +279,10 @@ export const AIBatch: React.FC = () => {
     };
   }
 
+  useEffect(() => {
+    queueRef.current = queue;
+  }, [queue]);
+
   const outputPathsFromResult = useCallback((result: BatchImageResult): string[] => {
     if (Array.isArray(result.outputPaths) && result.outputPaths.length > 0) {
       return result.outputPaths;
@@ -280,6 +292,16 @@ export const AIBatch: React.FC = () => {
 
   const loadResultThumbnails = useCallback(async (sourcePath: string, outputPaths: string[]) => {
     if (outputPaths.length === 0) return;
+    const existing = queueRef.current.find(i => i.path === sourcePath);
+    const existingOutputPaths = existing?.outputPaths || (existing?.outputPath ? [existing.outputPath] : []);
+    const thumbnailsAlreadyLoaded = existing
+      && existingOutputPaths.length === outputPaths.length
+      && existingOutputPaths.every((path, index) => path === outputPaths[index])
+      && existing.thumbUrls?.length === outputPaths.length
+      && existing.resultHoverUrls?.length === outputPaths.length
+      && existing.thumbUrls.every(Boolean)
+      && existing.resultHoverUrls.every(Boolean);
+    if (thumbnailsAlreadyLoaded) return;
 
     const thumbUrls = await Promise.all(outputPaths.map(async (outPath: string) => {
       try {
@@ -322,8 +344,22 @@ export const AIBatch: React.FC = () => {
     }));
   }, [outputPathsFromResult]);
 
+  const startBatchRun = useCallback(() => {
+    const batchId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    activeBatchIdRef.current = batchId;
+    return batchId;
+  }, []);
+
+  const finishBatchRun = useCallback((batchId: string) => {
+    if (activeBatchIdRef.current === batchId) {
+      activeBatchIdRef.current = null;
+    }
+  }, []);
+
   useEffect(() => {
-    const off = EventsOn('batch-image-result', (result: BatchImageResult) => {
+    const off = EventsOn('batch-progress', (update: BatchProgressUpdate) => {
+      if (!update?.batchId || update.batchId !== activeBatchIdRef.current) return;
+      const result = update.result;
       if (!result?.sourcePath) return;
       const outputPaths = outputPathsFromResult(result);
       applyImageResultToQueue(result, true);
@@ -589,9 +625,10 @@ export const AIBatch: React.FC = () => {
       done: false,
     });
 
+    const batchId = startBatchRun();
     try {
       const result = await (window as any).go.main.App.RunAIImageBatch(
-        buildBatchRequest([item.path])
+        buildBatchRequest([item.path], batchId)
       );
 
       if (!result || !result.results || result.results.length === 0) {
@@ -606,6 +643,7 @@ export const AIBatch: React.FC = () => {
           done: true,
           error: result?.error || '处理失败',
         });
+        finishBatchRun(batchId);
         setProcessing(false);
         return;
       }
@@ -628,21 +666,7 @@ export const AIBatch: React.FC = () => {
           ? r.outputPaths
           : r.outputPath ? [r.outputPath] : [];
         if (outputPaths.length > 0) {
-          const thumbUrls = await Promise.all(outputPaths.map(async (outPath: string) => {
-            try {
-              const dataUrl = await (window as any).go.main.App.ReadImageThumbnail(outPath, 80);
-              return dataUrl && dataUrl.startsWith('data:') ? dataUrl : '';
-            } catch { return ''; }
-          }));
-          const resultHoverUrls = await Promise.all(outputPaths.map(async (outPath: string) => {
-            try {
-              const dataUrl = await (window as any).go.main.App.ReadImageThumbnail(outPath, 640);
-              return dataUrl && dataUrl.startsWith('data:') ? dataUrl : '';
-            } catch { return ''; }
-          }));
-          setQueue(prev => prev.map(i =>
-            i.id === id ? { ...i, thumbUrl: thumbUrls[0], thumbUrls, resultHoverUrls } : i
-          ));
+          await loadResultThumbnails(item.path, outputPaths);
         }
       }
       updateProgress({
@@ -665,6 +689,7 @@ export const AIBatch: React.FC = () => {
         error: err.message,
       });
     }
+    finishBatchRun(batchId);
     setProcessing(false);
   };
 
@@ -759,11 +784,12 @@ export const AIBatch: React.FC = () => {
       i.status === 'pending' ? { ...i, status: 'processing' as const } : i
     ));
 
+    const batchId = startBatchRun();
     try {
-      if (cancelRef.current) { setProcessing(false); return; }
+      if (cancelRef.current) { finishBatchRun(batchId); setProcessing(false); return; }
 
       const result = await (window as any).go.main.App.RunAIImageBatch(
-        buildBatchRequest(pendingItems.map(i => i.path))
+        buildBatchRequest(pendingItems.map(i => i.path), batchId)
       );
 
       if (cancelRef.current || !result) {
@@ -828,26 +854,7 @@ export const AIBatch: React.FC = () => {
             ? r.outputPaths
             : r?.outputPath ? [r.outputPath] : [];
           if (!r || outputPaths.length === 0) return;
-          const thumbUrls = await Promise.all(outputPaths.map(async (outPath: string) => {
-            try {
-              const dataUrl = await (window as any).go.main.App.ReadImageThumbnail(outPath, 80);
-              return dataUrl && dataUrl.startsWith('data:') ? dataUrl : '';
-            } catch {
-              return '';
-            }
-          }));
-          const resultHoverUrls = await Promise.all(outputPaths.map(async (outPath: string) => {
-            try {
-              const dataUrl = await (window as any).go.main.App.ReadImageThumbnail(outPath, 640);
-              return dataUrl && dataUrl.startsWith('data:') ? dataUrl : '';
-            } catch {
-              return '';
-            }
-          }));
-          setQueue(prev => prev.map(i => {
-            if (i.path !== item.path) return i;
-            return { ...i, thumbUrl: thumbUrls[0], thumbUrls, resultHoverUrls };
-          }));
+          await loadResultThumbnails(item.path, outputPaths);
         }));
 
         const completedCount = pendingItems.filter(item => {
@@ -892,6 +899,7 @@ export const AIBatch: React.FC = () => {
       });
     }
 
+    finishBatchRun(batchId);
     setProcessing(false);
     setCancelRequested(false);
     cancelRef.current = false;
@@ -920,9 +928,10 @@ export const AIBatch: React.FC = () => {
         : i
     ));
 
+    const batchId = startBatchRun();
     try {
       const result = await (window as any).go.main.App.RunAIImageBatch(
-        buildBatchRequest(toRetry.map(i => i.path))
+        buildBatchRequest(toRetry.map(i => i.path), batchId)
       );
 
       if (!result || !result.results) {
@@ -940,6 +949,7 @@ export const AIBatch: React.FC = () => {
           done: true,
           error: result?.error || '处理失败',
         });
+        finishBatchRun(batchId);
         setProcessing(false);
         return;
       }
@@ -950,20 +960,21 @@ export const AIBatch: React.FC = () => {
         if (r.sourcePath) resultByPath.set(r.sourcePath, r);
       }
 
-      let failedCount = 0;
+      const retryPaths = new Set(toRetry.map(item => item.path));
+      const failedCount = toRetry.filter(item => {
+        const r = resultByPath.get(item.path);
+        const outputPaths = r ? outputPathsFromResult(r) : [];
+        return !r || !r.success || outputPaths.length === 0;
+      }).length;
       setQueue(prev => prev.map(i => {
-        if (i.status !== 'processing') return i;
+        if (!retryPaths.has(i.path)) return i;
         const r = resultByPath.get(i.path);
         if (r) {
-          const outputPaths = Array.isArray(r.outputPaths) && r.outputPaths.length > 0
-            ? r.outputPaths
-            : r.outputPath ? [r.outputPath] : [];
+          const outputPaths = outputPathsFromResult(r);
           if (r.success && outputPaths.length > 0) {
             return { ...i, status: 'completed' as const, outputPath: outputPaths[0], outputPaths };
-          } else {
-            failedCount++;
-            return { ...i, status: 'error' as const, error: r.error || '处理失败' };
           }
+          return { ...i, status: 'error' as const, error: r.error || '处理失败' };
         }
         return { ...i, status: 'error' as const, error: '未返回处理结果' };
       }));
@@ -980,26 +991,9 @@ export const AIBatch: React.FC = () => {
       // Load thumbnails for all completed items
       const completedResults = result.results.filter((r: any) => r.success);
       await Promise.all(completedResults.map(async (r: any) => {
-        const outputPaths = Array.isArray(r.outputPaths) && r.outputPaths.length > 0
-          ? r.outputPaths
-          : r.outputPath ? [r.outputPath] : [];
+        const outputPaths = outputPathsFromResult(r);
         if (outputPaths.length === 0) return;
-        const thumbUrls = await Promise.all(outputPaths.map(async (outPath: string) => {
-          try {
-            const dataUrl = await (window as any).go.main.App.ReadImageThumbnail(outPath, 80);
-            return dataUrl && dataUrl.startsWith('data:') ? dataUrl : '';
-          } catch { return ''; }
-        }));
-        const resultHoverUrls = await Promise.all(outputPaths.map(async (outPath: string) => {
-          try {
-            const dataUrl = await (window as any).go.main.App.ReadImageThumbnail(outPath, 640);
-            return dataUrl && dataUrl.startsWith('data:') ? dataUrl : '';
-          } catch { return ''; }
-        }));
-        setQueue(prev => prev.map(i => {
-          if (i.path !== r.sourcePath) return i;
-          return { ...i, thumbUrl: thumbUrls[0], thumbUrls, resultHoverUrls };
-        }));
+        await loadResultThumbnails(r.sourcePath, outputPaths);
       }));
 
       updateProgress({
@@ -1027,6 +1021,7 @@ export const AIBatch: React.FC = () => {
         error: err.message,
       });
     }
+    finishBatchRun(batchId);
     setProcessing(false);
   };
 
@@ -1539,7 +1534,7 @@ export const AIBatch: React.FC = () => {
             <div style={{ flex: 1 }} />
 
             {processing ? (
-              <button onClick={() => { updateProgress(null); cancelRef.current = true; setCancelRequested(true); try { (window as any).go.main.App.CancelBatch(); } catch { /* no-op */ } }} className="btn btn-danger" style={{ fontWeight: 600, padding: '8px 24px' }}>
+              <button onClick={() => { updateProgress(null); activeBatchIdRef.current = null; cancelRef.current = true; setCancelRequested(true); try { (window as any).go.main.App.CancelBatch(); } catch { /* no-op */ } }} className="btn btn-danger" style={{ fontWeight: 600, padding: '8px 24px' }}>
                 取消处理
               </button>
             ) : (

@@ -30,12 +30,12 @@ func RunConcurrent(ctx context.Context, sources []string, fn JobFunc, maxConcurr
 
 // RunConcurrentPaths executes jobs concurrently and supports multiple output paths per source.
 func RunConcurrentPaths(ctx context.Context, sources []string, fn JobFuncPaths, maxConcurrent int, progressCh chan<- model.ProgressUpdate) []model.ImageResult {
-	return RunConcurrentPathsWithResultCallback(ctx, sources, fn, maxConcurrent, progressCh, nil)
+	return RunConcurrentPathsWithProgressResults(ctx, sources, fn, maxConcurrent, progressCh, "")
 }
 
-// RunConcurrentPathsWithResultCallback executes jobs concurrently and reports each
-// image result as soon as that source has finished.
-func RunConcurrentPathsWithResultCallback(ctx context.Context, sources []string, fn JobFuncPaths, maxConcurrent int, progressCh chan<- model.ProgressUpdate, resultCh chan<- model.ImageResult) []model.ImageResult {
+// RunConcurrentPathsWithProgressResults executes jobs concurrently and includes
+// each finished image result in the corresponding progress update.
+func RunConcurrentPathsWithProgressResults(ctx context.Context, sources []string, fn JobFuncPaths, maxConcurrent int, progressCh chan<- model.ProgressUpdate, batchID string) []model.ImageResult {
 	if maxConcurrent <= 0 {
 		maxConcurrent = 1
 	}
@@ -87,15 +87,14 @@ func RunConcurrentPathsWithResultCallback(ctx context.Context, sources []string,
 			mu.Unlock()
 
 			if progressCh != nil {
-				progressCh <- model.ProgressUpdate{
+				sendProgress(ctx, progressCh, model.ProgressUpdate{
 					Completed: completed,
 					Total:     total,
 					Current:   path,
 					Error:     r.Error,
-				}
-			}
-			if resultCh != nil {
-				resultCh <- r
+					BatchID:   batchID,
+					Result:    &r,
+				}, true)
 			}
 		}(i, src)
 	}
@@ -103,8 +102,23 @@ func RunConcurrentPathsWithResultCallback(ctx context.Context, sources []string,
 	wg.Wait()
 
 	if progressCh != nil {
-		progressCh <- model.ProgressUpdate{Completed: total, Total: total, Done: true}
+		sendProgress(ctx, progressCh, model.ProgressUpdate{Completed: total, Total: total, Done: true, BatchID: batchID}, false)
 	}
 
 	return results
+}
+
+func sendProgress(ctx context.Context, progressCh chan<- model.ProgressUpdate, update model.ProgressUpdate, allowDrop bool) {
+	if allowDrop {
+		select {
+		case progressCh <- update:
+		case <-ctx.Done():
+		default:
+		}
+		return
+	}
+	select {
+	case progressCh <- update:
+	case <-ctx.Done():
+	}
 }

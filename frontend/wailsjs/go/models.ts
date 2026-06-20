@@ -1,6 +1,7 @@
 export namespace model {
 	
 	export class AIBatchRequest {
+	    batchId?: string;
 	    provider: string;
 	    n: number;
 	    sourcePaths: string[];
@@ -29,6 +30,7 @@ export namespace model {
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.batchId = source["batchId"];
 	        this.provider = source["provider"];
 	        this.n = source["n"];
 	        this.sourcePaths = source["sourcePaths"];

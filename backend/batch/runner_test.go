@@ -48,24 +48,27 @@ func TestRunConcurrentNormalizesInvalidConcurrency(t *testing.T) {
 	}
 }
 
-func TestRunConcurrentPathsReportsResultBeforeBatchReturns(t *testing.T) {
-	resultCh := make(chan model.ImageResult, 2)
+func TestRunConcurrentPathsReportsResultInProgressBeforeBatchReturns(t *testing.T) {
+	progressCh := make(chan model.ProgressUpdate, 2)
 	returned := make(chan struct{})
 
 	go func() {
-		RunConcurrentPathsWithResultCallback(context.Background(), []string{"a", "b"}, func(srcPath string) ([]string, error) {
+		RunConcurrentPathsWithProgressResults(context.Background(), []string{"a", "b"}, func(srcPath string) ([]string, error) {
 			if srcPath == "b" {
 				time.Sleep(50 * time.Millisecond)
 			}
 			return []string{srcPath + ".out"}, nil
-		}, 1, nil, resultCh)
+		}, 1, progressCh, "batch-1")
 		close(returned)
 	}()
 
 	select {
-	case result := <-resultCh:
-		if result.SourcePath != "a" || !result.Success {
-			t.Fatalf("expected first successful result for a, got %+v", result)
+	case update := <-progressCh:
+		if update.BatchID != "batch-1" {
+			t.Fatalf("expected batch ID batch-1, got %q", update.BatchID)
+		}
+		if update.Result == nil || update.Result.SourcePath != "a" || !update.Result.Success {
+			t.Fatalf("expected first successful result for a, got %+v", update.Result)
 		}
 	case <-returned:
 		t.Fatal("batch returned before emitting the first image result")

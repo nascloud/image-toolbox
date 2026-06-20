@@ -18,12 +18,6 @@ const (
 
 // RunAIImageBatch processes images through AI generation.
 func RunAIImageBatch(ctx context.Context, req model.AIBatchRequest, configPath string, progressCh chan<- model.ProgressUpdate) model.BatchResult {
-	return RunAIImageBatchWithResultEvents(ctx, req, configPath, progressCh, nil)
-}
-
-// RunAIImageBatchWithResultEvents processes images through AI generation and sends
-// each image result as soon as the provider returns for that source image.
-func RunAIImageBatchWithResultEvents(ctx context.Context, req model.AIBatchRequest, configPath string, progressCh chan<- model.ProgressUpdate, resultCh chan<- model.ImageResult) model.BatchResult {
 	if err := validateAIBatchRequest(req); err != nil {
 		return model.BatchResult{Error: err.Error()}
 	}
@@ -81,7 +75,7 @@ func RunAIImageBatchWithResultEvents(ctx context.Context, req model.AIBatchReque
 	}
 
 	maxConcurrent := normalizeAIConcurrency(req.Concurrent)
-	results := RunConcurrentPathsWithResultCallback(ctx, req.SourcePaths, jobFn, maxConcurrent, progressCh, resultCh)
+	results := RunConcurrentPathsWithProgressResults(ctx, req.SourcePaths, jobFn, maxConcurrent, progressCh, req.BatchID)
 	return aggregateResults(results)
 }
 
