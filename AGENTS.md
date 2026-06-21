@@ -24,7 +24,8 @@
 - 可选参考图（Reference Image）
 - 支持对一组图片执行相同 AI 操作
 - 支持可复现参数（尺寸、模型、种子、风格等）
-- 多模型支持：Seedream 5.0 / 4.5 / 4.0 / 3.0
+- 多供应商支持：Seedream（火山引擎 Ark）、ChatGPT2API（兼容 OpenAI 格式）
+- 多模型支持：Seedream 5.0 / 4.5 / 4.0 / 3.0、ChatGPT2API 接入模型
 
 ⚠️ AI **不是实时交互工具**，而是：
 > **"用户配置一次 → 后端批量执行 → 返回结果"**
@@ -91,14 +92,16 @@ image-toolbox/
 │   │   └── output_paths.go    # 批处理输出路径规划
 │   │
 │   ├── ai/                    # ✅ AI 图片处理
-│   │   ├── client.go          # AI 图片 API 客户端
+│   │   ├── provider.go        # Provider 接口定义 + 工厂方法
+│   │   ├── provider_seedream.go      # Seedream 供应商实现
+│   │   ├── provider_chatgpt2api.go   # ChatGPT2API 供应商实现
 │   │   ├── prompt.go          # Prompt 构建（纯函数）
 │   │   ├── reference.go       # 参考图处理
-│   │   ├── image_task.go      # 单图 AI 任务
-│   │   └── capability.go      # 模型能力定义（各模型支持的参数）
+│   │   ├── image_task.go      # 单图 AI 任务（input → API → output）
+│   │   └── download.go        # 结果图片 URL → 本地文件下载
 │   │
 │   ├── config/                # ✅ 配置管理
-│   │   └── config.go          # API Key / AI 输出目录持久化
+│   │   └── config.go          # API Key / AI 输出目录持久化（多供应商）
 │   │
 │   ├── file/                  # ✅ 文件系统
 │   │   ├── scan.go            # 扫描目录生成图片列表
@@ -109,10 +112,16 @@ image-toolbox/
 │   ├── model/                 # ✅ 所有结构体定义
 │   │   ├── image.go           # ImageJob / ImageResult
 │   │   ├── batch.go           # BatchRequest / BatchResult
-│   │   ├── ai.go              # AIImageRequest / AIImageResult / AIBatchRequest
+│   │   ├── ai.go              # AIImageRequest / AIImageResponse / AIBatchRequest / ModelInfo
 │   │   ├── slice.go           # SliceRequest
 │   │   ├── watermark.go       # WatermarkRequest / WatermarkPreviewRequest
 │   │   └── progress.go        # 进度状态
+│   │
+│   ├── shell/                 # ✅ Windows Shell 集成
+│   │   ├── register.go        # 右键菜单注册 / 卸载
+│   │   ├── launch.go          # 命令行参数解析（LaunchIntent）
+│   │   ├── mutex.go           # 单实例互斥锁
+│   │   └── ipc.go             # 进程间通信（第二实例 → 已有实例）
 │   │
 │   └── util/                  # 通用工具（待充实）
 │       └── ...
@@ -143,7 +152,8 @@ image-toolbox/
 │       │
 │       ├── hooks/
 │       │   ├── useBatch.ts        # 批处理状态管理
-│       │   └── useProgress.tsx    # 进度管理
+│       │   ├── useProgress.tsx    # 进度管理
+│       │   └── useIntent.tsx      # Shell 启动意图管理
 │       │
 │       ├── assets/
 │       ├── styles/
@@ -208,8 +218,10 @@ AI 图片处理 **必须支持以下输入**：
 - 可重复生成（纯函数）
 
 ✅ 模型能力：
-- 通过 `capability.go` 定义各模型支持的参数差异
-- 前端请求参数统一，后端按模型自动适配
+- 通过 `provider.go` 中的 `Provider` 接口定义统一契约
+- 每个供应商（`provider_seedream.go` / `provider_chatgpt2api.go`）自行实现能力
+- 通过 `model.go` 中的 `ModelCapabilities` / `ModelInfo` 定义各模型支持的参数差异
+- 前端请求参数统一，后端按供应商 + 模型自动适配
 
 ❌ 禁止：
 - 前端拼 Prompt
