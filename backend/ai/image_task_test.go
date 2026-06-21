@@ -12,6 +12,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	imgpkg "image-toolbox/backend/image"
@@ -105,5 +106,86 @@ func TestProcessSingleImagesSavesAllReturnedImages(t *testing.T) {
 		if _, err := os.Stat(outPath); err != nil {
 			t.Fatalf("expected saved output %s: %v", outPath, err)
 		}
+	}
+}
+
+func TestProcessSingleImagesUsesDetectedOutputExtension(t *testing.T) {
+	srcPath := filepath.Join(t.TempDir(), "source.png")
+	src := image.NewRGBA(image.Rect(0, 0, 20, 20))
+	var srcBuf bytes.Buffer
+	if err := png.Encode(&srcBuf, src); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(srcPath, srcBuf.Bytes(), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	result := image.NewRGBA(image.Rect(0, 0, 16, 16))
+	var resultBuf bytes.Buffer
+	if err := png.Encode(&resultBuf, result); err != nil {
+		t.Fatal(err)
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/v1/models" {
+			json.NewEncoder(w).Encode(map[string]any{
+				"data": []map[string]string{{"id": "gpt-image-2"}},
+			})
+			return
+		}
+		json.NewEncoder(w).Encode(model.AIImageResponse{
+			Data: []struct {
+				URL     string `json:"url,omitempty"`
+				B64JSON string `json:"b64_json,omitempty"`
+				Size    string `json:"size,omitempty"`
+				Error   *struct {
+					Code    string `json:"code"`
+					Message string `json:"message"`
+				} `json:"error,omitempty"`
+			}{
+				{B64JSON: base64.StdEncoding.EncodeToString(resultBuf.Bytes())},
+			},
+		})
+	}))
+	defer server.Close()
+
+	provider := NewChatGPT2APIProvider("test-key", server.URL)
+	outDir := t.TempDir()
+	outPaths, err := ProcessSingleImagesWithContext(context.Background(), provider, srcPath, outDir, model.AIBatchRequest{
+		Model:  "gpt-image-2",
+		Prompt: "test",
+	}, filepath.Join(outDir, "source_ai.jpg"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(outPaths) != 1 {
+		t.Fatalf("expected 1 output path, got %d", len(outPaths))
+	}
+	if filepath.Ext(outPaths[0]) != ".png" {
+		t.Fatalf("expected detected .png extension, got %s", outPaths[0])
+	}
+}
+
+func TestProcessSingleImagesRejectsModelWithoutImageInput(t *testing.T) {
+	srcPath := filepath.Join(t.TempDir(), "source.png")
+	src := image.NewRGBA(image.Rect(0, 0, 20, 20))
+	var srcBuf bytes.Buffer
+	if err := png.Encode(&srcBuf, src); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(srcPath, srcBuf.Bytes(), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	provider := NewSeedreamProvider("test-key", "")
+	_, err := ProcessSingleImagesWithContext(context.Background(), provider, srcPath, t.TempDir(), model.AIBatchRequest{
+		Model:  "doubao-seedream-3-0-t2i-250415",
+		Prompt: "test",
+	}, "")
+	if err == nil {
+		t.Fatal("expected unsupported image input error")
+	}
+	if !strings.Contains(err.Error(), "does not support image input") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }

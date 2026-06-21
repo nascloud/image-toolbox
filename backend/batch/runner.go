@@ -30,6 +30,12 @@ func RunConcurrent(ctx context.Context, sources []string, fn JobFunc, maxConcurr
 
 // RunConcurrentPaths executes jobs concurrently and supports multiple output paths per source.
 func RunConcurrentPaths(ctx context.Context, sources []string, fn JobFuncPaths, maxConcurrent int, progressCh chan<- model.ProgressUpdate) []model.ImageResult {
+	return RunConcurrentPathsWithProgressResults(ctx, sources, fn, maxConcurrent, progressCh, "")
+}
+
+// RunConcurrentPathsWithProgressResults executes jobs concurrently and includes
+// each finished image result in the corresponding progress update.
+func RunConcurrentPathsWithProgressResults(ctx context.Context, sources []string, fn JobFuncPaths, maxConcurrent int, progressCh chan<- model.ProgressUpdate, batchID string) []model.ImageResult {
 	if maxConcurrent <= 0 {
 		maxConcurrent = 1
 	}
@@ -81,12 +87,14 @@ func RunConcurrentPaths(ctx context.Context, sources []string, fn JobFuncPaths, 
 			mu.Unlock()
 
 			if progressCh != nil {
-				progressCh <- model.ProgressUpdate{
+				sendProgress(ctx, progressCh, model.ProgressUpdate{
 					Completed: completed,
 					Total:     total,
 					Current:   path,
 					Error:     r.Error,
-				}
+					BatchID:   batchID,
+					Result:    &r,
+				}, true)
 			}
 		}(i, src)
 	}
@@ -94,8 +102,23 @@ func RunConcurrentPaths(ctx context.Context, sources []string, fn JobFuncPaths, 
 	wg.Wait()
 
 	if progressCh != nil {
-		progressCh <- model.ProgressUpdate{Completed: total, Total: total, Done: true}
+		sendProgress(ctx, progressCh, model.ProgressUpdate{Completed: total, Total: total, Done: true, BatchID: batchID}, false)
 	}
 
 	return results
+}
+
+func sendProgress(ctx context.Context, progressCh chan<- model.ProgressUpdate, update model.ProgressUpdate, allowDrop bool) {
+	if allowDrop {
+		select {
+		case progressCh <- update:
+		case <-ctx.Done():
+		default:
+		}
+		return
+	}
+	select {
+	case progressCh <- update:
+	case <-ctx.Done():
+	}
 }

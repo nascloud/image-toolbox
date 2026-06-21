@@ -157,6 +157,22 @@ func TestChatGPT2APIGenerateEdits(t *testing.T) {
 	}
 }
 
+func TestChatGPT2APIGenerateEditsRejectsInvalidInputImage(t *testing.T) {
+	p := NewChatGPT2APIProvider("test-key", "http://127.0.0.1:1")
+
+	_, err := p.Generate(context.Background(), model.AIImageRequest{
+		Model:  "gpt-image-2",
+		Prompt: "edit prompt",
+		Image:  "not-a-data-uri",
+	})
+	if err == nil {
+		t.Fatal("expected invalid input image error")
+	}
+	if !strings.Contains(err.Error(), "decode input image") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestChatGPT2APIModels(t *testing.T) {
 	p := NewChatGPT2APIProvider("test-key", "")
 	models := p.Models()

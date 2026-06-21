@@ -4,9 +4,9 @@ import { useProgressContext } from '../hooks/useProgress';
 export const Settings: React.FC = () => {
   const [aiOutputDir, setAiOutputDir] = useState('');
   const [dirSaved, setDirSaved] = useState(false);
-  const [providers, setProviders] = useState<{[key: string]: {apiKey: string, baseURL: string}}>({
-    seedream: {apiKey: '', baseURL: 'https://ark.cn-beijing.volces.com/api/v3'},
-    chatgpt2api: {apiKey: '', baseURL: 'https://image.wq727.cf:21118'},
+  const [providers, setProviders] = useState<{[key: string]: {apiKey: string, baseURL: string, hasApiKey: boolean}}>({
+    seedream: {apiKey: '', baseURL: 'https://ark.cn-beijing.volces.com/api/v3', hasApiKey: false},
+    chatgpt2api: {apiKey: '', baseURL: 'http://localhost:3000', hasApiKey: false},
   });
   const [activeProvider, setActiveProvider] = useState('seedream');
   const [providerSaved, setProviderSaved] = useState<{[key: string]: boolean}>({});
@@ -32,7 +32,7 @@ export const Settings: React.FC = () => {
           const cfg = await (window as any).go.main.App.GetProviderConfig(name);
           setProviders(prev => ({
             ...prev,
-            [name]: {apiKey: cfg.hasApiKey ? '••••••••' : '', baseURL: cfg.baseURL || prev[name].baseURL}
+            [name]: {apiKey: '', hasApiKey: !!cfg.hasApiKey, baseURL: cfg.baseURL || prev[name].baseURL}
           }));
         } catch { /* no-op */ }
       }
@@ -49,7 +49,13 @@ export const Settings: React.FC = () => {
 
   const handleSaveProvider = async (name: string) => {
     try {
-      await (window as any).go.main.App.SaveProviderConfig(name, providers[name].apiKey, providers[name].baseURL);
+      const apiKey = providers[name].apiKey.trim();
+      const preserveExistingKey = apiKey === '' && providers[name].hasApiKey;
+      await (window as any).go.main.App.SaveProviderConfig(name, apiKey, providers[name].baseURL, preserveExistingKey);
+      setProviders(prev => ({
+        ...prev,
+        [name]: {...prev[name], apiKey: '', hasApiKey: preserveExistingKey || apiKey !== ''}
+      }));
       setProviderSaved(prev => ({...prev, [name]: true}));
       setTimeout(() => setProviderSaved(prev => ({...prev, [name]: false})), 2000);
     } catch { /* no-op */ }
@@ -104,7 +110,7 @@ export const Settings: React.FC = () => {
           </label>
           <input
             type="password"
-            placeholder="API Key"
+            placeholder={providers[name].hasApiKey ? '已保存，留空则保留当前 Key' : 'API Key'}
             value={providers[name].apiKey}
             onChange={e => setProviders(p => ({...p, [name]: {...p[name], apiKey: e.target.value}}))}
             className="input"

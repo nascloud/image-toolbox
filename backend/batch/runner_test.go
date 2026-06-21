@@ -47,3 +47,80 @@ func TestRunConcurrentNormalizesInvalidConcurrency(t *testing.T) {
 		t.Fatalf("expected successful result, got %+v", results)
 	}
 }
+
+func TestRunConcurrentPathsReportsResultInProgressBeforeBatchReturns(t *testing.T) {
+	progressCh := make(chan model.ProgressUpdate, 2)
+	returned := make(chan struct{})
+
+	go func() {
+		RunConcurrentPathsWithProgressResults(context.Background(), []string{"a", "b"}, func(srcPath string) ([]string, error) {
+			if srcPath == "b" {
+				time.Sleep(50 * time.Millisecond)
+			}
+			return []string{srcPath + ".out"}, nil
+		}, 1, progressCh, "batch-1")
+		close(returned)
+	}()
+
+	select {
+	case update := <-progressCh:
+		if update.BatchID != "batch-1" {
+			t.Fatalf("expected batch ID batch-1, got %q", update.BatchID)
+		}
+		if update.Result == nil || update.Result.SourcePath != "a" || !update.Result.Success {
+			t.Fatalf("expected first successful result for a, got %+v", update.Result)
+		}
+	case <-returned:
+		t.Fatal("batch returned before emitting the first image result")
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for image result")
+	}
+}
+
+func TestNormalizeAIConcurrency(t *testing.T) {
+	tests := []struct {
+		name      string
+		requested int
+		want      int
+	}{
+		{name: "default", requested: 0, want: defaultAIConcurrency},
+		{name: "negative", requested: -1, want: defaultAIConcurrency},
+		{name: "within limit", requested: 20, want: 20},
+		{name: "clamped", requested: 80, want: maxAIConcurrency},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := normalizeAIConcurrency(tt.requested); got != tt.want {
+				t.Fatalf("got %d, want %d", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestValidateAIBatchRequest(t *testing.T) {
+	valid := model.AIBatchRequest{
+		SourcePaths: []string{"input.png"},
+		OutputDir:   t.TempDir(),
+		Prompt:      "make it brighter",
+	}
+	if err := validateAIBatchRequest(valid); err != nil {
+		t.Fatalf("expected valid request, got %v", err)
+	}
+
+	tests := []struct {
+		name string
+		req  model.AIBatchRequest
+	}{
+		{name: "missing source", req: model.AIBatchRequest{OutputDir: t.TempDir(), Prompt: "prompt"}},
+		{name: "missing prompt", req: model.AIBatchRequest{SourcePaths: []string{"input.png"}, OutputDir: t.TempDir()}},
+		{name: "missing output dir", req: model.AIBatchRequest{SourcePaths: []string{"input.png"}, Prompt: "prompt"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := validateAIBatchRequest(tt.req); err == nil {
+				t.Fatal("expected validation error")
+			}
+		})
+	}
+}
