@@ -1939,7 +1939,11 @@ export const AIBatch: React.FC = () => {
 
                     {/* Status badges */}
                     {item.status === 'pending' && <span className="badge badge-pending">等待处理</span>}
-                    {item.status === 'processing' && <span className="badge badge-processing">处理中</span>}
+                    {item.status === 'processing' && (
+                      <span className="badge badge-processing" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                        处理中 · {formatElapsedTime(waitSeconds)}
+                      </span>
+                    )}
                     {item.status === 'completed' && (
                       <button onClick={() => openPreview(item)} className="badge badge-completed" style={{ cursor: 'pointer', border: 'none' }}>
                         ✓ 完成
