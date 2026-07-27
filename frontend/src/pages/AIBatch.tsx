@@ -144,6 +144,14 @@ function getSizeOptions(model: string): string[] {
   return ['1K', '2K', '3K', '4K'];
 }
 
+function formatElapsedTime(totalSeconds: number): string {
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return minutes > 0
+    ? `${minutes}:${seconds.toString().padStart(2, '0')}`
+    : `${seconds} 秒`;
+}
+
 function hoverPreviewStyle(pos: { x: number; y: number }): React.CSSProperties {
   const gap = 16;
   const padding = 12;
@@ -215,6 +223,7 @@ export const AIBatch: React.FC = () => {
   const [recursive, setRecursive] = useState(true);
   const [looseFilePaths, setLooseFilePaths] = useState<string[]>([]);
   const [processing, setProcessing] = useState(false);
+  const [waitSeconds, setWaitSeconds] = useState(0);
   const [cancelRequested, setCancelRequested] = useState(false);
   const [presets, setPresets] = useState<PromptPreset[]>(loadPresets);
   const [showPromptForm, setShowPromptForm] = useState(false);
@@ -263,6 +272,16 @@ export const AIBatch: React.FC = () => {
   const saveInProgressRef = useRef(false);
   const selectedPreviewRef = useRef(selectedPreview);
   selectedPreviewRef.current = selectedPreview;
+
+  useEffect(() => {
+    if (!processing) return;
+    setWaitSeconds(0);
+    const startedAt = Date.now();
+    const timer = window.setInterval(() => {
+      setWaitSeconds(Math.floor((Date.now() - startedAt) / 1000));
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [processing]);
 
   function getEffectiveWidth(): number {
     return downloadWidth === 'custom'
@@ -1673,6 +1692,13 @@ export const AIBatch: React.FC = () => {
                 )}
               </div>
             </div>
+
+            {processing && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--color-text-muted)', fontSize: 12 }}>
+                <span className="badge badge-processing">AI 处理中</span>
+                <span style={{ fontVariantNumeric: 'tabular-nums' }}>{formatElapsedTime(waitSeconds)}</span>
+              </div>
+            )}
 
             <div style={{ flex: 1 }} />
 
