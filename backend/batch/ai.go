@@ -1,4 +1,4 @@
-package batch
+﻿package batch
 
 import (
 	"context"
@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	defaultAIConcurrency = 10
+	defaultAIConcurrency = 5
 	maxAIConcurrency     = 50
 )
 

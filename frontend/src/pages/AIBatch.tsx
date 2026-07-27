@@ -203,7 +203,7 @@ export const AIBatch: React.FC = () => {
   const [maxImages, setMaxImages] = useState(4);
   const [optimizePromptMode, setOptimizePromptMode] = useState('standard');
   const [webSearch, setWebSearch] = useState(false);
-  const [concurrent, setConcurrent] = useState(10);
+  const [concurrent, setConcurrent] = useState(5);
   const [aiOutputDir, setAiOutputDir] = useState('');
   const [downloadWidth, setDownloadWidth] = useState('1440');
   const [customWidth, setCustomWidth] = useState('');

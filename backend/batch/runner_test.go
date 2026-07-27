@@ -83,8 +83,8 @@ func TestNormalizeAIConcurrency(t *testing.T) {
 		requested int
 		want      int
 	}{
-		{name: "default", requested: 0, want: defaultAIConcurrency},
-		{name: "negative", requested: -1, want: defaultAIConcurrency},
+		{name: "default", requested: 0, want: 5},
+		{name: "negative", requested: -1, want: 5},
 		{name: "within limit", requested: 20, want: 20},
 		{name: "clamped", requested: 80, want: maxAIConcurrency},
 	}
