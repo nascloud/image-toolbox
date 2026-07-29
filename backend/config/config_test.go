@@ -103,6 +103,28 @@ func TestProviderConfigRoundTrip(t *testing.T) {
 	}
 }
 
+func TestProviderReviewConfigRoundTripAndImageSavePreservesIt(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.json")
+	if err := SaveProviderConfig(cfgPath, "seedream", "sk-review", DefaultSeedreamBaseURL); err != nil {
+		t.Fatal(err)
+	}
+	if err := SaveProviderReviewConfig(cfgPath, "seedream", "ep-language-model", "https://example.com/chat/completions"); err != nil {
+		t.Fatal(err)
+	}
+	if err := SaveProviderConfigWithKeyMode(cfgPath, "seedream", "", "https://example.com/v3", true); err != nil {
+		t.Fatal(err)
+	}
+
+	apiKey, modelID, endpoint, err := LoadProviderReviewConfig(cfgPath, "seedream")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if apiKey != "sk-review" || modelID != "ep-language-model" || endpoint != "https://example.com/chat/completions" {
+		t.Fatalf("unexpected review config: key=%q model=%q endpoint=%q", apiKey, modelID, endpoint)
+	}
+}
+
 func TestSaveProviderConfigPreservesExistingKey(t *testing.T) {
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "config.json")

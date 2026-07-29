@@ -70,8 +70,20 @@ export function ReadImageThumbnail(arg1, arg2) {
   return window['go']['main']['App']['ReadImageThumbnail'](arg1, arg2);
 }
 
+export function RedrawBuyerShowImage(arg1) {
+  return window['go']['main']['App']['RedrawBuyerShowImage'](arg1);
+}
+
+export function RewriteBuyerShowReview(arg1) {
+  return window['go']['main']['App']['RewriteBuyerShowReview'](arg1);
+}
+
 export function RunAIImageBatch(arg1) {
   return window['go']['main']['App']['RunAIImageBatch'](arg1);
+}
+
+export function RunBuyerShowBatch(arg1) {
+  return window['go']['main']['App']['RunBuyerShowBatch'](arg1);
 }
 
 export function SaveAiOutputDir(arg1) {
@@ -88,6 +100,14 @@ export function SaveFilesToDir(arg1, arg2, arg3) {
 
 export function SaveProviderConfig(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['SaveProviderConfig'](arg1, arg2, arg3, arg4);
+}
+
+export function SaveProviderReviewConfig(arg1, arg2, arg3) {
+  return window['go']['main']['App']['SaveProviderReviewConfig'](arg1, arg2, arg3);
+}
+
+export function ScanBuyerShowImport(arg1) {
+  return window['go']['main']['App']['ScanBuyerShowImport'](arg1);
 }
 
 export function ScanDirectory(arg1, arg2) {

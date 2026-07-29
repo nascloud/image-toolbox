@@ -38,7 +38,13 @@ export function ReadImageAsBase64(arg1:string):Promise<string>;
 
 export function ReadImageThumbnail(arg1:string,arg2:number):Promise<string>;
 
+export function RedrawBuyerShowImage(arg1:model.BuyerShowRedrawRequest):Promise<model.BuyerShowSlotResult>;
+
+export function RewriteBuyerShowReview(arg1:model.BuyerShowReviewRewriteRequest):Promise<model.BuyerShowReviewRewriteResult>;
+
 export function RunAIImageBatch(arg1:model.AIBatchRequest):Promise<model.BatchResult>;
+
+export function RunBuyerShowBatch(arg1:model.BuyerShowBatchRequest):Promise<model.BuyerShowBatchResult>;
 
 export function SaveAiOutputDir(arg1:string):Promise<void>;
 
@@ -47,6 +53,10 @@ export function SaveApiKey(arg1:string):Promise<void>;
 export function SaveFilesToDir(arg1:Array<string>,arg2:string,arg3:number):Promise<number>;
 
 export function SaveProviderConfig(arg1:string,arg2:string,arg3:string,arg4:boolean):Promise<void>;
+
+export function SaveProviderReviewConfig(arg1:string,arg2:string,arg3:string):Promise<void>;
+
+export function ScanBuyerShowImport(arg1:model.BuyerShowScanRequest):Promise<model.BuyerShowScanResult>;
 
 export function ScanDirectory(arg1:string,arg2:boolean):Promise<Array<string>>;
 

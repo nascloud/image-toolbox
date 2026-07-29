@@ -64,6 +64,7 @@ func ProcessSingleImagesWithContext(ctx context.Context, provider Provider, srcP
 	req := model.AIImageRequest{
 		Model:                     opts.Model,
 		Prompt:                    BuildPrompt(opts.Prompt),
+		NegativePrompt:            opts.NegativePrompt,
 		Size:                      opts.Size,
 		Quality:                   opts.Quality,
 		Image:                     imgData,

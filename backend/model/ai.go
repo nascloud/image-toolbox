@@ -5,6 +5,7 @@ type AIImageRequest struct {
 	N                         int      `json:"n,omitempty"`
 	Model                     string   `json:"model"`
 	Prompt                    string   `json:"prompt"`
+	NegativePrompt            string   `json:"negativePrompt,omitempty"`
 	Size                      string   `json:"size"`
 	Quality                   string   `json:"quality,omitempty"`
 	Image                     string   `json:"image,omitempty"`
@@ -77,8 +78,11 @@ type ModelInfo struct {
 
 // ProviderConfigResponse is returned to the frontend (API key masked).
 type ProviderConfigResponse struct {
-	HasAPIKey bool   `json:"hasApiKey"`
-	BaseURL   string `json:"baseURL"`
+	HasAPIKey               bool   `json:"hasApiKey"`
+	BaseURL                 string `json:"baseURL"`
+	ReviewModel             string `json:"reviewModel,omitempty"`
+	ReviewEndpoint          string `json:"reviewEndpoint,omitempty"`
+	ReviewRewriteConfigured bool   `json:"reviewRewriteConfigured"`
 }
 
 // AIBatchRequest holds AI batch processing parameters.
@@ -89,6 +93,7 @@ type AIBatchRequest struct {
 	SourcePaths               []string `json:"sourcePaths"`
 	OutputDir                 string   `json:"outputDir"`
 	Prompt                    string   `json:"prompt"`
+	NegativePrompt            string   `json:"negativePrompt,omitempty"`
 	Model                     string   `json:"model"`
 	Size                      string   `json:"size"`
 	Quality                   string   `json:"quality"`

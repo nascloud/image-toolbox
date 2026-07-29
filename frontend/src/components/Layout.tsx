@@ -5,6 +5,7 @@ export interface TabDef {
   id: string;
   label: string;
   component: React.ReactNode;
+  keepAlive?: boolean;
 }
 
 interface LayoutProps {
@@ -48,7 +49,17 @@ export const Layout: React.FC<LayoutProps> = ({ tabs, activeTab, onTabChange }) 
           animation: animating ? 'fadeIn 250ms ease' : undefined,
         }}
       >
-        {activeContent}
+        {tabs.filter(tab => tab.keepAlive).map(tab => (
+          <section
+            key={tab.id}
+            className="tab-content"
+            hidden={activeTab !== tab.id}
+            aria-hidden={activeTab !== tab.id}
+          >
+            {tab.component}
+          </section>
+        ))}
+        {!tabs.find(tab => tab.id === activeTab)?.keepAlive && activeContent}
       </main>
       <StatusBar />
     </div>
