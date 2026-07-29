@@ -18,8 +18,10 @@ type appConfig struct {
 }
 
 type ProviderConfig struct {
-	ApiKey  string `json:"apiKey"`
-	BaseURL string `json:"baseURL"`
+	ApiKey         string `json:"apiKey"`
+	BaseURL        string `json:"baseURL"`
+	ReviewModel    string `json:"reviewModel,omitempty"`
+	ReviewEndpoint string `json:"reviewEndpoint,omitempty"`
 }
 
 const (
@@ -48,12 +50,16 @@ func SaveProviderConfigWithKeyMode(path, name, apiKey, baseURL string, preserveE
 	if cfg.Providers == nil {
 		cfg.Providers = make(map[string]ProviderConfig)
 	}
+	existing := cfg.Providers[name]
 	if preserveExistingKey {
-		if existing, ok := cfg.Providers[name]; ok {
-			apiKey = existing.ApiKey
-		}
+		apiKey = existing.ApiKey
 	}
-	cfg.Providers[name] = ProviderConfig{ApiKey: apiKey, BaseURL: baseURL}
+	cfg.Providers[name] = ProviderConfig{
+		ApiKey:         apiKey,
+		BaseURL:        baseURL,
+		ReviewModel:    existing.ReviewModel,
+		ReviewEndpoint: existing.ReviewEndpoint,
+	}
 	return saveConfig(path, cfg)
 }
 
@@ -70,6 +76,35 @@ func LoadProviderConfig(path, name string) (string, string, error) {
 		return p.ApiKey, defaultBaseURL(name), nil
 	}
 	return p.ApiKey, p.BaseURL, nil
+}
+
+// SaveProviderReviewConfig persists the explicit plain-text chat model and endpoint.
+func SaveProviderReviewConfig(path, name, reviewModel, reviewEndpoint string) error {
+	cfg, err := loadConfig(path)
+	if err != nil {
+		cfg = &appConfig{Providers: make(map[string]ProviderConfig)}
+	}
+	if cfg.Providers == nil {
+		cfg.Providers = make(map[string]ProviderConfig)
+	}
+	provider := cfg.Providers[name]
+	provider.ReviewModel = reviewModel
+	provider.ReviewEndpoint = reviewEndpoint
+	cfg.Providers[name] = provider
+	return saveConfig(path, cfg)
+}
+
+// LoadProviderReviewConfig returns the provider key plus explicit text configuration.
+func LoadProviderReviewConfig(path, name string) (string, string, string, error) {
+	cfg, err := loadConfig(path)
+	if err != nil {
+		return "", "", "", err
+	}
+	provider, ok := cfg.Providers[name]
+	if !ok {
+		return "", "", "", nil
+	}
+	return provider.ApiKey, provider.ReviewModel, provider.ReviewEndpoint, nil
 }
 
 func SaveActiveProvider(path, name string) error {

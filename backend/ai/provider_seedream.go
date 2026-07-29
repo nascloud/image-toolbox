@@ -51,6 +51,9 @@ func (p *SeedreamProvider) Generate(ctx context.Context, req model.AIImageReques
 		"prompt":    req.Prompt,
 		"watermark": req.Watermark,
 	}
+	if strings.TrimSpace(req.NegativePrompt) != "" {
+		body["negative_prompt"] = req.NegativePrompt
+	}
 
 	if req.Size != "" {
 		sizesMap := allowedSizesMap(caps.AllowedSizes)

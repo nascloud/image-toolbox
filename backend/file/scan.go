@@ -14,6 +14,7 @@ var imageExts = map[string]bool{
 	".webp": true,
 	".bmp":  true,
 	".gif":  true,
+	".tif":  true,
 	".tiff": true,
 }
 

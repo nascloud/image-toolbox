@@ -4,6 +4,7 @@ import { ConvertResize } from './pages/ConvertResize';
 import { Slice } from './pages/Slice';
 import { Watermark } from './pages/Watermark';
 import { AIBatch } from './pages/AIBatch';
+import { BuyerShow } from './pages/BuyerShow';
 import { Settings } from './pages/Settings';
 import { ProgressProvider } from './hooks/useProgress';
 import { OnFileDrop, OnFileDropOff, EventsOn } from '../wailsjs/runtime/runtime';
@@ -34,6 +35,8 @@ function MainApp() {
           setActiveTab('watermark');
         } else if (intent.page === 'aibatch') {
           setActiveTab('ai');
+        } else if (intent.page === 'buyer-show') {
+          setActiveTab('buyer-show');
         }
       }
     };
@@ -63,6 +66,7 @@ function MainApp() {
     { id: 'slice', label: '切片', component: <Slice /> },
     { id: 'watermark', label: '水印', component: <Watermark /> },
     { id: 'ai', label: 'AI 生成', component: <AIBatch /> },
+    { id: 'buyer-show', label: 'AI 买家秀', component: <BuyerShow active={activeTab === 'buyer-show'} />, keepAlive: true },
     { id: 'settings', label: '⚙ 设置', component: <Settings /> },
   ];
 

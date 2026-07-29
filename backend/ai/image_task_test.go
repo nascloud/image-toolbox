@@ -166,6 +166,89 @@ func TestProcessSingleImagesUsesDetectedOutputExtension(t *testing.T) {
 	}
 }
 
+func TestProcessSingleImagesPassesMultipleReferenceImagesInOrder(t *testing.T) {
+	dir := t.TempDir()
+	mainPath := writeSolidPNG(t, dir, "main.png", color.RGBA{R: 200, A: 255})
+	refOnePath := writeSolidPNG(t, dir, "ref-one.png", color.RGBA{G: 180, A: 255})
+	refTwoPath := writeSolidPNG(t, dir, "ref-two.png", color.RGBA{B: 160, A: 255})
+	resultPath := writeSolidPNG(t, dir, "result.png", color.RGBA{R: 80, G: 80, B: 80, A: 255})
+	resultData, err := os.ReadFile(resultPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	provider := &captureImageProvider{responseData: resultData}
+	_, err = ProcessSingleImagesWithContext(context.Background(), provider, mainPath, t.TempDir(), model.AIBatchRequest{
+		Model: "capture-model", Prompt: "test", ReferenceImages: []string{refOnePath, refTwoPath}, OutputFormat: "png",
+	}, "")
+	if err != nil {
+		t.Fatalf("ProcessSingleImagesWithContext() error = %v", err)
+	}
+	if !strings.HasPrefix(provider.request.Image, "data:image/png;base64,") {
+		t.Fatalf("main image was not encoded: %q", provider.request.Image)
+	}
+	if len(provider.request.ReferenceImages) != 2 {
+		t.Fatalf("reference count = %d", len(provider.request.ReferenceImages))
+	}
+	refOneData, _ := os.ReadFile(refOnePath)
+	refTwoData, _ := os.ReadFile(refTwoPath)
+	if provider.request.ReferenceImages[0] != "data:image/png;base64,"+base64.StdEncoding.EncodeToString(refOneData) ||
+		provider.request.ReferenceImages[1] != "data:image/png;base64,"+base64.StdEncoding.EncodeToString(refTwoData) {
+		t.Fatalf("reference images were not passed in path order")
+	}
+}
+
+type captureImageProvider struct {
+	request      model.AIImageRequest
+	responseData []byte
+}
+
+func (provider *captureImageProvider) Name() string { return "capture" }
+
+func (provider *captureImageProvider) Generate(_ context.Context, request model.AIImageRequest) (*model.AIImageResponse, error) {
+	provider.request = request
+	response := &model.AIImageResponse{}
+	response.Data = append(response.Data, struct {
+		URL     string `json:"url,omitempty"`
+		B64JSON string `json:"b64_json,omitempty"`
+		Size    string `json:"size,omitempty"`
+		Error   *struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		} `json:"error,omitempty"`
+	}{B64JSON: base64.StdEncoding.EncodeToString(provider.responseData)})
+	return response, nil
+}
+
+func (provider *captureImageProvider) Models() []model.ModelInfo { return nil }
+
+func (provider *captureImageProvider) ModelCapabilities(_ string) model.ModelCapabilities {
+	return model.ModelCapabilities{SupportsImageInput: true, SupportsOutputFormat: true, DefaultOutputFormat: "png"}
+}
+
+func writeSolidPNG(t *testing.T, dir, name string, fill color.Color) string {
+	t.Helper()
+	path := filepath.Join(dir, name)
+	img := image.NewRGBA(image.Rect(0, 0, 4, 4))
+	for y := 0; y < 4; y++ {
+		for x := 0; x < 4; x++ {
+			img.Set(x, y, fill)
+		}
+	}
+	file, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := png.Encode(file, img); err != nil {
+		file.Close()
+		t.Fatal(err)
+	}
+	if err := file.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
 func TestProcessSingleImagesRejectsModelWithoutImageInput(t *testing.T) {
 	srcPath := filepath.Join(t.TempDir(), "source.png")
 	src := image.NewRGBA(image.Rect(0, 0, 20, 20))

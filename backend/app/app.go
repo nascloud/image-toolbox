@@ -464,6 +464,44 @@ func (a *App) RunAIImageBatch(req model.AIBatchRequest) (model.BatchResult, erro
 	return result, nil
 }
 
+// ScanBuyerShowImport imports a parent folder or one complete set using local analysis only.
+func (a *App) ScanBuyerShowImport(req model.BuyerShowScanRequest) (model.BuyerShowScanResult, error) {
+	return file.ScanBuyerShowSets(req)
+}
+
+// RunBuyerShowBatch generates fixed buyer-show slots 2-6.
+func (a *App) RunBuyerShowBatch(req model.BuyerShowBatchRequest) (model.BuyerShowBatchResult, error) {
+	ctx, cleanup := a.newBatchContext()
+	defer cleanup()
+	progressCh := make(chan model.BuyerShowProgressUpdate, 100)
+	go func() {
+		for update := range progressCh {
+			runtime.EventsEmit(a.ctx, "buyer-show-progress", update)
+		}
+	}()
+
+	configPath := filepath.Join(getConfigDir(), "config.json")
+	result := batch.RunBuyerShowBatch(ctx, req, configPath, progressCh)
+	close(progressCh)
+	return result, nil
+}
+
+// RedrawBuyerShowImage regenerates one fixed buyer-show slot.
+func (a *App) RedrawBuyerShowImage(req model.BuyerShowRedrawRequest) (model.BuyerShowSlotResult, error) {
+	ctx, cleanup := a.newBatchContext()
+	defer cleanup()
+	configPath := filepath.Join(getConfigDir(), "config.json")
+	return batch.RedrawBuyerShowSlot(ctx, req, configPath)
+}
+
+// RewriteBuyerShowReview rewrites editable text without changing the source file.
+func (a *App) RewriteBuyerShowReview(req model.BuyerShowReviewRewriteRequest) (model.BuyerShowReviewRewriteResult, error) {
+	ctx, cleanup := a.newBatchContext()
+	defer cleanup()
+	configPath := filepath.Join(getConfigDir(), "config.json")
+	return batch.RewriteBuyerShowReview(ctx, req, configPath)
+}
+
 // SaveApiKey persists the API key to the config file.
 func (a *App) SaveApiKey(apiKey string) error {
 	configPath := filepath.Join(getConfigDir(), "config.json")
@@ -567,9 +605,16 @@ func (a *App) GetProviderConfig(providerName string) (model.ProviderConfigRespon
 	if err != nil {
 		return model.ProviderConfigResponse{}, err
 	}
+	_, reviewModel, reviewEndpoint, reviewErr := config.LoadProviderReviewConfig(configPath, providerName)
+	if reviewErr != nil {
+		return model.ProviderConfigResponse{}, reviewErr
+	}
 	return model.ProviderConfigResponse{
-		HasAPIKey: apiKey != "",
-		BaseURL:   baseURL,
+		HasAPIKey:               apiKey != "",
+		BaseURL:                 baseURL,
+		ReviewModel:             reviewModel,
+		ReviewEndpoint:          reviewEndpoint,
+		ReviewRewriteConfigured: apiKey != "" && reviewModel != "" && reviewEndpoint != "",
 	}, nil
 }
 
@@ -577,6 +622,12 @@ func (a *App) GetProviderConfig(providerName string) (model.ProviderConfigRespon
 func (a *App) SaveProviderConfig(providerName, apiKey, baseURL string, preserveExistingKey bool) error {
 	configPath := filepath.Join(getConfigDir(), "config.json")
 	return config.SaveProviderConfigWithKeyMode(configPath, providerName, apiKey, baseURL, preserveExistingKey)
+}
+
+// SaveProviderReviewConfig persists an explicit plain-text endpoint and model.
+func (a *App) SaveProviderReviewConfig(providerName, reviewModel, reviewEndpoint string) error {
+	configPath := filepath.Join(getConfigDir(), "config.json")
+	return config.SaveProviderReviewConfig(configPath, providerName, strings.TrimSpace(reviewModel), strings.TrimSpace(reviewEndpoint))
 }
 
 // SetActiveProvider sets the default provider.

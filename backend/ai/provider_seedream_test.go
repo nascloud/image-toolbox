@@ -239,6 +239,49 @@ func TestSeedreamIncludesOutputFormatForSeedream5(t *testing.T) {
 	}
 }
 
+func TestSeedreamSendsMultipleReferenceImagesInOrder(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		images, ok := req["image"].([]any)
+		if !ok {
+			t.Fatalf("image = %#v, want array", req["image"])
+		}
+		expected := []string{"data:image/png;base64,main", "data:image/png;base64,ref1", "data:image/png;base64,ref2"}
+		if len(images) != len(expected) {
+			t.Fatalf("image count = %d, want %d", len(images), len(expected))
+		}
+		for index, want := range expected {
+			if images[index] != want {
+				t.Fatalf("image[%d] = %v, want %q", index, images[index], want)
+			}
+		}
+		json.NewEncoder(w).Encode(model.AIImageResponse{
+			Data: []struct {
+				URL     string `json:"url,omitempty"`
+				B64JSON string `json:"b64_json,omitempty"`
+				Size    string `json:"size,omitempty"`
+				Error   *struct {
+					Code    string `json:"code"`
+					Message string `json:"message"`
+				} `json:"error,omitempty"`
+			}{{URL: "http://example.com/img.png"}},
+		})
+	}))
+	defer server.Close()
+
+	provider := NewSeedreamProvider("test-key", server.URL)
+	_, err := provider.Generate(context.Background(), model.AIImageRequest{
+		Model: "doubao-seedream-5-0-lite-260128", Prompt: "test", Size: "2K",
+		Image: "data:image/png;base64,main", ReferenceImages: []string{"data:image/png;base64,ref1", "data:image/png;base64,ref2"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestSeedreamOmitsImageAndSequentialForSeedream3(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req map[string]any

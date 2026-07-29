@@ -4,9 +4,9 @@ import { useProgressContext } from '../hooks/useProgress';
 export const Settings: React.FC = () => {
   const [aiOutputDir, setAiOutputDir] = useState('');
   const [dirSaved, setDirSaved] = useState(false);
-  const [providers, setProviders] = useState<{[key: string]: {apiKey: string, baseURL: string, hasApiKey: boolean}}>({
-    seedream: {apiKey: '', baseURL: 'https://ark.cn-beijing.volces.com/api/v3', hasApiKey: false},
-    chatgpt2api: {apiKey: '', baseURL: 'http://localhost:3000', hasApiKey: false},
+  const [providers, setProviders] = useState<{[key: string]: {apiKey: string, baseURL: string, hasApiKey: boolean, reviewModel: string, reviewEndpoint: string}}>({
+    seedream: {apiKey: '', baseURL: 'https://ark.cn-beijing.volces.com/api/v3', hasApiKey: false, reviewModel: '', reviewEndpoint: 'https://ark.cn-beijing.volces.com/api/v3/chat/completions'},
+    chatgpt2api: {apiKey: '', baseURL: 'http://localhost:3000', hasApiKey: false, reviewModel: '', reviewEndpoint: ''},
   });
   const [activeProvider, setActiveProvider] = useState('seedream');
   const [providerSaved, setProviderSaved] = useState<{[key: string]: boolean}>({});
@@ -32,7 +32,14 @@ export const Settings: React.FC = () => {
           const cfg = await (window as any).go.main.App.GetProviderConfig(name);
           setProviders(prev => ({
             ...prev,
-            [name]: {apiKey: '', hasApiKey: !!cfg.hasApiKey, baseURL: cfg.baseURL || prev[name].baseURL}
+            [name]: {
+              ...prev[name],
+              apiKey: '',
+              hasApiKey: !!cfg.hasApiKey,
+              baseURL: cfg.baseURL || prev[name].baseURL,
+              reviewModel: cfg.reviewModel || '',
+              reviewEndpoint: cfg.reviewEndpoint || prev[name].reviewEndpoint,
+            }
           }));
         } catch { /* no-op */ }
       }
@@ -52,6 +59,7 @@ export const Settings: React.FC = () => {
       const apiKey = providers[name].apiKey.trim();
       const preserveExistingKey = apiKey === '' && providers[name].hasApiKey;
       await (window as any).go.main.App.SaveProviderConfig(name, apiKey, providers[name].baseURL, preserveExistingKey);
+      await (window as any).go.main.App.SaveProviderReviewConfig(name, providers[name].reviewModel, providers[name].reviewEndpoint);
       setProviders(prev => ({
         ...prev,
         [name]: {...prev[name], apiKey: '', hasApiKey: preserveExistingKey || apiKey !== ''}
@@ -123,6 +131,27 @@ export const Settings: React.FC = () => {
             onChange={e => setProviders(p => ({...p, [name]: {...p[name], baseURL: e.target.value}}))}
             className="input"
           />
+          <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--color-border-subtle)' }}>
+            <label className="text-sm" style={{ display: 'block', marginBottom: 6, fontWeight: 600 }}>评价 AI 重写（可选）</label>
+            <input
+              type="text"
+              placeholder={name === 'seedream' ? '语言模型推理接入点 ID' : '文本模型 ID'}
+              value={providers[name].reviewModel}
+              onChange={e => setProviders(p => ({...p, [name]: {...p[name], reviewModel: e.target.value}}))}
+              className="input"
+            />
+            <div style={{ marginTop: 8 }} />
+            <input
+              type="text"
+              placeholder="完整 Chat Completions Endpoint"
+              value={providers[name].reviewEndpoint}
+              onChange={e => setProviders(p => ({...p, [name]: {...p[name], reviewEndpoint: e.target.value}}))}
+              className="input"
+            />
+            <p className="text-xs text-muted mt-4">
+              必须是返回纯文本的 OpenAI-compatible Chat Completions 接口；图片对话接口不能用于评价改写。
+            </p>
+          </div>
           <p className="text-xs text-muted mt-4">
             API Key 仅保存在本地 ~/.imagetool/config.json，不会上传到任何第三方
           </p>
