@@ -52,6 +52,26 @@ func TestOpenAIDefaultBaseURL(t *testing.T) {
 	}
 }
 
+func TestOpenAIDefaultReviewConfig(t *testing.T) {
+	cfgPath := filepath.Join(t.TempDir(), "config.json")
+	apiKey, modelID, endpoint, err := LoadProviderReviewConfig(cfgPath, "openai")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if apiKey != "" {
+		t.Fatalf("expected empty API key, got %q", apiKey)
+	}
+	if modelID != "gpt-6-sol" {
+		t.Fatalf("expected default review model gpt-6-sol, got %q", modelID)
+	}
+	if endpoint != "https://open2api.kuvms.net/v1/responses" {
+		t.Fatalf("unexpected default review endpoint %q", endpoint)
+	}
+	if DefaultOpenAIReasoningEffort != "medium" {
+		t.Fatalf("expected default reasoning effort medium, got %q", DefaultOpenAIReasoningEffort)
+	}
+}
+
 func TestLegacyConfigMigration(t *testing.T) {
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "config.json")

@@ -161,6 +161,9 @@ func TestRunBuyerShowBatchRunsSetsConcurrentlyAndSlotsSeriallyWithRelay(t *testi
 			t.Fatalf("decode request: %v", err)
 		}
 		prompt, _ := payload["prompt"].(string)
+		if strings.Contains(prompt, "仅用于评价的测试文本") || strings.Contains(prompt, "评价仅作为使用感受") {
+			t.Errorf("image prompt must not contain review text: %q", prompt)
+		}
 		setName := "套装-A"
 		if strings.Contains(prompt, "套装-B") {
 			setName = "套装-B"
@@ -221,10 +224,12 @@ func TestRunBuyerShowBatchRunsSetsConcurrentlyAndSlotsSeriallyWithRelay(t *testi
 	setA.SetID = "set-a"
 	setA.SetName = "套装-A"
 	setA.Product.Name = "套装-A"
+	setA.ReviewText = "仅用于评价的测试文本-A"
 	setB := validBuyerShowSet(t)
 	setB.SetID = "set-b"
 	setB.SetName = "套装-B"
 	setB.Product.Name = "套装-B"
+	setB.ReviewText = "仅用于评价的测试文本-B"
 
 	result := RunBuyerShowBatch(context.Background(), model.BuyerShowBatchRequest{
 		Options: model.BuyerShowGenerationOptions{

@@ -14,10 +14,15 @@
 |---|---|
 | API Key | Sub2API 访问令牌 |
 | Base URL | Sub2API OpenAI 兼容地址，默认 `https://open2api.kuvms.net` |
+| 评价重写模型 | `gpt-6-sol` |
+| 评价重写 Endpoint | `https://open2api.kuvms.net/v1/responses` |
+| 评价推理强度 | `medium` |
 
 后端统一发送 `Authorization: Bearer <API Key>`。Base URL 不以 `/v1` 结尾时，后端会自动补上 `/v1`。
 
 空 Base URL 时使用默认地址 `https://open2api.kuvms.net`。
+
+“评价 AI 重写”默认使用 `gpt-6-sol` 和 `medium` 推理强度调用上述 Responses Endpoint，并复用 OpenAI Provider 的 API Key。配置文件未填写模型或 Endpoint 时，后端也会使用这组默认值。
 
 ## 当前使用的接口
 

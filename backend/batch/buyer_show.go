@@ -390,7 +390,11 @@ func RewriteBuyerShowReview(ctx context.Context, req model.BuyerShowReviewRewrit
 	if err != nil {
 		return model.BuyerShowReviewRewriteResult{}, err
 	}
-	client := backendAI.NewOpenAICompatibleTextProvider(apiKey, endpoint)
+	reasoningEffort := ""
+	if providerName == backendAI.ProviderOpenAI {
+		reasoningEffort = config.DefaultOpenAIReasoningEffort
+	}
+	client := backendAI.NewOpenAICompatibleTextProvider(apiKey, endpoint, reasoningEffort)
 	rewritten, err := client.Rewrite(ctx, modelID, systemPrompt, userPrompt)
 	if err != nil {
 		return model.BuyerShowReviewRewriteResult{}, err

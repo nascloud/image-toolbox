@@ -6,7 +6,7 @@ export const Settings: React.FC = () => {
   const [dirSaved, setDirSaved] = useState(false);
   const [providers, setProviders] = useState<{[key: string]: {apiKey: string, baseURL: string, hasApiKey: boolean, reviewModel: string, reviewEndpoint: string}}>({
     seedream: {apiKey: '', baseURL: 'https://ark.cn-beijing.volces.com/api/v3', hasApiKey: false, reviewModel: '', reviewEndpoint: 'https://ark.cn-beijing.volces.com/api/v3/chat/completions'},
-    openai: {apiKey: '', baseURL: 'https://open2api.kuvms.net', hasApiKey: false, reviewModel: '', reviewEndpoint: ''},
+    openai: {apiKey: '', baseURL: 'https://open2api.kuvms.net', hasApiKey: false, reviewModel: 'gpt-6-sol', reviewEndpoint: 'https://open2api.kuvms.net/v1/responses'},
   });
   const [activeProvider, setActiveProvider] = useState('seedream');
   const [providerSaved, setProviderSaved] = useState<{[key: string]: boolean}>({});
@@ -37,7 +37,7 @@ export const Settings: React.FC = () => {
               apiKey: '',
               hasApiKey: !!cfg.hasApiKey,
               baseURL: cfg.baseURL || prev[name].baseURL,
-              reviewModel: cfg.reviewModel || '',
+              reviewModel: cfg.reviewModel || prev[name].reviewModel,
               reviewEndpoint: cfg.reviewEndpoint || prev[name].reviewEndpoint,
             }
           }));
@@ -143,13 +143,13 @@ export const Settings: React.FC = () => {
             <div style={{ marginTop: 8 }} />
             <input
               type="text"
-              placeholder="完整 Chat Completions Endpoint"
+              placeholder="完整 Responses 或 Chat Completions Endpoint"
               value={providers[name].reviewEndpoint}
               onChange={e => setProviders(p => ({...p, [name]: {...p[name], reviewEndpoint: e.target.value}}))}
               className="input"
             />
             <p className="text-xs text-muted mt-4">
-              必须是返回纯文本的 OpenAI-compatible Chat Completions 接口；图片对话接口不能用于评价改写。
+              支持 OpenAI-compatible Responses 和 Chat Completions 接口；OpenAI 默认使用 Responses API 与 medium 推理强度。
             </p>
           </div>
           <p className="text-xs text-muted mt-4">

@@ -25,8 +25,11 @@ type ProviderConfig struct {
 }
 
 const (
-	DefaultSeedreamBaseURL = "https://ark.cn-beijing.volces.com/api/v3"
-	DefaultOpenAIBaseURL   = "https://open2api.kuvms.net"
+	DefaultSeedreamBaseURL       = "https://ark.cn-beijing.volces.com/api/v3"
+	DefaultOpenAIBaseURL         = "https://open2api.kuvms.net"
+	DefaultOpenAIReviewModel     = "gpt-6-sol"
+	DefaultOpenAIReviewEndpoint  = DefaultOpenAIBaseURL + "/v1/responses"
+	DefaultOpenAIReasoningEffort = "medium"
 
 	openAIProviderName = "openai"
 )
@@ -96,17 +99,24 @@ func SaveProviderReviewConfig(path, name, reviewModel, reviewEndpoint string) er
 	return saveConfig(path, cfg)
 }
 
-// LoadProviderReviewConfig returns the provider key plus explicit text configuration.
+// LoadProviderReviewConfig returns the provider key plus plain-text configuration.
 func LoadProviderReviewConfig(path, name string) (string, string, string, error) {
 	cfg, err := loadConfig(path)
 	if err != nil {
 		return "", "", "", err
 	}
-	provider, ok := cfg.Providers[name]
-	if !ok {
-		return "", "", "", nil
+	provider := cfg.Providers[name]
+	reviewModel := provider.ReviewModel
+	reviewEndpoint := provider.ReviewEndpoint
+	if name == openAIProviderName {
+		if reviewModel == "" {
+			reviewModel = DefaultOpenAIReviewModel
+		}
+		if reviewEndpoint == "" {
+			reviewEndpoint = DefaultOpenAIReviewEndpoint
+		}
 	}
-	return provider.ApiKey, provider.ReviewModel, provider.ReviewEndpoint, nil
+	return provider.ApiKey, reviewModel, reviewEndpoint, nil
 }
 
 func SaveActiveProvider(path, name string) error {

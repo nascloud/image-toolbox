@@ -10,6 +10,9 @@
 |---|---|
 | API Key | Sub2API 分配的访问令牌 |
 | Base URL | Sub2API 的 OpenAI 兼容基础地址 |
+| 评价重写模型 | 默认 `gpt-6-sol` |
+| 评价重写 Endpoint | 默认 `https://open2api.kuvms.net/v1/responses` |
+| 评价推理强度 | 默认 `medium` |
 
 请求统一使用：
 
@@ -24,6 +27,8 @@ Base URL 可以填写服务根地址，也可以以 `/v1` 结尾：
 
 后端会移除 Base URL 末尾的 `/`，并保证 `/v1` 只出现一次。空 Base URL 时使用默认地址 `https://open2api.kuvms.net`。
 
+买家秀评价重写复用该 Provider 的 API Key，通过 Responses API 发送 `reasoning: {"effort":"medium"}`。配置文件中的 `reviewModel` 或 `reviewEndpoint` 为空时，后端分别回退到上述默认模型和 Endpoint。
+
 ## 二、ImageToolbox 实际调用的接口
 
 | 方法 | 路径 | 用途 |
@@ -32,7 +37,7 @@ Base URL 可以填写服务根地址，也可以以 `/v1` 结尾：
 | `POST` | `/v1/images/generations` | 文生图 |
 | `POST` | `/v1/images/edits` | 单图或多参考图编辑 |
 
-当前图片 Provider **不会调用** `/v1/chat/completions` 或 `/v1/responses`。买家秀评价改写使用设置页单独配置的文本 Endpoint，不属于本文图片接口。
+当前图片 Provider 不调用 `/v1/chat/completions` 或 `/v1/responses`。买家秀评价重写独立调用默认 `/v1/responses` 文本 Endpoint，不属于图片接口。
 
 HTTP 客户端超时为 180 秒。模型列表成功获取后缓存 10 分钟；获取失败时使用代码内置的模型列表。
 
