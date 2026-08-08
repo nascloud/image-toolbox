@@ -189,7 +189,7 @@ function displayModelName(m: { id: string; name?: string }): string {
 
 const providerDefaultModel: Record<string, string> = {
   seedream: 'doubao-seedream-5-0-lite-260128',
-  chatgpt2api: 'gpt-image-2',
+  openai: 'gpt-image-2',
 };
 
 // ── Component ──
@@ -433,7 +433,7 @@ export const AIBatch: React.FC = () => {
   const isWebSearchSupported = hasCapabilities ? (currentModelCaps.supportsWebSearch ?? false) : model.includes('5-0');
   const isFastPromptOptimizeSupported = hasCapabilities ? (currentModelCaps.supportsFastPromptOptimize ?? false) : model.includes('4-0');
   const modelSizeOptions = useMemo((): string[] => {
-    if (provider === 'chatgpt2api') {
+    if (provider === 'openai') {
       return ['auto', '1:1', '3:4', '4:3', '16:9', '9:16', '3:2', '2:3', '21:9'];
     }
     if (currentModelCaps.allowedSizes?.length) return currentModelCaps.allowedSizes;
@@ -1444,8 +1444,8 @@ export const AIBatch: React.FC = () => {
                 </select>
               </div>
 
-              {/* --- Quality (ChatGPT2API only) --- */}
-              {provider === 'chatgpt2api' && (<div className="param-row">
+              {/* --- Quality (OpenAI/Sub2API only) --- */}
+              {provider === 'openai' && (<div className="param-row">
                 <span className="param-label">画质</span>
                 <select value={quality} onChange={e => setQuality(e.target.value)} className="select" style={{ width: 150, fontSize: 12, padding: '4px 8px' }}>
                   <option value="auto">自动 (AI决定)</option>
@@ -1668,7 +1668,7 @@ export const AIBatch: React.FC = () => {
                   style={{ fontSize: 12, padding: '4px 8px', width: 120 }}
                 >
                   <option value="seedream">Seedream</option>
-                  <option value="chatgpt2api">ChatGPT2API</option>
+                  <option value="openai">OpenAI (Sub2API)</option>
                 </select>
               </div>
               {/* Model */}

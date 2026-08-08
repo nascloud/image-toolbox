@@ -17,13 +17,13 @@ func TestNewProviderSeedream(t *testing.T) {
 	}
 }
 
-func TestNewProviderChatGPT2API(t *testing.T) {
-	p, err := NewProvider("chatgpt2api", "test-key", DefaultChatGPT2APIBaseURL)
+func TestNewProviderOpenAI(t *testing.T) {
+	p, err := NewProvider("openai", "test-key", DefaultOpenAIBaseURL)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if p.Name() != "chatgpt2api" {
-		t.Fatalf("expected chatgpt2api, got %s", p.Name())
+	if p.Name() != "openai" {
+		t.Fatalf("expected openai, got %s", p.Name())
 	}
 }
 

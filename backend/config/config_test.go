@@ -38,6 +38,20 @@ func TestLoadEmptyApiKey(t *testing.T) {
 	}
 }
 
+func TestOpenAIDefaultBaseURL(t *testing.T) {
+	cfgPath := filepath.Join(t.TempDir(), "config.json")
+	apiKey, baseURL, err := LoadProviderConfig(cfgPath, "openai")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if apiKey != "" {
+		t.Fatalf("expected empty API key, got %q", apiKey)
+	}
+	if baseURL != "https://open2api.kuvms.net" {
+		t.Fatalf("expected OpenAI default Base URL, got %q", baseURL)
+	}
+}
+
 func TestLegacyConfigMigration(t *testing.T) {
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "config.json")
@@ -70,10 +84,10 @@ func TestProviderConfigRoundTrip(t *testing.T) {
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "config.json")
 
-	if err := SaveProviderConfig(cfgPath, "chatgpt2api", "sk-new", "https://example.com"); err != nil {
+	if err := SaveProviderConfig(cfgPath, "openai", "sk-new", "https://example.com"); err != nil {
 		t.Fatal(err)
 	}
-	apiKey, baseURL, err := LoadProviderConfig(cfgPath, "chatgpt2api")
+	apiKey, baseURL, err := LoadProviderConfig(cfgPath, "openai")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -81,15 +95,15 @@ func TestProviderConfigRoundTrip(t *testing.T) {
 		t.Fatalf("got %s, %s", apiKey, baseURL)
 	}
 
-	if err := SaveActiveProvider(cfgPath, "chatgpt2api"); err != nil {
+	if err := SaveActiveProvider(cfgPath, "openai"); err != nil {
 		t.Fatal(err)
 	}
 	active, err := LoadActiveProvider(cfgPath)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if active != "chatgpt2api" {
-		t.Fatalf("expected chatgpt2api, got %s", active)
+	if active != "openai" {
+		t.Fatalf("expected openai, got %s", active)
 	}
 
 	// Verify legacy top-level apiKey field is not written
@@ -129,14 +143,14 @@ func TestSaveProviderConfigPreservesExistingKey(t *testing.T) {
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "config.json")
 
-	if err := SaveProviderConfig(cfgPath, "chatgpt2api", "sk-original", "http://localhost:3000"); err != nil {
+	if err := SaveProviderConfig(cfgPath, "openai", "sk-original", "https://open2api.kuvms.net"); err != nil {
 		t.Fatal(err)
 	}
-	if err := SaveProviderConfigWithKeyMode(cfgPath, "chatgpt2api", "", "http://127.0.0.1:3000", true); err != nil {
+	if err := SaveProviderConfigWithKeyMode(cfgPath, "openai", "", "http://127.0.0.1:3000", true); err != nil {
 		t.Fatal(err)
 	}
 
-	apiKey, baseURL, err := LoadProviderConfig(cfgPath, "chatgpt2api")
+	apiKey, baseURL, err := LoadProviderConfig(cfgPath, "openai")
 	if err != nil {
 		t.Fatal(err)
 	}

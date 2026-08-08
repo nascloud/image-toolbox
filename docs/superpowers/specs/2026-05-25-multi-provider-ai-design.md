@@ -4,12 +4,12 @@ Date: 2026-05-25
 
 ## Background
 
-Currently the application supports only one AI image generation provider: Volcano Engine Ark API (Seedream models). The ChatGPT2API (an OpenAI-compatible image API) needs to be integrated to support both text-to-image and image editing.
+Currently the application supports Volcano Engine Ark API (Seedream models). An OpenAI-compatible Sub2API provider needs to be integrated to support both text-to-image and image editing.
 
 ## Goals
 
 - Refactor the AI backend to support multiple providers via a common interface
-- Integrate ChatGPT2API as a second provider (generations + edits endpoints)
+- Integrate OpenAI (Sub2API) as a second provider (generations + edits endpoints)
 - Allow users to switch providers without restarting the application
 - Support per-provider API Key and Base URL configuration
 - Minimal disruption to existing Seedream workflow
@@ -18,7 +18,7 @@ Currently the application supports only one AI image generation provider: Volcan
 ## Non-Goals
 
 - Removing Seedream provider
-- Supporting streaming responses from ChatGPT2API
+- Supporting streaming responses from OpenAI (Sub2API)
 - Supporting file upload via multipart/form-data for edits (JSON-only is sufficient, because Wails bindings only support JSON-serializable parameters; base64 data URIs work for typical image sizes under ~10MB per image)
 
 ## Architecture
@@ -82,7 +82,7 @@ Provider factory function:
 func NewProvider(name, apiKey, baseURL string) (Provider, error)
 ```
 
-Returns `SeedreamProvider` or `ChatGPT2APIProvider` based on name.
+Returns `SeedreamProvider` or `OpenAIProvider` based on name.
 
 ### Provider: SeedreamProvider
 
@@ -96,12 +96,12 @@ File: `backend/ai/provider_seedream.go` (migrated from existing `client.go`)
 - Response format: existing `AIImageResponse` struct
 - Timeout: 120s (unchanged from current default)
 
-### Provider: ChatGPT2APIProvider
+### Provider: OpenAIProvider
 
-File: `backend/ai/provider_chatgpt2api.go`
+File: `backend/ai/provider_openai.go`
 
-- BaseURL: configurable (default: `https://image.wq727.cf:21118`)
-- Timeout: 180s (ChatGPT2API may be slower due to upstream routing)
+- BaseURL: configurable (default: `https://open2api.kuvms.net`)
+- Timeout: 180s (Sub2API may be slower due to upstream routing)
 - Endpoints:
   - `POST /v1/images/generations` — text-to-image when `req.Image` is empty
   - `POST /v1/images/edits` — image editing when `req.Image` is non-empty
@@ -141,9 +141,9 @@ File: `backend/ai/provider_chatgpt2api.go`
 
 #### Response format compatibility
 
-ChatGPT2API returns an OpenAI-compatible response that maps to the existing `model.AIImageResponse` struct:
+Sub2API returns an OpenAI-compatible response that maps to the existing `model.AIImageResponse` struct:
 
-| ChatGPT2API field | AIImageResponse mapping | Notes |
+| Sub2API field | AIImageResponse mapping | Notes |
 |---|---|---|
 | `data[].b64_json` | `Data[].B64JSON` | ✅ direct match |
 | `data[].url` | `Data[].URL` | ✅ direct match |
@@ -151,7 +151,7 @@ ChatGPT2API returns an OpenAI-compatible response that maps to the existing `mod
 | `error.message` | `Error.Message` | ✅ direct match |
 | `error.type` | _(not captured)_ | OpenAI includes `type` field; we only use `code` + `message` |
 
-The existing struct's `omitempty` tags and unused fields (`Size`, `Usage`) are harmlessly ignored when parsing ChatGPT2API responses. No struct changes needed for initial integration.
+The existing struct's `omitempty` tags and unused fields (`Size`, `Usage`) are harmlessly ignored when parsing Sub2API responses. No struct changes needed for initial integration.
 
 ### Shared Utilities
 
@@ -208,8 +208,8 @@ File: `backend/model/ai.go`
 `AIBatchRequest` adds:
 ```go
 type AIBatchRequest struct {
-    Provider string `json:"provider"` // "seedream" | "chatgpt2api"
-    N        int    `json:"n"`        // number of images per request (ChatGPT2API only, 1-4)
+    Provider string `json:"provider"` // "seedream" | "openai"
+    N        int    `json:"n"`        // number of images per request (OpenAI only, 1-4)
     // ... existing fields
 }
 ```
@@ -265,7 +265,7 @@ File: `backend/batch/ai.go`
 
 Default model and size logic becomes provider-aware:
 - Seedream defaults: model=`"doubao-seedream-5-0-260128"`, size=`"2048x2048"`
-- ChatGPT2API defaults: model=`"gpt-image-2"`, size not used (API determines)
+- OpenAI defaults: model=`"gpt-image-2"`, size not used (API determines)
 
 ### App API Changes
 
@@ -288,18 +288,18 @@ Existing `SaveApiKey`/`GetApiKey` remain for backward compatibility.
 - Add **Provider selector** dropdown at top of page
   - On provider change, call `GetProviderModels()` and rebuild model dropdown + parameter UI
   - **File list is preserved** across provider switches (the input images don't change)
-  - **Provider-specific parameter state is preserved** independently: switching from Seedream → ChatGPT2API and back restores previously-configured Seedream parameters (seed, guidance_scale, etc.)
+  - **Provider-specific parameter state is preserved** independently: switching from Seedream → OpenAI and back restores previously-configured Seedream parameters (seed, guidance_scale, etc.)
 - **Parameter panel** dynamically renders based on model capabilities:
   - Seedream: all existing params (seed, guidance_scale, sequential, watermark, web_search, etc.)
-  - ChatGPT2API: prompt, n (1-4), reference images (for edit mode)
-  - ChatGPT2API edit mode: when input image is provided, show "edit" action type selector alongside default "generate"
+  - OpenAI: prompt, n (1-4), reference images (for edit mode)
+  - OpenAI edit mode: when input image is provided, show "edit" action type selector alongside default "generate"
 - **`n` parameter UX**: Clearly label that `n` controls "images generated per request". When batch-processing N input images with n=2, show a note: "Will generate N × 2 = 2N total images". This prevents confusion between "number of input images" and "images per generation".
 - Model dropdown repopulated from backend response
 - Settings defaults loaded on page mount
 
 #### Settings.tsx
 - Replace single API Key input with a **Provider configuration section**:
-  - Tab or section for each provider (Seedream, ChatGPT2API)
+  - Tab or section for each provider (Seedream, OpenAI)
   - Each section: API Key input + Base URL input (with placeholder showing the default URL)
 - Add **Default Provider** dropdown
 
@@ -312,7 +312,7 @@ User selects provider on AI page
   → Frontend renders model dropdown and parameter controls
 
 User configures batch and clicks "Start"
-  → Frontend sends AIBatchRequest with provider="seedream"|"chatgpt2api"
+  → Frontend sends AIBatchRequest with provider="seedream"|"openai"
   → backend/app/app.go → batch.RunAIImageBatch()
   → batch/ai.go creates provider via factory using saved config
   → For each image: ProcessSingleImagesWithContext(provider, ...)
@@ -324,15 +324,15 @@ User configures batch and clicks "Start"
 
 - Unknown provider name: return error with available providers list
 - Missing API key for selected provider: return clear error message specifying which provider needs configuration
-- ChatGPT2API endpoint errors: parsed from OpenAI error format (`error.message` + `error.type`)
+- OpenAI endpoint errors: parsed from OpenAI error format (`error.message` + `error.type`)
 - Single image failure within batch: logged, other images continue (existing pattern)
 
 ### Testing Strategy
 
-- Unit tests for `ChatGPT2APIProvider.Generate()` — verify request body format, URL routing (generations vs edits), response parsing
+- Unit tests for `OpenAIProvider.Generate()` — verify request body format, URL routing (generations vs edits), response parsing
 - Unit tests for `NewProvider()` factory — unknown name error handling
 - Unit tests for config serialization/deserialization with new `Providers` map, including legacy migration
-- Integration test against ChatGPT2API mock server for edits endpoint
+- Integration test against a Sub2API mock server for edits endpoint
 - Verify `AllowedSizes` migration: ensure `containsSize()` works correctly with the new `[]string` type
 - Verify `SupportsSeed` is used instead of `SupportsGuidanceScale` for seed gating
 - Existing Seedream tests remain unchanged and should pass without modification
@@ -351,7 +351,7 @@ User configures batch and clicks "Start"
 New files:
 - `backend/ai/provider.go` — interface, factory function
 - `backend/ai/provider_seedream.go` — migrate from client.go
-- `backend/ai/provider_chatgpt2api.go` — new provider
+- `backend/ai/provider_openai.go` — new provider
 - `backend/ai/download.go` — extracted DownloadImage/DownloadImageWithContext (shared utility)
 
 Modified files:

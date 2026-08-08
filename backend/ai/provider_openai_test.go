@@ -14,7 +14,7 @@ import (
 	"image-toolbox/backend/model"
 )
 
-func TestChatGPT2APIGenerateGenerations(t *testing.T) {
+func TestOpenAIGenerateGenerations(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !strings.HasSuffix(r.URL.Path, "/v1/images/generations") {
 			t.Fatalf("expected /v1/images/generations, got %s", r.URL.Path)
@@ -69,7 +69,7 @@ func TestChatGPT2APIGenerateGenerations(t *testing.T) {
 	}))
 	defer server.Close()
 
-	p := NewChatGPT2APIProvider("test-key", server.URL)
+	p := NewOpenAIProvider("test-key", server.URL)
 
 	req := model.AIImageRequest{
 		Model:        "gpt-image-2",
@@ -89,7 +89,7 @@ func TestChatGPT2APIGenerateGenerations(t *testing.T) {
 	}
 }
 
-func TestChatGPT2APIGenerateGenerationsWithV1BaseURL(t *testing.T) {
+func TestOpenAIGenerateGenerationsWithV1BaseURL(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/v1/images/generations" {
 			t.Fatalf("expected /v1/images/generations, got %s", r.URL.Path)
@@ -108,7 +108,7 @@ func TestChatGPT2APIGenerateGenerationsWithV1BaseURL(t *testing.T) {
 	}))
 	defer server.Close()
 
-	p := NewChatGPT2APIProvider("test-key", server.URL+"/v1")
+	p := NewOpenAIProvider("test-key", server.URL+"/v1")
 	resp, err := p.Generate(context.Background(), model.AIImageRequest{
 		Model:  "gpt-image-2",
 		Prompt: "test prompt",
@@ -121,7 +121,7 @@ func TestChatGPT2APIGenerateGenerationsWithV1BaseURL(t *testing.T) {
 	}
 }
 
-func TestChatGPT2APIGenerateNonGPTImageKeepsResponseFormat(t *testing.T) {
+func TestOpenAIGenerateNonGPTImageKeepsResponseFormat(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req map[string]any
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -144,7 +144,7 @@ func TestChatGPT2APIGenerateNonGPTImageKeepsResponseFormat(t *testing.T) {
 	}))
 	defer server.Close()
 
-	p := NewChatGPT2APIProvider("test-key", server.URL)
+	p := NewOpenAIProvider("test-key", server.URL)
 	if _, err := p.Generate(context.Background(), model.AIImageRequest{
 		Model:          "custom-image-model",
 		Prompt:         "test prompt",
@@ -154,7 +154,7 @@ func TestChatGPT2APIGenerateNonGPTImageKeepsResponseFormat(t *testing.T) {
 	}
 }
 
-func TestChatGPT2APIGenerateAllowsConcurrentRequests(t *testing.T) {
+func TestOpenAIGenerateAllowsConcurrentRequests(t *testing.T) {
 	var active int32
 	var maxActive int32
 	allStarted := make(chan struct{})
@@ -193,7 +193,7 @@ func TestChatGPT2APIGenerateAllowsConcurrentRequests(t *testing.T) {
 	}))
 	defer server.Close()
 
-	p := NewChatGPT2APIProvider("test-key", server.URL)
+	p := NewOpenAIProvider("test-key", server.URL)
 
 	var wg sync.WaitGroup
 	for i := 0; i < 3; i++ {
@@ -215,14 +215,14 @@ func TestChatGPT2APIGenerateAllowsConcurrentRequests(t *testing.T) {
 	}
 }
 
-func TestChatGPT2APINonJSONErrorResponse(t *testing.T) {
+func TestOpenAINonJSONErrorResponse(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadGateway)
 		_, _ = w.Write([]byte("Bad Gateway"))
 	}))
 	defer server.Close()
 
-	p := NewChatGPT2APIProvider("test-key", server.URL)
+	p := NewOpenAIProvider("test-key", server.URL)
 
 	_, err := p.Generate(context.Background(), model.AIImageRequest{
 		Model:  "gpt-image-2",
@@ -236,7 +236,7 @@ func TestChatGPT2APINonJSONErrorResponse(t *testing.T) {
 	}
 }
 
-func TestChatGPT2APIGenerateEdits(t *testing.T) {
+func TestOpenAIGenerateEdits(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !strings.HasSuffix(r.URL.Path, "/v1/images/edits") {
 			t.Fatalf("expected /v1/images/edits, got %s", r.URL.Path)
@@ -301,7 +301,7 @@ func TestChatGPT2APIGenerateEdits(t *testing.T) {
 	}))
 	defer server.Close()
 
-	p := NewChatGPT2APIProvider("test-key", server.URL)
+	p := NewOpenAIProvider("test-key", server.URL)
 
 	req := model.AIImageRequest{
 		Model:           "gpt-image-2",
@@ -320,8 +320,8 @@ func TestChatGPT2APIGenerateEdits(t *testing.T) {
 	}
 }
 
-func TestChatGPT2APIGenerateEditsRejectsInvalidInputImage(t *testing.T) {
-	p := NewChatGPT2APIProvider("test-key", "http://127.0.0.1:1")
+func TestOpenAIGenerateEditsRejectsInvalidInputImage(t *testing.T) {
+	p := NewOpenAIProvider("test-key", "http://127.0.0.1:1")
 
 	_, err := p.Generate(context.Background(), model.AIImageRequest{
 		Model:  "gpt-image-2",
@@ -336,8 +336,8 @@ func TestChatGPT2APIGenerateEditsRejectsInvalidInputImage(t *testing.T) {
 	}
 }
 
-func TestChatGPT2APIModels(t *testing.T) {
-	p := NewChatGPT2APIProvider("test-key", "")
+func TestOpenAIModels(t *testing.T) {
+	p := NewOpenAIProvider("test-key", "http://127.0.0.1:1")
 	models := p.Models()
 	if len(models) == 0 {
 		t.Fatal("expected at least one model")
@@ -378,7 +378,7 @@ func TestChatGPT2APIModels(t *testing.T) {
 	}
 }
 
-func TestChatGPT2APIErrorResponse(t *testing.T) {
+func TestOpenAIErrorResponse(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]any{
@@ -390,7 +390,7 @@ func TestChatGPT2APIErrorResponse(t *testing.T) {
 	}))
 	defer server.Close()
 
-	p := NewChatGPT2APIProvider("test-key", server.URL)
+	p := NewOpenAIProvider("test-key", server.URL)
 
 	_, err := p.Generate(context.Background(), model.AIImageRequest{
 		Model:  "gpt-image-2",

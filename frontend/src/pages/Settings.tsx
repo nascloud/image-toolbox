@@ -6,7 +6,7 @@ export const Settings: React.FC = () => {
   const [dirSaved, setDirSaved] = useState(false);
   const [providers, setProviders] = useState<{[key: string]: {apiKey: string, baseURL: string, hasApiKey: boolean, reviewModel: string, reviewEndpoint: string}}>({
     seedream: {apiKey: '', baseURL: 'https://ark.cn-beijing.volces.com/api/v3', hasApiKey: false, reviewModel: '', reviewEndpoint: 'https://ark.cn-beijing.volces.com/api/v3/chat/completions'},
-    chatgpt2api: {apiKey: '', baseURL: 'http://localhost:3000', hasApiKey: false, reviewModel: '', reviewEndpoint: ''},
+    openai: {apiKey: '', baseURL: 'https://open2api.kuvms.net', hasApiKey: false, reviewModel: '', reviewEndpoint: ''},
   });
   const [activeProvider, setActiveProvider] = useState('seedream');
   const [providerSaved, setProviderSaved] = useState<{[key: string]: boolean}>({});
@@ -27,7 +27,7 @@ export const Settings: React.FC = () => {
         const active = await (window as any).go.main.App.GetActiveProvider();
         if (active) setActiveProvider(active);
       } catch { /* no-op */ }
-      for (const name of ['seedream', 'chatgpt2api']) {
+      for (const name of ['seedream', 'openai']) {
         try {
           const cfg = await (window as any).go.main.App.GetProviderConfig(name);
           setProviders(prev => ({
@@ -106,15 +106,15 @@ export const Settings: React.FC = () => {
           style={{ width: '100%', padding: '8px 12px' }}
         >
           <option value="seedream">Seedream (Volcano Engine)</option>
-          <option value="chatgpt2api">ChatGPT2API</option>
+          <option value="openai">OpenAI (Sub2API)</option>
         </select>
       </div>
 
       {/* Provider configs */}
-      {['seedream', 'chatgpt2api'].map(name => (
+      {['seedream', 'openai'].map(name => (
         <div className="card mb-8" key={name}>
           <label className="card-label" style={{ marginBottom: 8, textTransform: 'none', letterSpacing: 0 }}>
-            {name === 'seedream' ? 'Seedream (Volcano Engine)' : 'ChatGPT2API'} 配置
+            {name === 'seedream' ? 'Seedream (Volcano Engine)' : 'OpenAI (Sub2API)'} 配置
           </label>
           <input
             type="password"

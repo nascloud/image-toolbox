@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Refactor the AI image generation backend to support multiple providers (Seedream + ChatGPT2API) via a common Provider interface.
+**Goal:** Refactor the AI image generation backend to support multiple providers (Seedream + OpenAI via Sub2API) through a common Provider interface.
 
-**Architecture:** A `Provider` interface with `Generate()` and `Models()` methods is implemented by `SeedreamProvider` (migrated from existing `client.go`) and `ChatGPT2APIProvider` (new). The `image_task.go` pipeline accepts the interface instead of a concrete client. Config is extended with per-provider API keys and base URLs, with lazy migration from the legacy single-key format. Frontend gains a provider selector with dynamic parameter rendering.
+**Architecture:** A `Provider` interface with `Generate()` and `Models()` methods is implemented by `SeedreamProvider` (migrated from existing `client.go`) and `OpenAIProvider` (new). The `image_task.go` pipeline accepts the interface instead of a concrete client. Config is extended with per-provider API keys and base URLs, with lazy migration from the legacy single-key format. Frontend gains a provider selector with dynamic parameter rendering.
 
 **Tech Stack:** Go 1.24, Wails v2, React + TypeScript, Volcano Engine Ark API, OpenAI-compatible API
 
@@ -54,8 +54,8 @@ type ProviderConfigResponse struct {
 Add `Provider` and `N` to `AIBatchRequest`:
 ```go
 type AIBatchRequest struct {
-	Provider string `json:"provider"` // "seedream" | "chatgpt2api"
-	N        int    `json:"n"`        // images per request (ChatGPT2API)
+	Provider string `json:"provider"` // "seedream" | "openai"
+	N        int    `json:"n"`        // images per request (OpenAI)
 	// ... keep existing fields unchanged
 }
 ```
@@ -125,10 +125,10 @@ func TestProviderConfigRoundTrip(t *testing.T) {
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "config.json")
 
-	if err := SaveProviderConfig(cfgPath, "chatgpt2api", "sk-new", "https://example.com"); err != nil {
+	if err := SaveProviderConfig(cfgPath, "openai", "sk-new", "https://example.com"); err != nil {
 		t.Fatal(err)
 	}
-	apiKey, baseURL, err := LoadProviderConfig(cfgPath, "chatgpt2api")
+	apiKey, baseURL, err := LoadProviderConfig(cfgPath, "openai")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -136,15 +136,15 @@ func TestProviderConfigRoundTrip(t *testing.T) {
 		t.Fatalf("got %s, %s", apiKey, baseURL)
 	}
 
-	if err := SaveActiveProvider(cfgPath, "chatgpt2api"); err != nil {
+	if err := SaveActiveProvider(cfgPath, "openai"); err != nil {
 		t.Fatal(err)
 	}
 	active, err := LoadActiveProvider(cfgPath)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if active != "chatgpt2api" {
-		t.Fatalf("expected chatgpt2api, got %s", active)
+	if active != "openai" {
+		t.Fatalf("expected openai, got %s", active)
 	}
 
 	// Verify legacy field is not written
@@ -187,7 +187,7 @@ type ProviderConfig struct {
 
 const (
 	DefaultSeedreamBaseURL    = "https://ark.cn-beijing.volces.com/api/v3"
-	DefaultChatGPT2APIBaseURL = "https://image.wq727.cf:21118"
+	DefaultOpenAIBaseURL = "https://open2api.kuvms.net"
 )
 
 // SaveApiKey writes the API key to the config file at path (legacy shim).
@@ -281,8 +281,8 @@ func LoadAiOutputDir(path string) (string, error) {
 
 func defaultBaseURL(name string) string {
 	switch name {
-	case "chatgpt2api":
-		return DefaultChatGPT2APIBaseURL
+	case "openai":
+		return DefaultOpenAIBaseURL
 	default:
 		return DefaultSeedreamBaseURL
 	}
@@ -368,13 +368,13 @@ func TestNewProviderSeedream(t *testing.T) {
 	}
 }
 
-func TestNewProviderChatGPT2API(t *testing.T) {
-	p, err := NewProvider("chatgpt2api", "test-key", DefaultChatGPT2APIBaseURL)
+func TestNewProviderOpenAI(t *testing.T) {
+	p, err := NewProvider("openai", "test-key", DefaultOpenAIBaseURL)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if p.Name() != "chatgpt2api" {
-		t.Fatalf("expected chatgpt2api, got %s", p.Name())
+	if p.Name() != "openai" {
+		t.Fatalf("expected openai, got %s", p.Name())
 	}
 }
 
@@ -407,7 +407,7 @@ import (
 
 const (
 	ProviderSeedream    = "seedream"
-	ProviderChatGPT2API = "chatgpt2api"
+	ProviderOpenAI = "openai"
 )
 
 // Provider is the common interface for AI image generation backends.
@@ -422,8 +422,8 @@ func NewProvider(name, apiKey, baseURL string) (Provider, error) {
 	switch name {
 	case ProviderSeedream:
 		return NewSeedreamProvider(apiKey, baseURL), nil
-	case ProviderChatGPT2API:
-		return NewChatGPT2APIProvider(apiKey, baseURL), nil
+	case ProviderOpenAI:
+		return NewOpenAIProvider(apiKey, baseURL), nil
 	default:
 		return nil, fmt.Errorf("unknown AI provider: %s", name)
 	}
@@ -433,7 +433,7 @@ func NewProvider(name, apiKey, baseURL string) (Provider, error) {
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `cd F:\Python\imagetool && go test ./backend/ai/ -run TestNewProvider -v`
-Expected: FAIL because NewSeedreamProvider and NewChatGPT2APIProvider are not yet defined. We need stub implementations.
+Expected: FAIL because NewSeedreamProvider and NewOpenAIProvider are not yet defined. We need stub implementations.
 
 - [ ] **Step 5: Add minimal stubs to make factory test pass**
 
@@ -466,7 +466,7 @@ func (p *SeedreamProvider) Models() []model.ModelInfo {
 }
 ```
 
-Add to provider_chatgpt2api.go (create file with minimal stub):
+Add to provider_openai.go (create file with minimal stub):
 ```go
 package ai
 
@@ -475,22 +475,22 @@ import (
 	"image-toolbox/backend/model"
 )
 
-type ChatGPT2APIProvider struct {
+type OpenAIProvider struct {
 	apiKey     string
 	baseURL    string
 }
 
-func NewChatGPT2APIProvider(apiKey, baseURL string) *ChatGPT2APIProvider {
-	return &ChatGPT2APIProvider{apiKey: apiKey, baseURL: baseURL}
+func NewOpenAIProvider(apiKey, baseURL string) *OpenAIProvider {
+	return &OpenAIProvider{apiKey: apiKey, baseURL: baseURL}
 }
 
-func (p *ChatGPT2APIProvider) Name() string { return ProviderChatGPT2API }
+func (p *OpenAIProvider) Name() string { return ProviderOpenAI }
 
-func (p *ChatGPT2APIProvider) Generate(ctx context.Context, req model.AIImageRequest) (*model.AIImageResponse, error) {
+func (p *OpenAIProvider) Generate(ctx context.Context, req model.AIImageRequest) (*model.AIImageResponse, error) {
 	return nil, fmt.Errorf("not yet implemented")
 }
 
-func (p *ChatGPT2APIProvider) Models() []model.ModelInfo {
+func (p *OpenAIProvider) Models() []model.ModelInfo {
 	return nil
 }
 ```
@@ -503,7 +503,7 @@ Expected: PASS
 - [ ] **Step 7: Commit**
 
 ```bash
-git add backend/ai/provider.go backend/ai/provider_test.go backend/ai/provider_seedream.go backend/ai/provider_chatgpt2api.go
+git add backend/ai/provider.go backend/ai/provider_test.go backend/ai/provider_seedream.go backend/ai/provider_openai.go
 git commit -m "feat(ai): add Provider interface, factory, and provider stubs"
 ```
 
@@ -514,7 +514,7 @@ git commit -m "feat(ai): add Provider interface, factory, and provider stubs"
 **Files:**
 - Delete: `backend/ai/client.go`
 - Create (replace): `backend/ai/provider_seedream.go` — full implementation
-- Update: `backend/ai/provider_chatgpt2api.go` — import `fmt` for stub
+- Update: `backend/ai/provider_openai.go` — import `fmt` for stub
 - Update: `backend/ai/capability.go` — migrate to return `model.ModelCapabilities`
 - Modify: `backend/ai/image_task.go` — update import of `CapabilitiesForModel` to new signature
 
@@ -1252,16 +1252,16 @@ git commit -m "refactor(ai): extract DownloadImage to shared download.go"
 
 ---
 
-### Task 6: Implement ChatGPT2APIProvider
+### Task 6: Implement OpenAIProvider
 
 **Files:**
-- Modify: `backend/ai/provider_chatgpt2api.go` — full implementation
-- Create: `backend/ai/provider_chatgpt2api_test.go`
+- Modify: `backend/ai/provider_openai.go` — full implementation
+- Create: `backend/ai/provider_openai_test.go`
 
-- [ ] **Step 1: Write tests for ChatGPT2APIProvider**
+- [ ] **Step 1: Write tests for OpenAIProvider**
 
 ```go
-// backend/ai/provider_chatgpt2api_test.go
+// backend/ai/provider_openai_test.go
 
 package ai
 
@@ -1276,7 +1276,7 @@ import (
 	"image-toolbox/backend/model"
 )
 
-func TestChatGPT2APIGenerateGenerations(t *testing.T) {
+func TestOpenAIGenerateGenerations(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !strings.HasSuffix(r.URL.Path, "/v1/images/generations") {
 			t.Fatalf("expected /v1/images/generations, got %s", r.URL.Path)
@@ -1323,7 +1323,7 @@ func TestChatGPT2APIGenerateGenerations(t *testing.T) {
 	}))
 	defer server.Close()
 
-	p := NewChatGPT2APIProvider("test-key", server.URL)
+	p := NewOpenAIProvider("test-key", server.URL)
 
 	req := model.AIImageRequest{
 		Model:  "gpt-image-2",
@@ -1340,7 +1340,7 @@ func TestChatGPT2APIGenerateGenerations(t *testing.T) {
 	}
 }
 
-func TestChatGPT2APIGenerateEdits(t *testing.T) {
+func TestOpenAIGenerateEdits(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !strings.HasSuffix(r.URL.Path, "/v1/images/edits") {
 			t.Fatalf("expected /v1/images/edits, got %s", r.URL.Path)
@@ -1385,7 +1385,7 @@ func TestChatGPT2APIGenerateEdits(t *testing.T) {
 	}))
 	defer server.Close()
 
-	p := NewChatGPT2APIProvider("test-key", server.URL)
+	p := NewOpenAIProvider("test-key", server.URL)
 
 	req := model.AIImageRequest{
 		Model:   "gpt-image-2",
@@ -1403,8 +1403,8 @@ func TestChatGPT2APIGenerateEdits(t *testing.T) {
 	}
 }
 
-func TestChatGPT2APIModels(t *testing.T) {
-	p := NewChatGPT2APIProvider("test-key", "")
+func TestOpenAIModels(t *testing.T) {
+	p := NewOpenAIProvider("test-key", "")
 	models := p.Models()
 	if len(models) == 0 {
 		t.Fatal("expected at least one model")
@@ -1432,7 +1432,7 @@ func TestChatGPT2APIModels(t *testing.T) {
 	}
 }
 
-func TestChatGPT2APIErrorResponse(t *testing.T) {
+func TestOpenAIErrorResponse(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]any{
@@ -1444,7 +1444,7 @@ func TestChatGPT2APIErrorResponse(t *testing.T) {
 	}))
 	defer server.Close()
 
-	p := NewChatGPT2APIProvider("test-key", server.URL)
+	p := NewOpenAIProvider("test-key", server.URL)
 
 	_, err := p.Generate(context.Background(), model.AIImageRequest{
 		Model:  "gpt-image-2",
@@ -1461,13 +1461,13 @@ func TestChatGPT2APIErrorResponse(t *testing.T) {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd F:\Python\imagetool && go test ./backend/ai/ -run TestChatGPT2API -v`
+Run: `cd F:\Python\imagetool && go test ./backend/ai/ -run TestOpenAI -v`
 Expected: FAIL — methods not implemented
 
-- [ ] **Step 3: Write full ChatGPT2APIProvider implementation**
+- [ ] **Step 3: Write full OpenAIProvider implementation**
 
 ```go
-// backend/ai/provider_chatgpt2api.go
+// backend/ai/provider_openai.go
 
 package ai
 
@@ -1485,7 +1485,7 @@ import (
 	"image-toolbox/backend/model"
 )
 
-type ChatGPT2APIProvider struct {
+type OpenAIProvider struct {
 	apiKey     string
 	baseURL    string
 	httpClient *http.Client
@@ -1494,11 +1494,11 @@ type ChatGPT2APIProvider struct {
 	lastFetch    time.Time
 }
 
-func NewChatGPT2APIProvider(apiKey, baseURL string) *ChatGPT2APIProvider {
+func NewOpenAIProvider(apiKey, baseURL string) *OpenAIProvider {
 	if baseURL == "" {
-		baseURL = DefaultChatGPT2APIBaseURL
+		baseURL = DefaultOpenAIBaseURL
 	}
-	return &ChatGPT2APIProvider{
+	return &OpenAIProvider{
 		apiKey:  apiKey,
 		baseURL: strings.TrimRight(baseURL, "/"),
 		httpClient: &http.Client{
@@ -1507,9 +1507,9 @@ func NewChatGPT2APIProvider(apiKey, baseURL string) *ChatGPT2APIProvider {
 	}
 }
 
-func (p *ChatGPT2APIProvider) Name() string { return ProviderChatGPT2API }
+func (p *OpenAIProvider) Name() string { return ProviderOpenAI }
 
-func (p *ChatGPT2APIProvider) Generate(ctx context.Context, req model.AIImageRequest) (*model.AIImageResponse, error) {
+func (p *OpenAIProvider) Generate(ctx context.Context, req model.AIImageRequest) (*model.AIImageResponse, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -1520,7 +1520,7 @@ func (p *ChatGPT2APIProvider) Generate(ctx context.Context, req model.AIImageReq
 	return p.generateGenerations(ctx, req)
 }
 
-func (p *ChatGPT2APIProvider) generateGenerations(ctx context.Context, req model.AIImageRequest) (*model.AIImageResponse, error) {
+func (p *OpenAIProvider) generateGenerations(ctx context.Context, req model.AIImageRequest) (*model.AIImageResponse, error) {
 	body := map[string]any{
 		"model":  req.Model,
 		"prompt": req.Prompt,
@@ -1541,7 +1541,7 @@ func (p *ChatGPT2APIProvider) generateGenerations(ctx context.Context, req model
 	return p.doRequest(ctx, "/v1/images/generations", body)
 }
 
-func (p *ChatGPT2APIProvider) generateEdits(ctx context.Context, req model.AIImageRequest) (*model.AIImageResponse, error) {
+func (p *OpenAIProvider) generateEdits(ctx context.Context, req model.AIImageRequest) (*model.AIImageResponse, error) {
 	images := make([]map[string]string, 0, 1+len(req.ReferenceImages))
 	images = append(images, map[string]string{"image_url": req.Image})
 	for _, ref := range req.ReferenceImages {
@@ -1557,7 +1557,7 @@ func (p *ChatGPT2APIProvider) generateEdits(ctx context.Context, req model.AIIma
 	return p.doRequest(ctx, "/v1/images/edits", body)
 }
 
-func (p *ChatGPT2APIProvider) doRequest(ctx context.Context, endpoint string, body map[string]any) (*model.AIImageResponse, error) {
+func (p *OpenAIProvider) doRequest(ctx context.Context, endpoint string, body map[string]any) (*model.AIImageResponse, error) {
 	payload, err := json.Marshal(body)
 	if err != nil {
 		return nil, fmt.Errorf("marshal request: %w", err)
@@ -1597,7 +1597,7 @@ func (p *ChatGPT2APIProvider) doRequest(ctx context.Context, endpoint string, bo
 	return &result, nil
 }
 
-func (p *ChatGPT2APIProvider) Models() []model.ModelInfo {
+func (p *OpenAIProvider) Models() []model.ModelInfo {
 	p.mu.RLock()
 	if time.Since(p.lastFetch) < 10*time.Minute && len(p.cachedModels) > 0 {
 		defer p.mu.RUnlock()
@@ -1623,7 +1623,7 @@ func (p *ChatGPT2APIProvider) Models() []model.ModelInfo {
 	return static
 }
 
-func (p *ChatGPT2APIProvider) fetchModels() ([]model.ModelInfo, error) {
+func (p *OpenAIProvider) fetchModels() ([]model.ModelInfo, error) {
 	httpReq, err := http.NewRequest("GET", p.baseURL+"/v1/models", nil)
 	if err != nil {
 		return nil, err
@@ -1649,27 +1649,27 @@ func (p *ChatGPT2APIProvider) fetchModels() ([]model.ModelInfo, error) {
 	for _, m := range apiResp.Data {
 		models = append(models, model.ModelInfo{
 			ID:           m.ID,
-			Capabilities: chatgpt2apiCapabilities(m.ID),
+			Capabilities: openAICapabilities(m.ID),
 		})
 	}
 	return models, nil
 }
 
-func (p *ChatGPT2APIProvider) staticModels() []model.ModelInfo {
+func (p *OpenAIProvider) staticModels() []model.ModelInfo {
 	return []model.ModelInfo{
-		{ID: "gpt-image-2", Capabilities: chatgpt2apiCapabilities("gpt-image-2")},
-		{ID: "codex-gpt-image-2", Capabilities: chatgpt2apiCapabilities("codex-gpt-image-2")},
-		{ID: "auto", Capabilities: chatgpt2apiCapabilities("auto")},
-		{ID: "gpt-5", Capabilities: chatgpt2apiCapabilities("gpt-5")},
-		{ID: "gpt-5-1", Capabilities: chatgpt2apiCapabilities("gpt-5-1")},
-		{ID: "gpt-5-2", Capabilities: chatgpt2apiCapabilities("gpt-5-2")},
-		{ID: "gpt-5-3", Capabilities: chatgpt2apiCapabilities("gpt-5-3")},
-		{ID: "gpt-5-3-mini", Capabilities: chatgpt2apiCapabilities("gpt-5-3-mini")},
-		{ID: "gpt-5-mini", Capabilities: chatgpt2apiCapabilities("gpt-5-mini")},
+		{ID: "gpt-image-2", Capabilities: openAICapabilities("gpt-image-2")},
+		{ID: "codex-gpt-image-2", Capabilities: openAICapabilities("codex-gpt-image-2")},
+		{ID: "auto", Capabilities: openAICapabilities("auto")},
+		{ID: "gpt-5", Capabilities: openAICapabilities("gpt-5")},
+		{ID: "gpt-5-1", Capabilities: openAICapabilities("gpt-5-1")},
+		{ID: "gpt-5-2", Capabilities: openAICapabilities("gpt-5-2")},
+		{ID: "gpt-5-3", Capabilities: openAICapabilities("gpt-5-3")},
+		{ID: "gpt-5-3-mini", Capabilities: openAICapabilities("gpt-5-3-mini")},
+		{ID: "gpt-5-mini", Capabilities: openAICapabilities("gpt-5-mini")},
 	}
 }
 
-func chatgpt2apiCapabilities(modelID string) model.ModelCapabilities {
+func openAICapabilities(modelID string) model.ModelCapabilities {
 	normalized := strings.ToLower(modelID)
 	caps := model.ModelCapabilities{
 		SupportsImageInput:  true,
@@ -1694,7 +1694,7 @@ Note: The `doRequest` method is shared between generations and edits, which keep
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `cd F:\Python\imagetool && go test ./backend/ai/ -run TestChatGPT2API -v`
+Run: `cd F:\Python\imagetool && go test ./backend/ai/ -run TestOpenAI -v`
 Expected: All PASS
 
 - [ ] **Step 5: Run all ai tests**
@@ -1705,8 +1705,8 @@ Expected: All PASS
 - [ ] **Step 6: Commit**
 
 ```bash
-git add backend/ai/provider_chatgpt2api.go backend/ai/provider_chatgpt2api_test.go
-git commit -m "feat(ai): add ChatGPT2APIProvider with generations and edits"
+git add backend/ai/provider_openai.go backend/ai/provider_openai_test.go
+git commit -m "feat(ai): add OpenAIProvider with generations and edits"
 ```
 
 ---
@@ -1864,7 +1864,7 @@ func RunAIImageBatch(ctx context.Context, req model.AIBatchRequest, configPath s
 	// Apply defaults per provider
 	if req.Model == "" {
 		switch providerName {
-		case "chatgpt2api":
+		case "openai":
 			req.Model = "gpt-image-2"
 		default:
 			req.Model = "doubao-seedream-5-0-260128"
@@ -2100,14 +2100,14 @@ git commit -m "feat(app): add provider config/model API methods"
 // Add state for providers
 const [providers, setProviders] = useState({
   seedream: { apiKey: '', baseURL: '' },
-  chatgpt2api: { apiKey: '', baseURL: '' },
+  openai: { apiKey: '', baseURL: '' },
 });
 const [activeProvider, setActiveProviderState] = useState('seedream');
 
 // Load configs on mount
 useEffect(() => {
   loadProviderConfig('seedream');
-  loadProviderConfig('chatgpt2api');
+  loadProviderConfig('openai');
   loadActiveProvider();
 }, []);
 
@@ -2162,7 +2162,7 @@ const [n, setN] = useState(1);
 
 // Per-provider preserved state
 const [seedreamParams, setSeedreamParams] = useState({...});
-const [chatgpt2apiParams, setChatgpt2apiParams] = useState({n: 1});
+const [openAIParams, setOpenAIParams] = useState({n: 1});
 
 // Load active provider on mount
 useEffect(() => {
@@ -2181,12 +2181,12 @@ useEffect(() => {
 function handleProviderChange(newProvider: string) {
   // Save current params
   if (provider === 'seedream') setSeedreamParams({...currentParams});
-  if (provider === 'chatgpt2api') setChatgpt2apiParams({n});
+  if (provider === 'openai') setOpenAIParams({n});
   // Switch
   setProvider(newProvider);
   // Restore saved params
-  if (newProvider === 'chatgpt2api') {
-    setN(chatgpt2apiParams.n);
+  if (newProvider === 'openai') {
+    setN(openAIParams.n);
   }
 }
 ```

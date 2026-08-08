@@ -25,8 +25,10 @@ type ProviderConfig struct {
 }
 
 const (
-	DefaultSeedreamBaseURL    = "https://ark.cn-beijing.volces.com/api/v3"
-	DefaultChatGPT2APIBaseURL = "http://localhost:3000"
+	DefaultSeedreamBaseURL = "https://ark.cn-beijing.volces.com/api/v3"
+	DefaultOpenAIBaseURL   = "https://open2api.kuvms.net"
+
+	openAIProviderName = "openai"
 )
 
 func SaveApiKey(path, apiKey string) error {
@@ -179,8 +181,8 @@ func LoadProviderModels(path, name string) ([]model.ModelInfo, error) {
 
 func defaultBaseURL(name string) string {
 	switch name {
-	case "chatgpt2api":
-		return DefaultChatGPT2APIBaseURL
+	case openAIProviderName:
+		return DefaultOpenAIBaseURL
 	default:
 		return DefaultSeedreamBaseURL
 	}

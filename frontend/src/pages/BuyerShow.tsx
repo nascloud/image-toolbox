@@ -70,12 +70,12 @@ interface BuyerShowProgressUpdate {
 
 const fallbackModels: Record<string, string[]> = {
   seedream: ['doubao-seedream-5-0-260128', 'doubao-seedream-5-0-lite-260128', 'doubao-seedream-4-5-251128'],
-  chatgpt2api: ['gpt-image-2'],
+  openai: ['gpt-image-2'],
 };
 
 const providerDefaults: Record<string, string> = {
   seedream: 'doubao-seedream-5-0-260128',
-  chatgpt2api: 'gpt-image-2',
+  openai: 'gpt-image-2',
 };
 
 function createBatchID(): string {
@@ -150,7 +150,7 @@ export const BuyerShow: React.FC<BuyerShowProps> = ({ active = true }) => {
         setModels(fallbackModels[provider]);
         setModel(providerDefaults[provider]);
       }
-      setSize(provider === 'chatgpt2api' ? 'auto' : '2K');
+      setSize(provider === 'openai' ? 'auto' : '2K');
     })();
   }, [provider]);
 
@@ -441,13 +441,13 @@ export const BuyerShow: React.FC<BuyerShowProps> = ({ active = true }) => {
       <aside className="buyer-v2-parameters">
         <div className="buyer-v2-heading"><div><span>01</span><div><strong>基本参数</strong><small>整批统一应用</small></div></div></div>
         <div className="buyer-v2-parameter-scroll">
-          <label className="buyer-field"><span>AI 服务</span><select className="select" value={provider} onChange={event => setProvider(event.target.value)} disabled={processing}><option value="seedream">Seedream</option><option value="chatgpt2api">ChatGPT2API</option></select></label>
+          <label className="buyer-field"><span>AI 服务</span><select className="select" value={provider} onChange={event => setProvider(event.target.value)} disabled={processing}><option value="seedream">Seedream</option><option value="openai">OpenAI (Sub2API)</option></select></label>
           <label className="buyer-field"><span>图片模型</span><select className="select" value={model} onChange={event => setModel(event.target.value)} disabled={processing}>{models.map(id => <option key={id} value={id}>{id}</option>)}</select></label>
           <div className="buyer-inline-fields">
-            <label className="buyer-field"><span>尺寸</span><select className="select" value={size} onChange={event => setSize(event.target.value)} disabled={processing}>{(provider === 'chatgpt2api' ? ['auto', '1:1', '3:4', '4:3', '16:9', '9:16'] : ['1K', '2K', '3K']).map(value => <option key={value}>{value}</option>)}</select></label>
+            <label className="buyer-field"><span>尺寸</span><select className="select" value={size} onChange={event => setSize(event.target.value)} disabled={processing}>{(provider === 'openai' ? ['auto', '1:1', '3:4', '4:3', '16:9', '9:16'] : ['1K', '2K', '3K']).map(value => <option key={value}>{value}</option>)}</select></label>
             <label className="buyer-field"><span>格式</span><select className="select" value={outputFormat} onChange={event => setOutputFormat(event.target.value)} disabled={processing}><option value="png">PNG</option><option value="jpeg">JPEG</option></select></label>
           </div>
-          {provider === 'chatgpt2api' && <label className="buyer-field"><span>画质</span><select className="select" value={quality} onChange={event => setQuality(event.target.value)} disabled={processing}><option value="auto">自动</option><option value="medium">中</option><option value="high">高</option></select></label>}
+          {provider === 'openai' && <label className="buyer-field"><span>画质</span><select className="select" value={quality} onChange={event => setQuality(event.target.value)} disabled={processing}><option value="auto">自动</option><option value="medium">中</option><option value="high">高</option></select></label>}
           <label className="buyer-field"><span>并发文件夹数</span><input className="input" type="number" min={1} max={10} value={concurrent} onChange={event => setConcurrent(Math.max(1, Math.min(10, Number(event.target.value) || 1)))} disabled={processing} /><small className="buyer-field-help">每套内部按图位 2→6 串行生成，成功结果自动加入后续参考图</small></label>
           <label className="buyer-field"><span>Seed</span><input className="input" type="number" value={seed} onChange={event => setSeed(Number(event.target.value))} disabled={processing} /></label>
           <label className="buyer-switch-row"><div><strong>图片水印</strong><small>仅支持该参数的模型生效</small></div><label className="buyer-switch"><input type="checkbox" checked={watermark} onChange={event => setWatermark(event.target.checked)} /><span /></label></label>

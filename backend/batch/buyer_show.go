@@ -161,14 +161,14 @@ func loadBuyerShowProvider(options model.BuyerShowGenerationOptions, configPath 
 		return nil, options, err
 	}
 	if strings.TrimSpace(options.Model) == "" {
-		if providerName == backendAI.ProviderChatGPT2API {
+		if providerName == backendAI.ProviderOpenAI {
 			options.Model = "gpt-image-2"
 		} else {
 			options.Model = "doubao-seedream-5-0-260128"
 		}
 	}
 	if strings.TrimSpace(options.Size) == "" {
-		if providerName == backendAI.ProviderChatGPT2API {
+		if providerName == backendAI.ProviderOpenAI {
 			options.Size = "auto"
 		} else {
 			options.Size = "2K"
@@ -251,7 +251,7 @@ func validateBuyerShowSet(set model.BuyerShowGenerateSet) (string, error) {
 func generateBuyerShowSlot(ctx context.Context, provider backendAI.Provider, options model.BuyerShowGenerationOptions, set model.BuyerShowGenerateSet, slotIndex int, basisPaths []string, extraPrompt string) model.BuyerShowSlotResult {
 	basisPath := basisPaths[0]
 	result := model.BuyerShowSlotResult{SetID: set.SetID, SlotIndex: slotIndex, SourcePath: basisPath}
-	prompt, err := backendAI.BuildBuyerShowPromptWithReferences(options.GlobalPrompt, set.ReviewText, set.BasisMode, set.Product, slotIndex, len(basisPaths), extraPrompt)
+	prompt, err := backendAI.BuildBuyerShowPromptWithReferences(options.GlobalPrompt, set.BasisMode, set.Product, slotIndex, len(basisPaths), extraPrompt)
 	if err != nil {
 		result.Error = err.Error()
 		return result

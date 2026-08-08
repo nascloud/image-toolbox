@@ -149,7 +149,7 @@ func TestProcessSingleImagesUsesDetectedOutputExtension(t *testing.T) {
 	}))
 	defer server.Close()
 
-	provider := NewChatGPT2APIProvider("test-key", server.URL)
+	provider := NewOpenAIProvider("test-key", server.URL)
 	outDir := t.TempDir()
 	outPaths, err := ProcessSingleImagesWithContext(context.Background(), provider, srcPath, outDir, model.AIBatchRequest{
 		Model:  "gpt-image-2",

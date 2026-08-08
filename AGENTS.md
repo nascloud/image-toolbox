@@ -24,8 +24,8 @@
 - 可选参考图（Reference Image）
 - 支持对一组图片执行相同 AI 操作
 - 支持可复现参数（尺寸、模型、种子、风格等）
-- 多供应商支持：Seedream（火山引擎 Ark）、ChatGPT2API（兼容 OpenAI 格式）
-- 多模型支持：Seedream 5.0 / 4.5 / 4.0 / 3.0、ChatGPT2API 接入模型
+- 多供应商支持：Seedream（火山引擎 Ark）、OpenAI（Sub2API Codex 转发）
+- 多模型支持：Seedream 5.0 / 4.5 / 4.0 / 3.0、OpenAI 兼容图片模型
 
 ⚠️ AI **不是实时交互工具**，而是：
 > **"用户配置一次 → 后端批量执行 → 返回结果"**
@@ -94,7 +94,7 @@ image-toolbox/
 │   ├── ai/                    # ✅ AI 图片处理
 │   │   ├── provider.go        # Provider 接口定义 + 工厂方法
 │   │   ├── provider_seedream.go      # Seedream 供应商实现
-│   │   ├── provider_chatgpt2api.go   # ChatGPT2API 供应商实现
+│   │   ├── provider_openai.go         # OpenAI（Sub2API）供应商实现
 │   │   ├── prompt.go          # Prompt 构建（纯函数）
 │   │   ├── reference.go       # 参考图处理
 │   │   ├── image_task.go      # 单图 AI 任务（input → API → output）
@@ -219,7 +219,7 @@ AI 图片处理 **必须支持以下输入**：
 
 ✅ 模型能力：
 - 通过 `provider.go` 中的 `Provider` 接口定义统一契约
-- 每个供应商（`provider_seedream.go` / `provider_chatgpt2api.go`）自行实现能力
+- 每个供应商（`provider_seedream.go` / `provider_openai.go`）自行实现能力
 - 通过 `model.go` 中的 `ModelCapabilities` / `ModelInfo` 定义各模型支持的参数差异
 - 前端请求参数统一，后端按供应商 + 模型自动适配
 

@@ -20,7 +20,7 @@ import (
 
 const modelsCacheTTL = 10 * time.Minute
 
-type ChatGPT2APIProvider struct {
+type OpenAIProvider struct {
 	apiKey       string
 	baseURL      string
 	httpClient   *http.Client
@@ -29,12 +29,12 @@ type ChatGPT2APIProvider struct {
 	lastFetch    time.Time
 }
 
-func NewChatGPT2APIProvider(apiKey, baseURL string) *ChatGPT2APIProvider {
+func NewOpenAIProvider(apiKey, baseURL string) *OpenAIProvider {
 	if baseURL == "" {
-		baseURL = DefaultChatGPT2APIBaseURL
+		baseURL = DefaultOpenAIBaseURL
 	}
 	baseURL = strings.TrimSuffix(baseURL, "/")
-	return &ChatGPT2APIProvider{
+	return &OpenAIProvider{
 		apiKey:  apiKey,
 		baseURL: baseURL,
 		httpClient: &http.Client{
@@ -43,11 +43,11 @@ func NewChatGPT2APIProvider(apiKey, baseURL string) *ChatGPT2APIProvider {
 	}
 }
 
-func (p *ChatGPT2APIProvider) Name() string {
-	return ProviderChatGPT2API
+func (p *OpenAIProvider) Name() string {
+	return ProviderOpenAI
 }
 
-func (p *ChatGPT2APIProvider) Generate(ctx context.Context, req model.AIImageRequest) (*model.AIImageResponse, error) {
+func (p *OpenAIProvider) Generate(ctx context.Context, req model.AIImageRequest) (*model.AIImageResponse, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -58,19 +58,19 @@ func (p *ChatGPT2APIProvider) Generate(ctx context.Context, req model.AIImageReq
 	return p.generateEdits(ctx, req)
 }
 
-func (p *ChatGPT2APIProvider) generateGenerations(ctx context.Context, req model.AIImageRequest) (*model.AIImageResponse, error) {
-	body, err := chatgpt2APIFields(req)
+func (p *OpenAIProvider) generateGenerations(ctx context.Context, req model.AIImageRequest) (*model.AIImageResponse, error) {
+	body, err := openAIFields(req)
 	if err != nil {
 		return nil, err
 	}
 	return p.doRequest(ctx, p.endpoint("images/generations"), body)
 }
 
-func (p *ChatGPT2APIProvider) generateEdits(ctx context.Context, req model.AIImageRequest) (*model.AIImageResponse, error) {
+func (p *OpenAIProvider) generateEdits(ctx context.Context, req model.AIImageRequest) (*model.AIImageResponse, error) {
 	var b bytes.Buffer
 	w := multipart.NewWriter(&b)
 
-	fields, err := chatgpt2APIFields(req)
+	fields, err := openAIFields(req)
 	if err != nil {
 		return nil, err
 	}
@@ -138,10 +138,10 @@ func (p *ChatGPT2APIProvider) generateEdits(ctx context.Context, req model.AIIma
 		return nil, fmt.Errorf("read response: %w", err)
 	}
 
-	return parseChatGPT2APIResponse(resp.StatusCode, respBody)
+	return parseOpenAIResponse(resp.StatusCode, respBody)
 }
 
-func (p *ChatGPT2APIProvider) doRequest(ctx context.Context, url string, body map[string]any) (*model.AIImageResponse, error) {
+func (p *OpenAIProvider) doRequest(ctx context.Context, url string, body map[string]any) (*model.AIImageResponse, error) {
 	payload, err := json.Marshal(body)
 	if err != nil {
 		return nil, fmt.Errorf("marshal request: %w", err)
@@ -166,10 +166,10 @@ func (p *ChatGPT2APIProvider) doRequest(ctx context.Context, url string, body ma
 		return nil, fmt.Errorf("read response: %w", err)
 	}
 
-	return parseChatGPT2APIResponse(resp.StatusCode, respBody)
+	return parseOpenAIResponse(resp.StatusCode, respBody)
 }
 
-func parseChatGPT2APIResponse(statusCode int, respBody []byte) (*model.AIImageResponse, error) {
+func parseOpenAIResponse(statusCode int, respBody []byte) (*model.AIImageResponse, error) {
 	var result model.AIImageResponse
 	if err := json.Unmarshal(respBody, &result); err != nil {
 		body := strings.TrimSpace(string(respBody))
@@ -195,7 +195,7 @@ func parseChatGPT2APIResponse(statusCode int, respBody []byte) (*model.AIImageRe
 	return &result, nil
 }
 
-func (p *ChatGPT2APIProvider) Models() []model.ModelInfo {
+func (p *OpenAIProvider) Models() []model.ModelInfo {
 	p.mu.RLock()
 	if p.cachedModels != nil && time.Since(p.lastFetch) < modelsCacheTTL {
 		defer p.mu.RUnlock()
@@ -216,11 +216,11 @@ func (p *ChatGPT2APIProvider) Models() []model.ModelInfo {
 	return cloneModels(models)
 }
 
-func (p *ChatGPT2APIProvider) ModelCapabilities(modelID string) model.ModelCapabilities {
-	return chatgpt2apiCapabilities(modelID)
+func (p *OpenAIProvider) ModelCapabilities(modelID string) model.ModelCapabilities {
+	return openAICapabilities(modelID)
 }
 
-func (p *ChatGPT2APIProvider) endpoint(path string) string {
+func (p *OpenAIProvider) endpoint(path string) string {
 	baseURL := strings.TrimRight(p.baseURL, "/")
 	path = strings.TrimLeft(path, "/")
 	if strings.HasSuffix(baseURL, "/v1") {
@@ -229,7 +229,7 @@ func (p *ChatGPT2APIProvider) endpoint(path string) string {
 	return baseURL + "/v1/" + path
 }
 
-func (p *ChatGPT2APIProvider) fetchModels() ([]model.ModelInfo, error) {
+func (p *OpenAIProvider) fetchModels() ([]model.ModelInfo, error) {
 	req, err := http.NewRequest("GET", p.endpoint("models"), nil)
 	if err != nil {
 		return nil, err
@@ -267,7 +267,7 @@ func (p *ChatGPT2APIProvider) fetchModels() ([]model.ModelInfo, error) {
 		}
 		models = append(models, model.ModelInfo{
 			ID:           item.ID,
-			Capabilities: chatgpt2apiCapabilities(item.ID),
+			Capabilities: openAICapabilities(item.ID),
 		})
 	}
 
@@ -278,7 +278,7 @@ func (p *ChatGPT2APIProvider) fetchModels() ([]model.ModelInfo, error) {
 	return models, nil
 }
 
-func (p *ChatGPT2APIProvider) staticModels() []model.ModelInfo {
+func (p *OpenAIProvider) staticModels() []model.ModelInfo {
 	ids := []string{
 		"gpt-image-2",
 		"codex-gpt-image-2",
@@ -294,13 +294,13 @@ func (p *ChatGPT2APIProvider) staticModels() []model.ModelInfo {
 	for i, id := range ids {
 		models[i] = model.ModelInfo{
 			ID:           id,
-			Capabilities: chatgpt2apiCapabilities(id),
+			Capabilities: openAICapabilities(id),
 		}
 	}
 	return models
 }
 
-func chatgpt2apiCapabilities(modelID string) model.ModelCapabilities {
+func openAICapabilities(modelID string) model.ModelCapabilities {
 	normalized := strings.ToLower(modelID)
 
 	switch {
@@ -338,8 +338,8 @@ func chatgpt2apiCapabilities(modelID string) model.ModelCapabilities {
 	}
 }
 
-func chatgpt2APIFields(req model.AIImageRequest) (map[string]any, error) {
-	prompt, err := chatgpt2APIPrompt(req.Prompt, req.Size)
+func openAIFields(req model.AIImageRequest) (map[string]any, error) {
+	prompt, err := openAIPrompt(req.Prompt, req.Size)
 	if err != nil {
 		return nil, err
 	}
@@ -371,8 +371,8 @@ func chatgpt2APIFields(req model.AIImageRequest) (map[string]any, error) {
 	return body, nil
 }
 
-func chatgpt2APIPrompt(prompt, aspectRatio string) (string, error) {
-	normalized, ok, err := normalizeChatGPT2APIAspectRatio(aspectRatio)
+func openAIPrompt(prompt, aspectRatio string) (string, error) {
+	normalized, ok, err := normalizeOpenAIAspectRatio(aspectRatio)
 	if err != nil {
 		return "", err
 	}
@@ -382,7 +382,7 @@ func chatgpt2APIPrompt(prompt, aspectRatio string) (string, error) {
 	return fmt.Sprintf("%s\n\nAspect ratio: %s.", prompt, normalized), nil
 }
 
-func normalizeChatGPT2APIAspectRatio(aspectRatio string) (string, bool, error) {
+func normalizeOpenAIAspectRatio(aspectRatio string) (string, bool, error) {
 	value := strings.ToLower(strings.ReplaceAll(strings.TrimSpace(aspectRatio), " ", ""))
 	value = strings.ReplaceAll(value, "x", ":")
 	if value == "" || value == "auto" {

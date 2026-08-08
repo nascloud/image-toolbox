@@ -46,13 +46,13 @@ func RunAIImageBatch(ctx context.Context, req model.AIBatchRequest, configPath s
 
 	if req.Model == "" {
 		switch providerName {
-		case "chatgpt2api":
+		case backendAI.ProviderOpenAI:
 			req.Model = "gpt-image-2"
 		default:
 			req.Model = "doubao-seedream-5-0-260128"
 		}
 	}
-	if req.Size == "" && providerName != "chatgpt2api" {
+	if req.Size == "" && providerName != backendAI.ProviderOpenAI {
 		req.Size = "2048x2048"
 	}
 	if req.N <= 0 {

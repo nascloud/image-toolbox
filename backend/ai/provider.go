@@ -8,11 +8,11 @@ import (
 )
 
 const (
-	ProviderSeedream    = "seedream"
-	ProviderChatGPT2API = "chatgpt2api"
+	ProviderSeedream = "seedream"
+	ProviderOpenAI   = "openai"
 
-	DefaultSeedreamBaseURL    = "https://ark.cn-beijing.volces.com/api/v3"
-	DefaultChatGPT2APIBaseURL = "http://localhost:3000"
+	DefaultSeedreamBaseURL = "https://ark.cn-beijing.volces.com/api/v3"
+	DefaultOpenAIBaseURL   = "https://open2api.kuvms.net"
 )
 
 // Provider is the common interface for AI image generation backends.
@@ -28,8 +28,8 @@ func NewProvider(name, apiKey, baseURL string) (Provider, error) {
 	switch name {
 	case ProviderSeedream:
 		return NewSeedreamProvider(apiKey, baseURL), nil
-	case ProviderChatGPT2API:
-		return NewChatGPT2APIProvider(apiKey, baseURL), nil
+	case ProviderOpenAI:
+		return NewOpenAIProvider(apiKey, baseURL), nil
 	default:
 		return nil, fmt.Errorf("unknown AI provider: %s", name)
 	}
