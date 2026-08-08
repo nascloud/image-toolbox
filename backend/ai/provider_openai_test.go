@@ -338,7 +338,10 @@ func TestOpenAIGenerateEditsRejectsInvalidInputImage(t *testing.T) {
 
 func TestOpenAIModels(t *testing.T) {
 	p := NewOpenAIProvider("test-key", "http://127.0.0.1:1")
-	models := p.Models()
+	models, err := p.Models(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(models) == 0 {
 		t.Fatal("expected at least one model")
 	}

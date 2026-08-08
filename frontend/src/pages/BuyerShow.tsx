@@ -86,6 +86,11 @@ function fileName(path?: string): string {
   return path?.split(/[\\/]/).pop() || '';
 }
 
+function modelLabel(id: string): string {
+  const label = id.startsWith('doubao-') ? id.slice(7) : id;
+  return label.length > 24 ? `${label.slice(0, 15)}...${label.slice(-6)}` : label;
+}
+
 interface BuyerShowProps {
   active?: boolean;
 }
@@ -142,7 +147,12 @@ export const BuyerShow: React.FC<BuyerShowProps> = ({ active = true }) => {
     (async () => {
       try {
         const response = await (window as any).go.main.App.GetProviderModels(provider);
-        const ids = Array.isArray(response) ? response.map((item: any) => item.id).filter(Boolean) : [];
+        const ids = Array.isArray(response) ? response
+          .filter((item: any) => provider === 'seedream'
+            ? item.id?.toLowerCase().includes('seedream')
+            : item.id?.toLowerCase().startsWith('gpt-image-'))
+          .map((item: any) => item.id)
+          .filter(Boolean) : [];
         const next = ids.length ? ids : fallbackModels[provider];
         setModels(next);
         setModel(current => next.includes(current) ? current : (providerDefaults[provider] || next[0]));
@@ -441,8 +451,8 @@ export const BuyerShow: React.FC<BuyerShowProps> = ({ active = true }) => {
       <aside className="buyer-v2-parameters">
         <div className="buyer-v2-heading"><div><span>01</span><div><strong>基本参数</strong><small>整批统一应用</small></div></div></div>
         <div className="buyer-v2-parameter-scroll">
-          <label className="buyer-field"><span>AI 服务</span><select className="select" value={provider} onChange={event => setProvider(event.target.value)} disabled={processing}><option value="seedream">Seedream</option><option value="openai">OpenAI (Sub2API)</option></select></label>
-          <label className="buyer-field"><span>图片模型</span><select className="select" value={model} onChange={event => setModel(event.target.value)} disabled={processing}>{models.map(id => <option key={id} value={id}>{id}</option>)}</select></label>
+          <label className="buyer-field"><span>AI 服务</span><select className="select" value={provider} onChange={event => setProvider(event.target.value)} disabled={processing}><option value="seedream">Seedream</option><option value="openai">OpenAI</option></select></label>
+          <label className="buyer-field"><span>图片模型</span><select className="select" value={model} onChange={event => setModel(event.target.value)} disabled={processing} title={model}>{models.map(id => <option key={id} value={id} title={id}>{modelLabel(id)}</option>)}</select></label>
           <div className="buyer-inline-fields">
             <label className="buyer-field"><span>尺寸</span><select className="select" value={size} onChange={event => setSize(event.target.value)} disabled={processing}>{(provider === 'openai' ? ['auto', '1:1', '3:4', '4:3', '16:9', '9:16'] : ['1K', '2K', '3K']).map(value => <option key={value}>{value}</option>)}</select></label>
             <label className="buyer-field"><span>格式</span><select className="select" value={outputFormat} onChange={event => setOutputFormat(event.target.value)} disabled={processing}><option value="png">PNG</option><option value="jpeg">JPEG</option></select></label>

@@ -27,7 +27,7 @@ type ProviderConfig struct {
 const (
 	DefaultSeedreamBaseURL       = "https://ark.cn-beijing.volces.com/api/v3"
 	DefaultOpenAIBaseURL         = "https://open2api.kuvms.net"
-	DefaultOpenAIReviewModel     = "gpt-6-sol"
+	DefaultOpenAIReviewModel     = "gpt-5.6-sol"
 	DefaultOpenAIReviewEndpoint  = DefaultOpenAIBaseURL + "/v1/responses"
 	DefaultOpenAIReasoningEffort = "medium"
 

@@ -325,89 +325,34 @@ func TestSeedreamOmitsImageAndSequentialForSeedream3(t *testing.T) {
 }
 
 func TestSeedreamModels(t *testing.T) {
-	p := NewSeedreamProvider("test-key", "")
-	models := p.Models()
-	if len(models) != 5 {
-		t.Fatalf("expected 5 models, got %d", len(models))
-	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != "/models" {
+			t.Fatalf("unexpected request: %s %s", r.Method, r.URL.Path)
+		}
+		if r.Header.Get("Authorization") != "Bearer test-key" {
+			t.Fatalf("unexpected authorization header")
+		}
+		json.NewEncoder(w).Encode(map[string]any{"data": []map[string]string{
+			{"id": "doubao-seedream-5-0-260128"},
+			{"id": "qwen3-8b-20250429"},
+			{"id": "retired-model", "status": "Shutdown"},
+		}})
+	}))
+	defer server.Close()
 
-	expected := map[string]struct {
-		hasImageInput bool
-		hasSequential bool
-		hasStream     bool
-		hasSeed       bool
-		hasOutputFmt  bool
-		hasWebSearch  bool
-		hasGuidance   bool
-		hasPromptOpt  bool
-		hasWatermark  bool
-		sizes         int
-	}{
-		"doubao-seedream-5-0-260128": {
-			hasImageInput: true, hasSequential: true, hasStream: true,
-			hasSeed: true, hasOutputFmt: true, hasWebSearch: true, hasWatermark: true,
-			sizes: 3,
-		},
-		"doubao-seedream-5-0-lite-260128": {
-			hasImageInput: true, hasSequential: true, hasStream: true,
-			hasSeed: true, hasOutputFmt: true, hasWebSearch: true, hasWatermark: true,
-			sizes: 2,
-		},
-		"doubao-seedream-4-5-251128": {
-			hasImageInput: true, hasSequential: true, hasStream: true,
-			hasSeed: true, hasWatermark: true,
-			sizes: 4,
-		},
-		"doubao-seedream-4-0-250828": {
-			hasImageInput: true, hasSequential: true, hasStream: true,
-			hasSeed: true, hasPromptOpt: true, hasWatermark: true,
-			sizes: 4,
-		},
-		"doubao-seedream-3-0-t2i-250415": {
-			hasGuidance: true,
-			sizes:       2,
-		},
+	p := NewSeedreamProvider("test-key", server.URL)
+	models, err := p.Models(context.Background())
+	if err != nil {
+		t.Fatal(err)
 	}
-
-	for _, m := range models {
-		exp, ok := expected[m.ID]
-		if !ok {
-			t.Errorf("unexpected model: %s", m.ID)
-			continue
-		}
-		if m.Capabilities.SupportsImageInput != exp.hasImageInput {
-			t.Errorf("%s: SupportsImageInput=%v, want %v", m.ID, m.Capabilities.SupportsImageInput, exp.hasImageInput)
-		}
-		if m.Capabilities.SupportsSequential != exp.hasSequential {
-			t.Errorf("%s: SupportsSequential=%v, want %v", m.ID, m.Capabilities.SupportsSequential, exp.hasSequential)
-		}
-		if m.Capabilities.SupportsStream != exp.hasStream {
-			t.Errorf("%s: SupportsStream=%v, want %v", m.ID, m.Capabilities.SupportsStream, exp.hasStream)
-		}
-		if m.Capabilities.SupportsSeed != exp.hasSeed {
-			t.Errorf("%s: SupportsSeed=%v, want %v", m.ID, m.Capabilities.SupportsSeed, exp.hasSeed)
-		}
-		if m.Capabilities.SupportsOutputFormat != exp.hasOutputFmt {
-			t.Errorf("%s: SupportsOutputFormat=%v, want %v", m.ID, m.Capabilities.SupportsOutputFormat, exp.hasOutputFmt)
-		}
-		if m.Capabilities.SupportsWebSearch != exp.hasWebSearch {
-			t.Errorf("%s: SupportsWebSearch=%v, want %v", m.ID, m.Capabilities.SupportsWebSearch, exp.hasWebSearch)
-		}
-		if m.Capabilities.SupportsGuidanceScale != exp.hasGuidance {
-			t.Errorf("%s: SupportsGuidanceScale=%v, want %v", m.ID, m.Capabilities.SupportsGuidanceScale, exp.hasGuidance)
-		}
-		if m.Capabilities.SupportsFastPromptOptimize != exp.hasPromptOpt {
-			t.Errorf("%s: SupportsFastPromptOptimize=%v, want %v", m.ID, m.Capabilities.SupportsFastPromptOptimize, exp.hasPromptOpt)
-		}
-		if m.Capabilities.SupportsWatermark != exp.hasWatermark {
-			t.Errorf("%s: SupportsWatermark=%v, want %v", m.ID, m.Capabilities.SupportsWatermark, exp.hasWatermark)
-		}
-		if len(m.Capabilities.AllowedSizes) != exp.sizes {
-			t.Errorf("%s: AllowedSizes count=%d, want %d", m.ID, len(m.Capabilities.AllowedSizes), exp.sizes)
-		}
-		if m.Capabilities.DefaultOutputFormat != "jpeg" {
-			t.Errorf("%s: DefaultOutputFormat=%s, want jpeg", m.ID, m.Capabilities.DefaultOutputFormat)
-		}
+	if len(models) != 2 {
+		t.Fatalf("expected 2 available models, got %d", len(models))
+	}
+	if models[0].ID != "doubao-seedream-5-0-260128" || !models[0].Capabilities.SupportsImageInput {
+		t.Fatalf("unexpected Seedream model: %+v", models[0])
+	}
+	if models[1].ID != "qwen3-8b-20250429" {
+		t.Fatalf("unexpected text model: %+v", models[1])
 	}
 }
 

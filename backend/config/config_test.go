@@ -61,8 +61,8 @@ func TestOpenAIDefaultReviewConfig(t *testing.T) {
 	if apiKey != "" {
 		t.Fatalf("expected empty API key, got %q", apiKey)
 	}
-	if modelID != "gpt-6-sol" {
-		t.Fatalf("expected default review model gpt-6-sol, got %q", modelID)
+	if modelID != "gpt-5.6-sol" {
+		t.Fatalf("expected default review model gpt-5.6-sol, got %q", modelID)
 	}
 	if endpoint != "https://open2api.kuvms.net/v1/responses" {
 		t.Fatalf("unexpected default review endpoint %q", endpoint)

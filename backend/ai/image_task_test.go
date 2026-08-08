@@ -220,7 +220,9 @@ func (provider *captureImageProvider) Generate(_ context.Context, request model.
 	return response, nil
 }
 
-func (provider *captureImageProvider) Models() []model.ModelInfo { return nil }
+func (provider *captureImageProvider) Models(context.Context) ([]model.ModelInfo, error) {
+	return nil, nil
+}
 
 func (provider *captureImageProvider) ModelCapabilities(_ string) model.ModelCapabilities {
 	return model.ModelCapabilities{SupportsImageInput: true, SupportsOutputFormat: true, DefaultOutputFormat: "png"}

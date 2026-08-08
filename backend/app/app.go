@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 	_ "golang.org/x/image/bmp"
@@ -588,7 +589,12 @@ func (a *App) FetchProviderModels(providerName string) ([]model.ModelInfo, error
 		return nil, err
 	}
 
-	models := provider.Models()
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	models, err := provider.Models(ctx)
+	if err != nil {
+		return nil, err
+	}
 
 	if err := config.SaveProviderModels(configPath, providerName, models); err != nil {
 		return nil, fmt.Errorf("failed to save models: %w", err)

@@ -58,7 +58,7 @@ func TestOpenAICompatibleTextProviderRewriteResponses(t *testing.T) {
 		if err := json.NewDecoder(request.Body).Decode(&payload); err != nil {
 			t.Fatal(err)
 		}
-		if payload["model"] != "gpt-6-sol" {
+		if payload["model"] != "gpt-5.6-sol" {
 			t.Fatalf("model = %v", payload["model"])
 		}
 		if payload["instructions"] != "system" || payload["input"] != "input" {
@@ -91,7 +91,7 @@ func TestOpenAICompatibleTextProviderRewriteResponses(t *testing.T) {
 	defer server.Close()
 
 	provider := NewOpenAICompatibleTextProvider("sk-test", server.URL+"/v1/responses", "medium")
-	result, err := provider.Rewrite(context.Background(), "gpt-6-sol", "system", "input")
+	result, err := provider.Rewrite(context.Background(), "gpt-5.6-sol", "system", "input")
 	if err != nil {
 		t.Fatalf("Rewrite() error = %v", err)
 	}

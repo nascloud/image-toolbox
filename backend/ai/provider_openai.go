@@ -195,15 +195,18 @@ func parseOpenAIResponse(statusCode int, respBody []byte) (*model.AIImageRespons
 	return &result, nil
 }
 
-func (p *OpenAIProvider) Models() []model.ModelInfo {
+func (p *OpenAIProvider) Models(ctx context.Context) ([]model.ModelInfo, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	p.mu.RLock()
 	if p.cachedModels != nil && time.Since(p.lastFetch) < modelsCacheTTL {
 		defer p.mu.RUnlock()
-		return cloneModels(p.cachedModels)
+		return cloneModels(p.cachedModels), nil
 	}
 	p.mu.RUnlock()
 
-	models, err := p.fetchModels()
+	models, err := p.fetchModels(ctx)
 	if err != nil {
 		models = p.staticModels()
 	}
@@ -213,7 +216,7 @@ func (p *OpenAIProvider) Models() []model.ModelInfo {
 	p.lastFetch = time.Now()
 	p.mu.Unlock()
 
-	return cloneModels(models)
+	return cloneModels(models), nil
 }
 
 func (p *OpenAIProvider) ModelCapabilities(modelID string) model.ModelCapabilities {
@@ -229,8 +232,8 @@ func (p *OpenAIProvider) endpoint(path string) string {
 	return baseURL + "/v1/" + path
 }
 
-func (p *OpenAIProvider) fetchModels() ([]model.ModelInfo, error) {
-	req, err := http.NewRequest("GET", p.endpoint("models"), nil)
+func (p *OpenAIProvider) fetchModels(ctx context.Context) ([]model.ModelInfo, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, p.endpoint("models"), nil)
 	if err != nil {
 		return nil, err
 	}

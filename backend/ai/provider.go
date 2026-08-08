@@ -19,7 +19,7 @@ const (
 type Provider interface {
 	Name() string
 	Generate(ctx context.Context, req model.AIImageRequest) (*model.AIImageResponse, error)
-	Models() []model.ModelInfo
+	Models(ctx context.Context) ([]model.ModelInfo, error)
 	ModelCapabilities(modelID string) model.ModelCapabilities
 }
 

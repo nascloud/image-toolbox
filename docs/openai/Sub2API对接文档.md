@@ -10,7 +10,7 @@
 |---|---|
 | API Key | Sub2API 分配的访问令牌 |
 | Base URL | Sub2API 的 OpenAI 兼容基础地址 |
-| 评价重写模型 | 默认 `gpt-6-sol` |
+| 评价重写模型 | 默认 `gpt-5.6-sol` |
 | 评价重写 Endpoint | 默认 `https://open2api.kuvms.net/v1/responses` |
 | 评价推理强度 | 默认 `medium` |
 

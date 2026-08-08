@@ -175,22 +175,15 @@ function hoverPreviewStyle(pos: { x: number; y: number }): React.CSSProperties {
   };
 }
 
-const modelNameMap: Record<string, string> = {
-  'doubao-seedream-5-0-260128': 'Seedream 5.0',
-  'doubao-seedream-5-0-lite-260128': 'Seedream 5.0 Lite',
-  'doubao-seedream-4-5-251128': 'Seedream 4.5',
-  'doubao-seedream-4-0-250828': 'Seedream 4.0',
-  'doubao-seedream-3-0-t2i-250415': 'Seedream 3.0',
-};
-
-function displayModelName(m: { id: string; name?: string }): string {
-  return m.name || modelNameMap[m.id] || m.id;
-}
-
 const providerDefaultModel: Record<string, string> = {
   seedream: 'doubao-seedream-5-0-lite-260128',
   openai: 'gpt-image-2',
 };
+
+function modelLabel(id: string): string {
+  const label = id.startsWith('doubao-') ? id.slice(7) : id;
+  return label.length > 24 ? `${label.slice(0, 15)}...${label.slice(-6)}` : label;
+}
 
 // ── Component ──
 export const AIBatch: React.FC = () => {
@@ -479,13 +472,16 @@ export const AIBatch: React.FC = () => {
       if (!provider) return;
       try {
         const models = await (window as any).go.main.App.GetProviderModels(provider);
-        setAvailableModels(models);
-        if (models.length > 0 && !(models as any[]).find((m: any) => m.id === model)) {
-          const fallback = providerDefaultModel[provider] || models[0].id;
-          if ((models as any[]).find((m: any) => m.id === fallback)) {
+        const imageModels = (models as any[]).filter((item: any) => provider === 'seedream'
+          ? item.id?.toLowerCase().includes('seedream')
+          : item.id?.toLowerCase().startsWith('gpt-image-'));
+        setAvailableModels(imageModels);
+        if (imageModels.length > 0 && !imageModels.find((m: any) => m.id === model)) {
+          const fallback = providerDefaultModel[provider] || imageModels[0].id;
+          if (imageModels.find((m: any) => m.id === fallback)) {
             setModel(fallback);
           } else {
-            setModel(models[0].id);
+            setModel(imageModels[0].id);
           }
         }
       } catch {
@@ -1668,14 +1664,14 @@ export const AIBatch: React.FC = () => {
                   style={{ fontSize: 12, padding: '4px 8px', width: 120 }}
                 >
                   <option value="seedream">Seedream</option>
-                  <option value="openai">OpenAI (Sub2API)</option>
+                  <option value="openai">OpenAI</option>
                 </select>
               </div>
               {/* Model */}
               <div className="flex items-center gap-2">
                 <span className="text-xs text-muted">模型:</span>
-                <select value={model} onChange={e => setModel(e.target.value)} className="select" style={{ width: 160, fontSize: 12, padding: '4px 8px' }}>
-                  {displayModels.map(m => <option key={m.id} value={m.id}>{displayModelName(m)}</option>)}
+                <select value={model} onChange={e => setModel(e.target.value)} className="select" title={model} style={{ width: 180, fontSize: 12, padding: '4px 30px 4px 8px' }}>
+                  {displayModels.map(m => <option key={m.id} value={m.id} title={m.id}>{modelLabel(m.id)}</option>)}
                 </select>
               </div>
 

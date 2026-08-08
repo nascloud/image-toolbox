@@ -6,12 +6,13 @@ export const Settings: React.FC = () => {
   const [dirSaved, setDirSaved] = useState(false);
   const [providers, setProviders] = useState<{[key: string]: {apiKey: string, baseURL: string, hasApiKey: boolean, reviewModel: string, reviewEndpoint: string}}>({
     seedream: {apiKey: '', baseURL: 'https://ark.cn-beijing.volces.com/api/v3', hasApiKey: false, reviewModel: '', reviewEndpoint: 'https://ark.cn-beijing.volces.com/api/v3/chat/completions'},
-    openai: {apiKey: '', baseURL: 'https://open2api.kuvms.net', hasApiKey: false, reviewModel: 'gpt-6-sol', reviewEndpoint: 'https://open2api.kuvms.net/v1/responses'},
+    openai: {apiKey: '', baseURL: 'https://open2api.kuvms.net', hasApiKey: false, reviewModel: 'gpt-5.6-sol', reviewEndpoint: 'https://open2api.kuvms.net/v1/responses'},
   });
   const [activeProvider, setActiveProvider] = useState('seedream');
   const [providerSaved, setProviderSaved] = useState<{[key: string]: boolean}>({});
   const [fetchingModels, setFetchingModels] = useState<{[key: string]: boolean}>({});
   const [fetchModelResult, setFetchModelResult] = useState<{[key: string]: string}>({});
+  const [providerModels, setProviderModels] = useState<{[key: string]: string[]}>({});
   const [contextMenuInstalled, setContextMenuInstalled] = useState(false);
   const [contextMenuLoading, setContextMenuLoading] = useState(false);
   const [contextMenuError, setContextMenuError] = useState('');
@@ -42,6 +43,10 @@ export const Settings: React.FC = () => {
             }
           }));
         } catch { /* no-op */ }
+        try {
+          const models = await (window as any).go.main.App.GetProviderModels(name);
+          setProviderModels(prev => ({...prev, [name]: models.map((item: any) => item.id).filter(Boolean)}));
+        } catch { /* no cached models */ }
       }
       try {
         const dir = await (window as any).go.main.App.GetAiOutputDir();
@@ -106,7 +111,7 @@ export const Settings: React.FC = () => {
           style={{ width: '100%', padding: '8px 12px' }}
         >
           <option value="seedream">Seedream (Volcano Engine)</option>
-          <option value="openai">OpenAI (Sub2API)</option>
+          <option value="openai">OpenAI</option>
         </select>
       </div>
 
@@ -114,7 +119,7 @@ export const Settings: React.FC = () => {
       {['seedream', 'openai'].map(name => (
         <div className="card mb-8" key={name}>
           <label className="card-label" style={{ marginBottom: 8, textTransform: 'none', letterSpacing: 0 }}>
-            {name === 'seedream' ? 'Seedream (Volcano Engine)' : 'OpenAI (Sub2API)'} 配置
+            {name === 'seedream' ? 'Seedream (Volcano Engine)' : 'OpenAI'} 配置
           </label>
           <input
             type="password"
@@ -133,13 +138,16 @@ export const Settings: React.FC = () => {
           />
           <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--color-border-subtle)' }}>
             <label className="text-sm" style={{ display: 'block', marginBottom: 6, fontWeight: 600 }}>评价 AI 重写（可选）</label>
-            <input
-              type="text"
-              placeholder={name === 'seedream' ? '语言模型推理接入点 ID' : '文本模型 ID'}
+            <select
               value={providers[name].reviewModel}
               onChange={e => setProviders(p => ({...p, [name]: {...p[name], reviewModel: e.target.value}}))}
               className="input"
-            />
+            >
+              {!providers[name].reviewModel && <option value="">请先获取并选择模型</option>}
+              {Array.from(new Set([providers[name].reviewModel, ...(providerModels[name] || [])].filter(Boolean))).map(id => (
+                <option key={id} value={id}>{id}</option>
+              ))}
+            </select>
             <div style={{ marginTop: 8 }} />
             <input
               type="text"
@@ -165,6 +173,7 @@ export const Settings: React.FC = () => {
               setFetchModelResult(prev => ({...prev, [name]: ''}));
               try {
                 const models = await (window as any).go.main.App.FetchProviderModels(name);
+                setProviderModels(prev => ({...prev, [name]: models.map((item: any) => item.id).filter(Boolean)}));
                 setFetchModelResult(prev => ({...prev, [name]: `✓ 已获取 ${models.length} 个模型`}));
               } catch (e: any) {
                 setFetchModelResult(prev => ({...prev, [name]: `✗ ${e?.message || String(e)}`}));

@@ -45,9 +45,9 @@ func (p *capabilityOnlyProvider) Generate(ctx context.Context, req model.AIImage
 	return nil, nil
 }
 
-func (p *capabilityOnlyProvider) Models() []model.ModelInfo {
+func (p *capabilityOnlyProvider) Models(context.Context) ([]model.ModelInfo, error) {
 	p.modelCalls++
-	return nil
+	return nil, nil
 }
 
 func (p *capabilityOnlyProvider) ModelCapabilities(modelID string) model.ModelCapabilities {

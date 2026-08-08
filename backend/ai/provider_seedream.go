@@ -161,12 +161,56 @@ func (p *SeedreamProvider) Generate(ctx context.Context, req model.AIImageReques
 	return &result, nil
 }
 
-func (p *SeedreamProvider) Models() []model.ModelInfo {
-	infos := make([]model.ModelInfo, len(seedreamModelDefs))
-	for i, def := range seedreamModelDefs {
-		infos[i] = model.ModelInfo{ID: def.id, Capabilities: def.caps}
+func (p *SeedreamProvider) Models(ctx context.Context) ([]model.ModelInfo, error) {
+	if ctx == nil {
+		ctx = context.Background()
 	}
-	return infos
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, p.baseURL+"/models", nil)
+	if err != nil {
+		return nil, fmt.Errorf("create models request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+p.apiKey)
+
+	resp, err := p.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("fetch models: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read models response: %w", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		message := strings.TrimSpace(string(body))
+		if len(message) > 500 {
+			message = message[:500] + "..."
+		}
+		return nil, fmt.Errorf("models API HTTP %d: %s", resp.StatusCode, message)
+	}
+
+	var result struct {
+		Data []struct {
+			ID     string `json:"id"`
+			Status string `json:"status"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(body, &result); err != nil {
+		return nil, fmt.Errorf("parse models response: %w", err)
+	}
+
+	models := make([]model.ModelInfo, 0, len(result.Data))
+	for _, item := range result.Data {
+		id := strings.TrimSpace(item.ID)
+		if id == "" || strings.EqualFold(item.Status, "Shutdown") {
+			continue
+		}
+		models = append(models, model.ModelInfo{ID: id, Capabilities: seedreamCapabilities(id)})
+	}
+	if len(models) == 0 {
+		return nil, fmt.Errorf("models API returned no available models")
+	}
+	return models, nil
 }
 
 func (p *SeedreamProvider) ModelCapabilities(modelID string) model.ModelCapabilities {
@@ -177,7 +221,7 @@ func seedreamCapabilities(modelName string) model.ModelCapabilities {
 	normalized := strings.ToLower(modelName)
 	var best model.ModelCapabilities
 	var bestLen int
-	for _, def := range seedreamModelDefs {
+	for _, def := range seedreamCapabilityDefs {
 		if strings.Contains(normalized, def.pattern) && len(def.pattern) > bestLen {
 			best = def.caps
 			bestLen = len(def.pattern)
@@ -189,14 +233,12 @@ func seedreamCapabilities(modelName string) model.ModelCapabilities {
 	return model.ModelCapabilities{DefaultOutputFormat: "jpeg"}
 }
 
-var seedreamModelDefs = []struct {
+var seedreamCapabilityDefs = []struct {
 	pattern string
-	id      string
 	caps    model.ModelCapabilities
 }{
 	{
 		pattern: "5-0-lite",
-		id:      "doubao-seedream-5-0-lite-260128",
 		caps: model.ModelCapabilities{
 			SupportsImageInput:   true,
 			SupportsSequential:   true,
@@ -211,7 +253,6 @@ var seedreamModelDefs = []struct {
 	},
 	{
 		pattern: "5-0",
-		id:      "doubao-seedream-5-0-260128",
 		caps: model.ModelCapabilities{
 			SupportsImageInput:   true,
 			SupportsSequential:   true,
@@ -226,7 +267,6 @@ var seedreamModelDefs = []struct {
 	},
 	{
 		pattern: "4-5",
-		id:      "doubao-seedream-4-5-251128",
 		caps: model.ModelCapabilities{
 			SupportsImageInput:  true,
 			SupportsSequential:  true,
@@ -239,7 +279,6 @@ var seedreamModelDefs = []struct {
 	},
 	{
 		pattern: "4-0",
-		id:      "doubao-seedream-4-0-250828",
 		caps: model.ModelCapabilities{
 			SupportsImageInput:         true,
 			SupportsSequential:         true,
@@ -253,7 +292,6 @@ var seedreamModelDefs = []struct {
 	},
 	{
 		pattern: "3-0-t2i",
-		id:      "doubao-seedream-3-0-t2i-250415",
 		caps: model.ModelCapabilities{
 			SupportsGuidanceScale: true,
 			DefaultOutputFormat:   "jpeg",
