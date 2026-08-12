@@ -216,6 +216,7 @@ export const AIBatch: React.FC = () => {
   const [recursive, setRecursive] = useState(true);
   const [looseFilePaths, setLooseFilePaths] = useState<string[]>([]);
   const [processing, setProcessing] = useState(false);
+  const [timingAIRequest, setTimingAIRequest] = useState(false);
   const [waitSeconds, setWaitSeconds] = useState(0);
   const [cancelRequested, setCancelRequested] = useState(false);
   const [presets, setPresets] = useState<PromptPreset[]>(loadPresets);
@@ -267,14 +268,14 @@ export const AIBatch: React.FC = () => {
   selectedPreviewRef.current = selectedPreview;
 
   useEffect(() => {
-    if (!processing) return;
+    if (!timingAIRequest) return;
     setWaitSeconds(0);
     const startedAt = Date.now();
     const timer = window.setInterval(() => {
       setWaitSeconds(Math.floor((Date.now() - startedAt) / 1000));
     }, 1000);
     return () => window.clearInterval(timer);
-  }, [processing]);
+  }, [timingAIRequest]);
 
   function getEffectiveWidth(): number {
     return downloadWidth === 'custom'
@@ -310,6 +311,15 @@ export const AIBatch: React.FC = () => {
       downloadWidth: isNaN(downloadW) ? 0 : downloadW,
       n: currentModelCaps.supportsN ? n : 1,
     };
+  }
+
+  async function runTimedBatch(request: ReturnType<typeof buildBatchRequest>) {
+    setTimingAIRequest(true);
+    try {
+      return await (window as any).go.main.App.RunAIImageBatch(request);
+    } finally {
+      setTimingAIRequest(false);
+    }
   }
 
   useEffect(() => {
@@ -660,7 +670,7 @@ export const AIBatch: React.FC = () => {
 
     const batchId = startBatchRun();
     try {
-      const result = await (window as any).go.main.App.RunAIImageBatch(
+      const result = await runTimedBatch(
         buildBatchRequest([item.path], batchId)
       );
 
@@ -820,7 +830,7 @@ export const AIBatch: React.FC = () => {
     try {
       if (cancelRef.current) { finishBatchRun(batchId); setProcessing(false); return; }
 
-      const result = await (window as any).go.main.App.RunAIImageBatch(
+      const result = await runTimedBatch(
         buildBatchRequest(pendingItems.map(i => i.path), batchId)
       );
 
@@ -962,7 +972,7 @@ export const AIBatch: React.FC = () => {
 
     const batchId = startBatchRun();
     try {
-      const result = await (window as any).go.main.App.RunAIImageBatch(
+      const result = await runTimedBatch(
         buildBatchRequest(toRetry.map(i => i.path), batchId)
       );
 
@@ -1689,7 +1699,7 @@ export const AIBatch: React.FC = () => {
               </div>
             </div>
 
-            {processing && (
+            {timingAIRequest && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--color-text-muted)', fontSize: 12 }}>
                 <span className="badge badge-processing">AI 处理中</span>
                 <span style={{ fontVariantNumeric: 'tabular-nums' }}>{formatElapsedTime(waitSeconds)}</span>
@@ -1935,11 +1945,7 @@ export const AIBatch: React.FC = () => {
 
                     {/* Status badges */}
                     {item.status === 'pending' && <span className="badge badge-pending">等待处理</span>}
-                    {item.status === 'processing' && (
-                      <span className="badge badge-processing" style={{ fontVariantNumeric: 'tabular-nums' }}>
-                        处理中 · {formatElapsedTime(waitSeconds)}
-                      </span>
-                    )}
+                    {item.status === 'processing' && <span className="badge badge-processing">处理中</span>}
                     {item.status === 'completed' && (
                       <button onClick={() => openPreview(item)} className="badge badge-completed" style={{ cursor: 'pointer', border: 'none' }}>
                         ✓ 完成
